@@ -1,0 +1,29 @@
+<!-- 
+  ZenSort Logo: Enso Dot (Aligned with Pul5 Brand)
+  
+  - This SVG is designed for maximum flexibility.
+  - It contains a <defs> section with the Pul5 linear gradient.
+  - The main path uses the `url(#pul5-gradient)` for its stroke.
+  - To override with a solid color (e.g., for dark mode), you can use CSS:
+    .zensort-logo .gradient-stroke { stroke: currentColor; }
+    .zensort-logo .solid-fill { fill: currentColor; }
+-->
+<svg class="zensort-logo" width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>ZenSort Logo - Enso Dot (Pul5 Aligned)</title>
+  
+  <!-- Gradient Definition from Pul5 Logo -->
+  <defs>
+    <linearGradient id="pul5-gradient" x1="10.5" y1="18" x2="83" y2="88" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF9D00"/>
+      <stop offset="0.26" stop-color="#F75830"/>
+      <stop offset="0.5" stop-color="#F11E5A"/>
+      <stop offset="1" stop-color="#9800A6"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- The Open Circle (Enso) -->
+  <path class="gradient-stroke" d="M85,50 A35,35 0 1 1 50,15" stroke="url(#pul5-gradient)" stroke-width="14" stroke-linecap="round"/>
+  
+  <!-- The Dot -->
+  <circle class="solid-fill" cx="68" cy="32" r="8" fill="#9800A6"/>
+</svg>

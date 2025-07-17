@@ -1,0 +1,52 @@
+<!-- 
+  ZenSort Full Logo: Enso Dot Icon + Nunito Wordmark (v5 - Final)
+  
+  - Aligned with the Pul5 brand identity.
+  - Wordmark is set in Nunito.
+  - For web use, ensure the Nunito font is loaded, e.g., from Google Fonts:
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700&display=swap" rel="stylesheet">
+
+  - FINAL OPTIMIZATIONS (v5):
+    - Removed space between "Zen" and "Sort" to create a single, unified logotype.
+    - Meticulously adjusted kerning and spacing for a final, polished composition.
+    - Finalized the SVG viewBox for a production-ready asset.
+-->
+<svg width="255" height="100" viewBox="0 0 255 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>ZenSort Full Logo</title>
+  
+  <!-- Gradient Definitions -->
+  <defs>
+    <!-- Gradient for the Icon Stroke -->
+    <linearGradient id="pul5-gradient-icon" x1="10.5" y1="18" x2="83" y2="88" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF9D00"/>
+      <stop offset="0.26" stop-color="#F75830"/>
+      <stop offset="0.5" stop-color="#F11E5A"/>
+      <stop offset="1" stop-color="#9800A6"/>
+    </linearGradient>
+    <!-- Gradient for the "Sort" Text -->
+    <linearGradient id="pul5-gradient-text" x1="162" y1="61" x2="245" y2="61" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF9D00"/>
+      <stop offset="0.26" stop-color="#F75830"/>
+      <stop offset="0.5" stop-color="#F11E5A"/>
+      <stop offset="1" stop-color="#9800A6"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Icon Group -->
+  <g transform="translate(0, 12) scale(0.75)">
+    <!-- The Open Circle (Enso) -->
+    <path d="M85,50 A35,35 0 1 1 50,15" stroke="url(#pul5-gradient-icon)" stroke-width="13" stroke-linecap="round"/>
+    <!-- The Dot -->
+    <circle cx="68" cy="32" r="8" fill="#9800A6"/>
+  </g>
+  
+  <!-- Wordmark with Typographic Hierarchy and Gradient -->
+  <text 
+    x="78" 
+    y="61" 
+    font-family="Nunito, sans-serif" 
+    font-size="40" 
+    letter-spacing="0.5">
+      <tspan font-weight="400" fill="#4A5568">Zen</tspan><tspan font-weight="700" fill="url(#pul5-gradient-text)">Sort</tspan>
+  </text>
+</svg>
