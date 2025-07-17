@@ -1,0 +1,13 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Target the 'waitlist' collection specifically.
+    match /waitlist/{docId} {
+      // Allow anyone to create a new document in the collection.
+      allow create: if true;
+
+      // Deny all reads, updates, and deletes to protect user privacy.
+      allow read, update, delete: if false;
+    }
+  }
+}

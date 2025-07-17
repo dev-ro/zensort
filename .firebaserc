@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "zensort-a7b47"
-  }
+    "default": "zensort-a7b47",
+    "dev": "zensort-dev"
+  },
+  "targets": {},
+  "etags": {}
 }
