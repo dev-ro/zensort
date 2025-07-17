@@ -25,11 +25,9 @@
    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
    xmlns:cc="http://creativecommons.org/ns#"
    xmlns:dc="http://purl.org/dc/elements/1.1/">
-  <title
-     id="title1">ZenSort Full Logo</title>
-  <!-- Gradient Definitions -->
   <defs
      id="defs8">
+    <!-- Gradient Definitions -->
     <!-- Gradient for the Icon Stroke -->
     <linearGradient
        id="pul5-gradient-icon"
@@ -115,13 +113,4 @@
          id="path10" />
     </g>
   </g>
-  <metadata
-     id="metadata10">
-    <rdf:RDF>
-      <cc:Work
-         rdf:about="">
-        <dc:title>ZenSort Full Logo</dc:title>
-      </cc:Work>
-    </rdf:RDF>
-  </metadata>
 </svg>
