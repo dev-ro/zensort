@@ -32,14 +32,23 @@ def add_to_waitlist(req: https_fn.CallableRequest) -> dict:
         )
 
     try:
-        # 2. Add the new document to the 'waitlist' collection in Firestore
-        # The Admin SDK bypasses security rules to write to the database
+        # 2. Check if the email already exists in the 'waitlist' collection
         db = firestore.client()
-        db.collection("waitlist").add(
+        waitlist_collection = db.collection("waitlist")
+        existing_entries = (
+            waitlist_collection.where("email", "==", email).limit(1).get()
+        )
+
+        if len(list(existing_entries)) > 0:
+            return {"message": f"{email} is already on our waitlist."}
+
+        # 3. Add the new document to the 'waitlist' collection in Firestore
+        # The Admin SDK bypasses security rules to write to the database
+        waitlist_collection.add(
             {"email": email, "createdAt": datetime.now(timezone.utc)}
         )
 
-        # 3. Send a success response back to the client
+        # 4. Send a success response back to the client
         return {"message": f"Successfully added {email} to the waitlist!"}
 
     except Exception as e:
