@@ -30,12 +30,28 @@ class LandingPage extends StatefulWidget {
   State<LandingPage> createState() => _LandingPageState();
 }
 
-class _LandingPageState extends State<LandingPage> {
+class _LandingPageState extends State<LandingPage>
+    with SingleTickerProviderStateMixin {
   final _emailController = TextEditingController();
+  late AnimationController _animationController;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(seconds: 2),
+      vsync: this,
+    )..repeat(reverse: true);
+    _animation = Tween<double>(begin: 1.0, end: 1.03).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+  }
 
   @override
   void dispose() {
     _emailController.dispose();
+    _animationController.dispose();
     super.dispose();
   }
 
@@ -63,7 +79,7 @@ class _LandingPageState extends State<LandingPage> {
               children: [
                 SvgPicture.asset(
                   'assets/images/zensort_logo_wordmark.svg',
-                  height: 60,
+                  height: 75,
                   placeholderBuilder: (BuildContext context) => Container(
                     padding: const EdgeInsets.all(30.0),
                     child: const CircularProgressIndicator(),
@@ -81,7 +97,7 @@ class _LandingPageState extends State<LandingPage> {
                   textAlign: TextAlign.center,
                   style: ZenSortTheme.body,
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 48),
                 TextField(
                   controller: _emailController,
                   decoration: InputDecoration(
@@ -99,31 +115,37 @@ class _LandingPageState extends State<LandingPage> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: _joinWaitlist,
-                  style: ElevatedButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 5,
-                  ),
-                  child: Ink(
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [
-                          ZenSortTheme.primaryColor,
-                          ZenSortTheme.accentColor,
-                        ],
+                ScaleTransition(
+                  scale: _animation,
+                  child: ElevatedButton(
+                    onPressed: _joinWaitlist,
+                    style: ElevatedButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      borderRadius: BorderRadius.circular(12),
+                      elevation: 5,
+                      backgroundColor: Colors.transparent,
                     ),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      alignment: Alignment.center,
-                      child: Text(
-                        'Join the Waitlist',
-                        style: ZenSortTheme.button,
+                    child: Ink(
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [
+                            ZenSortTheme.gradientStart,
+                            ZenSortTheme.gradientEnd,
+                          ],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        alignment: Alignment.center,
+                        child: Text(
+                          'Join the Waitlist',
+                          style: ZenSortTheme.button,
+                        ),
                       ),
                     ),
                   ),

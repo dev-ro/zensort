@@ -9,6 +9,10 @@ class ZenSortTheme {
   static const Color primaryColor = Color(0xFF6A8A82);
   static const Color accentColor = Color(0xFFC2DCD3);
 
+  // Gradient Colors for Buttons
+  static const Color gradientStart = Color(0xFFF9A825); // Vibrant Orange
+  static const Color gradientEnd = Color(0xFFAB47BC); // Vibrant Purple
+
   // Text Styles
   static final TextStyle headline = GoogleFonts.nunito(
     fontSize: 28,
