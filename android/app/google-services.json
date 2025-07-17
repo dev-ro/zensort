@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "286608244703",
+    "project_id": "zensort-a7b47",
+    "storage_bucket": "zensort-a7b47.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:286608244703:android:4e77ab474f343297e00e6a",
+        "android_client_info": {
+          "package_name": "com.example.zensort"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB2m4TEWflZ7R0-j0YFHrOf7tvco0wv27I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
