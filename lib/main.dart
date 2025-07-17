@@ -100,6 +100,7 @@ class _LandingPageState extends State<LandingPage>
                 const SizedBox(height: 48),
                 TextField(
                   controller: _emailController,
+                  onSubmitted: (_) => _joinWaitlist(),
                   decoration: InputDecoration(
                     hintText: 'Enter your email',
                     filled: true,
