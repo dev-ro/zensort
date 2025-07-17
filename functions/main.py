@@ -1,11 +1,12 @@
 # Welcome to Cloud Functions for Firebase for Python!
 # To get started, simply uncomment the below code or create your own.
-# Deploy with `firebase deploy`
+# Deploy with `firebase deploy --only functions`
 
 from firebase_functions import https_fn
 from firebase_functions.options import set_global_options
 from firebase_admin import initialize_app, firestore
 from google.cloud.firestore_v1 import SERVER_TIMESTAMP
+from datetime import datetime, timezone
 
 # For cost control, you can set the maximum number of containers that can be
 # running at the same time. This helps mitigate the impact of unexpected
@@ -34,7 +35,9 @@ def add_to_waitlist(req: https_fn.CallableRequest) -> dict:
         # 2. Add the new document to the 'waitlist' collection in Firestore
         # The Admin SDK bypasses security rules to write to the database
         db = firestore.client()
-        db.collection("waitlist").add({"email": email, "createdAt": SERVER_TIMESTAMP})
+        db.collection("waitlist").add(
+            {"email": email, "createdAt": datetime.now(timezone.utc)}
+        )
 
         # 3. Send a success response back to the client
         return {"message": f"Successfully added {email} to the waitlist!"}

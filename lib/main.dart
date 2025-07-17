@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:zensort/theme.dart';
-import 'package:firebase_core/firebase_core.dart'; 
-import 'firebase_options.dart'; 
+import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'firebase_options.dart';
 
-void main() async { 
-  WidgetsFlutterBinding.ensureInitialized(); 
-  await Firebase.initializeApp( 
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const MyApp());
 }
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -40,6 +40,7 @@ class _LandingPageState extends State<LandingPage>
   final _emailController = TextEditingController();
   late AnimationController _animationController;
   late Animation<double> _animation;
+  bool _isLoading = false;
 
   @override
   void initState() {
@@ -60,12 +61,40 @@ class _LandingPageState extends State<LandingPage>
     super.dispose();
   }
 
-  void _joinWaitlist() {
-    if (_emailController.text.isNotEmpty) {
+  void _joinWaitlist() async {
+    if (_emailController.text.isEmpty || !_emailController.text.contains('@')) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Thank you for joining the waitlist!')),
+        const SnackBar(content: Text('Please enter a valid email.')),
       );
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable(
+        'add_to_waitlist',
+      );
+      final result = await callable.call({'email': _emailController.text});
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(result.data['message'])));
       _emailController.clear();
+    } on FirebaseFunctionsException catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: ${e.message}')));
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('An unexpected error occurred: $e')),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 
@@ -124,7 +153,7 @@ class _LandingPageState extends State<LandingPage>
                 ScaleTransition(
                   scale: _animation,
                   child: ElevatedButton(
-                    onPressed: _joinWaitlist,
+                    onPressed: _isLoading ? null : _joinWaitlist,
                     style: ElevatedButton.styleFrom(
                       padding: EdgeInsets.zero,
                       shape: RoundedRectangleBorder(
@@ -148,10 +177,16 @@ class _LandingPageState extends State<LandingPage>
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         alignment: Alignment.center,
-                        child: Text(
-                          'Join the Waitlist',
-                          style: ZenSortTheme.button,
-                        ),
+                        child: _isLoading
+                            ? const CircularProgressIndicator(
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
+                              )
+                            : Text(
+                                'Join the Waitlist',
+                                style: ZenSortTheme.button,
+                              ),
                       ),
                     ),
                   ),
