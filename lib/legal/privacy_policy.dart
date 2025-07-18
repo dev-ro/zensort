@@ -1,91 +1,119 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:zensort/main.dart';
 
 const String privacyPolicyText = """
-**Privacy Policy for ZenSort**
+# Privacy Policy for ZenSort
 
-**Effective Date:** July 17, 2025
+**Effective Date: July 19, 2024**
 
-Welcome to ZenSort ("we," "us," or "our"). We are committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our website [zensort.app](https://zensort.app) and our mobile application (collectively, the "Service"). Please read this privacy policy carefully. If you do not agree with the terms of this privacy policy, please do not access the Service.
+### 1. Introduction
 
-We are based in Michigan, United States.
+Welcome to ZenSort ("we," "our," "us"). We are committed to protecting your privacy. This Privacy Policy governs your use of our software application ("App") and services (collectively, the "Service"). It explains how we collect, use, disclose, and safeguard your information.
 
-**1. Information We Collect**
+This Service is operated from the State of Michigan, United States, and this policy is governed by its laws.
 
-We may collect information about you in a variety of ways. The information we may collect via the Service includes:
+### 2. Definitions
 
-**a) Personal Data**
-When you register for an account using Google Sign-In, we collect the following personally identifiable information from your Google profile:
-- **Name and Email Address:** Your name and email address are used for account identification and communication.
+- **"Service"** refers to the ZenSort application and any related services provided by us.
+- **"Personal Data"** means data about a living individual who can be identified from those data.
+- **"YouTube Data"** refers to the metadata of your "Liked Videos" playlist on YouTube, including titles, descriptions, thumbnails, and channel names.
 
-**b) Authentication Data**
-To connect your YouTube account, we use Firebase Authentication with Google Sign-In. We receive and store authentication tokens from Google, which are necessary to securely access the YouTube API on your behalf. We do not have access to, nor do we store, your Google account password.
+### 3. Information We Collect and How We Use It
 
-**c) YouTube Data**
-When you connect your YouTube account, we access certain data from the YouTube API service. This includes:
-- **Metadata of your "liked" videos:** such as titles, descriptions, and thumbnails.
-We do not download or store the video files themselves. Our use of this data is for the sole purpose of providing the ZenSort features, such as creating "Shelves" and "Smart Shelves".
+#### 3.1. Information You Provide to Us
 
-ZenSort's use and transfer of information received from Google APIs will adhere to the [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy), including the Limited Use requirements. By using our Service, you are also agreeing to be bound by the [YouTube Terms of Service](https://www.youtube.com/t/terms) and the [Google Privacy Policy](http://www.google.com/policies/privacy).
+When you create an account, we use Google's OAuth service to authenticate your identity. Through this service, and with your explicit consent, we collect the following Personal Data:
 
-You can revoke ZenSort's access to your YouTube data at any time via the [Google security settings page](https://security.google.com/settings/security/permissions).
+- **Name**
+- **Email Address**
+- **Profile Picture**
 
-**d) User-Generated Content**
-We collect the information you provide when you create and organize your "Shelves." This includes the names of your shelves and the videos you assign to them.
+We use this information to create and manage your account, personalize your experience, and for communication purposes. **We do not collect or store your Google account password.**
 
-**e) Usage Data and Cookies**
-We may automatically collect information about your device and how you interact with our Service, such as your IP address, browser type, operating system, and usage patterns. We use cookies and similar tracking technologies to track activity on our Service and hold certain information.
+#### 3.2. Information Collected via the YouTube API
 
-**2. How We Use Your Information**
+With your explicit consent, we access your YouTube Data for the sole purpose of providing the Service. Our process is as follows:
 
-We use the information we collect to:
-- Create and manage your account.
-- Provide, operate, and maintain our Service.
-- Process your subscriptions and payments.
-- Analyze your liked videos to provide the "Smart Shelves" feature using k-means clustering.
-- Communicate with you, including responding to your inquiries and sending you service-related updates.
-- Improve and personalize our Service.
-- Monitor the usage of our Service to prevent fraudulent activity.
+1.  **Access:** We access the metadata of videos in your "Liked Videos" playlist. We do not access your viewing history or any other playlists.
+2.  **Analysis:** This metadata is used to create numerical representations ("embeddings") for analysis.
+3.  **Organization:** We use k-means clustering algorithms to group similar videos based on these embeddings.
+4.  **Action:** Upon your request, we create new playlists on your YouTube account to organize your liked videos based on the clustering results.
 
-**3. How We Share Your Information**
+#### 3.3. Information Processed by Third-Party Services
 
-We do not sell your personal information. We may share your information in the following situations:
-- **With Service Providers:** We may share your information with third-party vendors and service providers that perform services for us, such as payment processing (e.g., Stripe, PayPal), cloud hosting (e.g., Google Cloud), and analytics.
-- **With Third-Party APIs:** Our Service uses the Google Gemini API to generate "Smart Shelves." We may send anonymized or aggregated data to this service.
-- **For Legal Reasons:** We may disclose your information if required to do so by law or in response to valid requests by public authorities (e.g., a court or a government agency).
-- **Business Transfers:** We may share or transfer your information in connection with, or during negotiations of, any merger, sale of company assets, financing, or acquisition of all or a portion of our business to another company.
+To provide our Service, we utilize Google's Gemini API to process your YouTube Data. Specifically, we send YouTube Data (titles, descriptions, etc.) to the Gemini API to generate the embeddings required for our clustering analysis.
 
-**4. Data Security**
+Your data is subject to Google's Privacy Policy. We recommend you review their policy to understand how they handle data.
 
-We use administrative, technical, and physical security measures to help protect your personal information. While we have taken reasonable steps to secure the personal information you provide to us, please be aware that despite our efforts, no security measures are perfect or impenetrable, and no method of data transmission can be guaranteed against any interception or other type of misuse.
+### 4. How We Share Your Information
 
-**5. Data Retention**
+We do not sell, trade, or rent your Personal Data to others. We may disclose your information to the following third parties:
 
-We will retain your personal information only for as long as is necessary for the purposes set out in this Privacy Policy. We will retain and use your information to the extent necessary to comply with our legal obligations, resolve disputes, and enforce our policies. When you delete your account, we will delete your personal information within a reasonable timeframe.
+- **Google:** For authentication (OAuth), data processing (Gemini API), and service functionality (YouTube API).
+- **Firebase:** For secure backend infrastructure and data storage.
 
-**6. Your Data Protection Rights (GDPR & CCPA)**
+### 5. Data Storage and Security
 
-Depending on your location, you may have the following rights regarding your personal information:
-- The right to access – You have the right to request copies of your personal data.
-- The right to rectification – You have the right to request that we correct any information you believe is inaccurate.
-- The right to erasure – You have the right to request that we erase your personal data, under certain conditions.
-- The right to restrict processing – You have the right to request that we restrict the processing of your personal data, under certain conditions.
-- The right to object to processing – You have the right to object to our processing of your personal data, under certain conditions.
-- The right to data portability – You have the right to request that we transfer the data that we have collected to another organization, or directly to you, under certain conditions.
+We use Firebase, a Google product, for secure data storage. We implement industry-standard security measures to protect your data. However, no method of transmission over the Internet or method of electronic storage is 100% secure.
 
-If you are a California resident, you have specific rights under the California Consumer Privacy Act (CCPA).
+### 6. Your Data Rights and Choices
 
-To exercise any of these rights, please contact us at [hi@zensort.app](mailto:hi@zensort.app).
+You have the following rights regarding your data:
 
-**7. Children's Privacy**
+- **Access:** You can request a copy of the Personal Data we hold about you.
+- **Correction:** You can request that we correct any inaccurate or incomplete data.
+- **Deletion:** You can request that we delete your account and all associated data.
+- **Opt-Out:** You may opt-out of receiving promotional communications from us by following the unsubscribe link in those emails.
 
-Our Service is not intended for use by children under the age of 13. We do not knowingly collect personally identifiable information from children under 13. If we become aware that we have collected personal information from a child under 13, we will take steps to delete that information.
+### 7. Children's Privacy
 
-**8. Changes to This Privacy Policy**
+Our Service is not intended for use by anyone under the age of 13. We do not knowingly collect personally identifiable information from children under 13.
 
-We may update our Privacy Policy from time to time. We will notify you of any changes by posting the new Privacy Policy on this page and updating the "Effective Date" at the top. You are advised to review this Privacy Policy periodically for any changes.
+### 8. Changes to This Privacy Policy
 
-**9. Contact Us**
+We may update this Privacy Policy from time to time. We will notify you of any changes by posting the new policy on this page and updating the "Effective Date" at the top.
 
-If you have any questions about this Privacy Policy, please contact us at:
+### 9. Contact Us
 
-[hi@zensort.app](mailto:hi@zensort.app)
+If you have any questions or concerns about this Privacy Policy, please contact us at: **legal@zensort.app**
 """;
+
+class PrivacyPolicyPage extends StatelessWidget {
+  const PrivacyPolicyPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Privacy Policy'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/');
+            }
+          },
+        ),
+      ),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: MarkdownBody(
+            data: privacyPolicyText,
+            styleSheet: CustomMarkdownStyle.getTheme(context),
+            onTapLink: (text, href, title) {
+              if (href != null) {
+                launchUrl(Uri.parse(href));
+              }
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}

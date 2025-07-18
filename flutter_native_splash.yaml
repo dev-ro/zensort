@@ -1,0 +1,4 @@
+flutter_native_splash:
+    color: '#FFFFFF'
+    image: assets/images/zensort_logo.png
+    web: true

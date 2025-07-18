@@ -3,12 +3,14 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'firebase_options.dart' as prod_options;
 import 'firebase_options_dev.dart' as dev_options;
 import 'legal/privacy_policy.dart';
 import 'legal/terms_of_service.dart';
 import 'theme.dart';
+import 'package:zensort/router.dart';
 
 class CustomMarkdownStyle {
   static MarkdownStyleSheet getTheme(BuildContext context) {
@@ -48,13 +50,14 @@ void main() async {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
+  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'ZenSort - Find clarity in the chaos.',
+    return MaterialApp.router(
+      title: 'ZenSort',
       theme: getLightTheme(),
-      home: const LandingPage(),
+      routerConfig: router,
+      debugShowCheckedModeBanner: false,
     );
   }
 }
@@ -73,7 +76,7 @@ class _LandingPageState extends State<LandingPage> {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: ListView(
         children: [
-          const HeroSection(),
+          Hero(tag: 'zensort_logo', child: const HeroSection()),
           const FeaturesSection(),
           HowItWorksSection(),
           const CallToActionSection(),
@@ -235,8 +238,7 @@ class _FeaturesSectionState extends State<FeaturesSection> {
                         const _FeatureItem(
                           icon: Icons.delete_sweep_outlined,
                           title: 'Effortless Cleanup',
-                          description:
-                              'Mass unlike videos to start fresh.',
+                          description: 'Mass unlike videos to start fresh.',
                           gradient: ZenSortTheme.orangePurpleGradient,
                         ),
                         const SizedBox(height: 20),
@@ -759,39 +761,6 @@ Tip: Use your primary YouTube Gmail for early adopter rewards!''',
 class Footer extends StatelessWidget {
   const Footer({super.key});
 
-  void _showLegalDialog(BuildContext context, String title, String content) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text(title),
-          content: SizedBox(
-            width: 500,
-            child: SingleChildScrollView(
-              child: MarkdownBody(
-                data: content,
-                styleSheet: CustomMarkdownStyle.getTheme(context),
-                onTapLink: (text, href, title) {
-                  if (href != null) {
-                    launchUrl(Uri.parse(href));
-                  }
-                },
-              ),
-            ),
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text('Close'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -814,11 +783,7 @@ class Footer extends StatelessWidget {
                 children: [
                   TextButton(
                     onPressed: () {
-                      _showLegalDialog(
-                        context,
-                        'Privacy Policy',
-                        privacyPolicyText,
-                      );
+                      context.go('/privacy');
                     },
                     child: Text(
                       'Privacy Policy',
@@ -833,14 +798,25 @@ class Footer extends StatelessWidget {
                   ),
                   TextButton(
                     onPressed: () {
-                      _showLegalDialog(
-                        context,
-                        'Terms of Service',
-                        termsOfServiceText,
-                      );
+                      context.go('/terms');
                     },
                     child: Text(
                       'Terms of Service',
+                      style: Theme.of(context).textTheme.labelSmall,
+                    ),
+                  ),
+                  Text(
+                    '•',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      context.go('/disclaimer');
+                    },
+                    child: Text(
+                      'Disclaimer',
                       style: Theme.of(context).textTheme.labelSmall,
                     ),
                   ),
