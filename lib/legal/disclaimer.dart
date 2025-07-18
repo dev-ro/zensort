@@ -6,7 +6,7 @@ import 'package:zensort/main.dart'; // Assuming CustomMarkdownStyle is here
 const String disclaimerText = """
 # Disclaimer
 
-**Effective Date: July 19, 2024**
+**Effective Date: July 19, 2025**
 
 ### 1. General Information
 

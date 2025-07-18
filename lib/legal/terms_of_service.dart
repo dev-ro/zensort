@@ -7,7 +7,7 @@ import 'package:zensort/main.dart';
 const String termsOfServiceText = """
 # Terms of Service for ZenSort
 
-**Effective Date: July 19, 2024**
+**Effective Date: July 19, 2025**
 
 ### 1. Introduction and Definitions
 
