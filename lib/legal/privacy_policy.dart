@@ -4,7 +4,7 @@ const String privacyPolicyText = """
 
 **Effective Date:** July 17, 2025
 
-Welcome to ZenSort ("we," "us," or "our"). We are committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our website (https://zensort.app) and our mobile application (collectively, the "Service"). Please read this privacy policy carefully. If you do not agree with the terms of this privacy policy, please do not access the Service.
+Welcome to ZenSort ("we," "us," or "our"). We are committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our website [zensort.app](https://zensort.app) and our mobile application (collectively, the "Service"). Please read this privacy policy carefully. If you do not agree with the terms of this privacy policy, please do not access the Service.
 
 We are based in Michigan, United States.
 
@@ -73,7 +73,7 @@ Depending on your location, you may have the following rights regarding your per
 
 If you are a California resident, you have specific rights under the California Consumer Privacy Act (CCPA).
 
-To exercise any of these rights, please contact us at hi@zensort.app.
+To exercise any of these rights, please contact us at [hi@zensort.app](mailto:hi@zensort.app).
 
 **7. Children's Privacy**
 
@@ -86,5 +86,5 @@ We may update our Privacy Policy from time to time. We will notify you of any ch
 **9. Contact Us**
 
 If you have any questions about this Privacy Policy, please contact us at:
-Email: hi@zensort.app
+> [hi@zensort.app](mailto:hi@zensort.app)
 """;

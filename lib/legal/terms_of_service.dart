@@ -3,7 +3,7 @@ const String termsOfServiceText = """
 
 **Effective Date:** July 17, 2025
 
-Please read these Terms of Service ("Terms", "Terms of Service") carefully before using the https://zensort.app website and the ZenSort mobile application (the "Service") operated by ZenSort ("us", "we", or "our").
+Please read these Terms of Service ("Terms", "Terms of Service") carefully before using the [zensort.app](https://zensort.app)  website and the ZenSort mobile application (the "Service") operated by ZenSort ("us", "we", or "our").
 
 Your access to and use of the Service is conditioned on your acceptance of and compliance with these Terms. These Terms apply to all visitors, users, and others who access or use the Service. By accessing or using the Service you agree to be bound by these Terms. If you disagree with any part of the terms then you may not access the Service.
 
@@ -70,5 +70,5 @@ By continuing to access or use our Service after any revisions become effective,
 **11. Contact Us**
 
 If you have any questions about these Terms, please contact us:
-Email: hi@zensort.app
+> [hi@zensort.app](mailto:hi@zensort.app)
 """;

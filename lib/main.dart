@@ -4,13 +4,23 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-import 'firebase_options.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'firebase_options.dart' as prod_options;
+import 'firebase_options_dev.dart' as dev_options;
 import 'legal/privacy_policy.dart';
 import 'legal/terms_of_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // To run in prod mode: flutter run --dart-define=FLAVOR=prod
+  const flavor = String.fromEnvironment('FLAVOR');
+
+  final options = flavor == 'prod'
+      ? prod_options.DefaultFirebaseOptions.currentPlatform
+      : dev_options.DefaultFirebaseOptions.currentPlatform;
+
+  await Firebase.initializeApp(options: options);
   runApp(const MyApp());
 }
 
@@ -678,7 +688,16 @@ class Footer extends StatelessWidget {
           title: Text(title),
           content: SizedBox(
             width: 500,
-            child: SingleChildScrollView(child: MarkdownBody(data: content)),
+            child: SingleChildScrollView(
+              child: MarkdownBody(
+                data: content,
+                onTapLink: (text, href, title) {
+                  if (href != null) {
+                    launchUrl(Uri.parse(href));
+                  }
+                },
+              ),
+            ),
           ),
           actions: <Widget>[
             TextButton(
