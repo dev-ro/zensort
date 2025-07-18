@@ -236,7 +236,7 @@ class _FeaturesSectionState extends State<FeaturesSection> {
                           icon: Icons.delete_sweep_outlined,
                           title: 'Effortless Cleanup',
                           description:
-                              'For those with exceptionally large liked lists, mass unlike videos to start fresh.',
+                              'Mass unlike videos to start fresh.',
                           gradient: ZenSortTheme.orangePurpleGradient,
                         ),
                         const SizedBox(height: 20),
@@ -244,7 +244,7 @@ class _FeaturesSectionState extends State<FeaturesSection> {
                           icon: Icons.history_outlined,
                           title: 'Travel Back in Time',
                           description:
-                              "Rediscover what you loved with 'Timely Shelves', perfect for nostalgic journeys through your library.",
+                              "Rediscover what you loved with Timely Shelves, perfect for nostalgic journeys.",
                           gradient: ZenSortTheme.orangePurpleGradient,
                         ),
                         const SizedBox(height: 20),
@@ -252,7 +252,7 @@ class _FeaturesSectionState extends State<FeaturesSection> {
                           icon: Icons.sync_problem_outlined,
                           title: 'Track Unavailable Videos',
                           description:
-                              'Get notified when liked videos are made private or deleted, so you never lose track of content.',
+                              'Get notified when liked videos are made private or deleted.',
                           gradient: ZenSortTheme.orangePurpleGradient,
                         ),
                       ],
