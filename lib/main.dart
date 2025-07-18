@@ -9,6 +9,7 @@ import 'firebase_options_dev.dart' as dev_options;
 import 'legal/privacy_policy.dart';
 import 'legal/terms_of_service.dart';
 import 'theme.dart';
+
 class CustomMarkdownStyle {
   static MarkdownStyleSheet getTheme(BuildContext context) {
     final pStyle = Theme.of(context).textTheme.bodyMedium;
@@ -147,16 +148,7 @@ class _FeaturesSectionState extends State<FeaturesSection> {
             constraints: const BoxConstraints(maxWidth: 500),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface.withAlpha(128),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.outlineVariant.withAlpha(128),
-                  width: 1,
-                ),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withAlpha(_isHovered ? 51 : 26),
@@ -165,84 +157,108 @@ class _FeaturesSectionState extends State<FeaturesSection> {
                   ),
                 ],
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: SvgPicture.asset(
-                          'assets/images/zensort_logo.svg',
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      ShaderMask(
-                        shaderCallback: (bounds) =>
-                            ZenSortTheme.orangePurpleGradient.createShader(
-                              Rect.fromLTWH(0, 0, bounds.width, bounds.height),
-                            ),
-                        child: Text(
-                          'Features',
-                          style: Theme.of(context).textTheme.headlineSmall
-                              ?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20.0),
+                child: Container(
+                  padding: const EdgeInsets.all(1.5), // Border width
+                  decoration: const BoxDecoration(
+                    gradient: ZenSortTheme.orangePurpleGradient,
+                  ),
+                  child: Container(
+                    padding: const EdgeInsets.all(22.5), // Content padding
+                    decoration: BoxDecoration(
+                      color: ZenSortTheme.scaffoldBackground,
+                      borderRadius: BorderRadius.circular(18.5),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: SvgPicture.asset(
+                                'assets/images/zensort_logo.svg',
                               ),
+                            ),
+                            const SizedBox(width: 12),
+                            ShaderMask(
+                              shaderCallback: (bounds) => ZenSortTheme
+                                  .orangePurpleGradient
+                                  .createShader(
+                                    Rect.fromLTWH(
+                                      0,
+                                      0,
+                                      bounds.width,
+                                      bounds.height,
+                                    ),
+                                  ),
+                              child: Text(
+                                'Features',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineMedium
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 20),
+                        const _FeatureItem(
+                          icon: Icons.video_library_outlined,
+                          title: 'Rediscover Your Library',
+                          description:
+                              'Effortlessly organize your entire liked video library, no matter the size.',
+                          gradient: ZenSortTheme.orangePurpleGradient,
+                        ),
+                        const SizedBox(height: 20),
+                        const _FeatureItem(
+                          icon: Icons.playlist_play_outlined,
+                          title: 'Break the Plateau',
+                          description:
+                              'Turn your Shelves into new YouTube playlists to escape the algorithm.',
+                          gradient: ZenSortTheme.orangePurpleGradient,
+                        ),
+                        const SizedBox(height: 20),
+                        const _FeatureItem(
+                          icon: Icons.music_note_outlined,
+                          title: 'Find Lost Music',
+                          description:
+                              'Locate and restore your legacy music uploads.',
+                          gradient: ZenSortTheme.orangePurpleGradient,
+                        ),
+                        const SizedBox(height: 20),
+                        const _FeatureItem(
+                          icon: Icons.delete_sweep_outlined,
+                          title: 'Effortless Cleanup',
+                          description:
+                              'For those with exceptionally large liked lists, mass unlike videos to start fresh.',
+                          gradient: ZenSortTheme.orangePurpleGradient,
+                        ),
+                        const SizedBox(height: 20),
+                        const _FeatureItem(
+                          icon: Icons.history_outlined,
+                          title: 'Travel Back in Time',
+                          description:
+                              "Rediscover what you loved with 'Timely Shelves', perfect for nostalgic journeys through your library.",
+                          gradient: ZenSortTheme.orangePurpleGradient,
+                        ),
+                        const SizedBox(height: 20),
+                        const _FeatureItem(
+                          icon: Icons.sync_problem_outlined,
+                          title: 'Track Unavailable Videos',
+                          description:
+                              'Get notified when liked videos are made private or deleted, so you never lose track of content.',
+                          gradient: ZenSortTheme.orangePurpleGradient,
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 20),
-                  _buildFeatureItem(
-                    context,
-                    Icons.video_library_outlined,
-                    'Rediscover Your Library',
-                    'Effortlessly organize your entire liked video library, no matter the size.',
-                    ZenSortTheme.orangePurpleGradient,
-                  ),
-                  const SizedBox(height: 20),
-                  _buildFeatureItem(
-                    context,
-                    Icons.playlist_play_outlined,
-                    'Break the Plateau',
-                    'Turn your Shelves into new YouTube playlists to escape the algorithm.',
-                    ZenSortTheme.orangePurpleGradient,
-                  ),
-                  const SizedBox(height: 20),
-                  _buildFeatureItem(
-                    context,
-                    Icons.music_note_outlined,
-                    'Find Lost Music',
-                    'Locate and restore your legacy music uploads.',
-                    ZenSortTheme.orangePurpleGradient,
-                  ),
-                  const SizedBox(height: 20),
-                  _buildFeatureItem(
-                    context,
-                    Icons.delete_sweep_outlined,
-                    'Effortless Cleanup',
-                    'For those with exceptionally large liked lists, mass unlike videos to start fresh.',
-                    ZenSortTheme.orangePurpleGradient,
-                  ),
-                  const SizedBox(height: 20),
-                  _buildFeatureItem(
-                    context,
-                    Icons.history_outlined,
-                    'Travel Back in Time',
-                    "Rediscover what you loved with 'Timely Shelves', perfect for nostalgic journeys through your library.",
-                    ZenSortTheme.orangePurpleGradient,
-                  ),
-                  const SizedBox(height: 20),
-                  _buildFeatureItem(
-                    context,
-                    Icons.sync_problem_outlined,
-                    'Track Unavailable Videos',
-                    'Get notified when liked videos are made private or deleted, so you never lose track of content.',
-                    ZenSortTheme.orangePurpleGradient,
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -250,14 +266,23 @@ class _FeaturesSectionState extends State<FeaturesSection> {
       ),
     );
   }
+}
 
-  Widget _buildFeatureItem(
-    BuildContext context,
-    IconData icon,
-    String title,
-    String description,
-    Gradient gradient,
-  ) {
+class _FeatureItem extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String description;
+  final Gradient gradient;
+
+  const _FeatureItem({
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.gradient,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -276,14 +301,11 @@ class _FeaturesSectionState extends State<FeaturesSection> {
             ),
             const SizedBox(width: 16),
             Expanded(
-              child: ShaderMask(
-                shaderCallback: (bounds) => gradient.createShader(
-                  Rect.fromLTWH(0, 0, bounds.width, bounds.height),
-                ),
-                child: Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
+              child: Text(
+                title,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
               ),
             ),
           ],
@@ -617,7 +639,7 @@ class _CallToActionSectionState extends State<CallToActionSection>
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8.0),
                 child: Text(
-                  '''We won't send a confirmation email. To check if you're on the list, just enter your email again. We'll only email you at launch.
+                  '''We won't send a confirmation email. To check if you're on the list, just enter your email again and a confirmation will appear at the bottom of your screen. \nWe'll only email you at launch.
 Tip: Use your primary YouTube Gmail for early adopter rewards!''',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodySmall,
@@ -692,38 +714,33 @@ Tip: Use your primary YouTube Gmail for early adopter rewards!''',
                                     Theme.of(context).colorScheme.onPrimary,
                                   ),
                                 )
-                              : Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    AnimatedPadding(
-                                      duration: const Duration(
-                                        milliseconds: 200,
-                                      ),
-                                      curve: Curves.easeOut,
-                                      padding: EdgeInsets.only(
-                                        right: _isHovering ? 5.0 : 0.0,
-                                      ),
-                                      child: Icon(
+                              : AnimatedScale(
+                                  duration: const Duration(milliseconds: 200),
+                                  scale: _isHovering ? 1.05 : 1.0,
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
                                         Icons.arrow_forward,
                                         color: Theme.of(
                                           context,
                                         ).colorScheme.onPrimary,
                                         size: 20,
                                       ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Text(
-                                      'Join the Waitlist',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .labelLarge
-                                          ?.copyWith(
-                                            color: Theme.of(
-                                              context,
-                                            ).colorScheme.onPrimary,
-                                          ),
-                                    ),
-                                  ],
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        'Join the Waitlist',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelLarge
+                                            ?.copyWith(
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.onPrimary,
+                                            ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                         ),
                       ),
