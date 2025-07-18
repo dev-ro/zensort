@@ -1,6 +1,6 @@
 # ZenSort
 
-![ZenSort Logo](assets/images/zensort_logo.png)
+![ZenSort Logo](assets/images/zensort_logo_wordmark_inkscape.png)
 
 > Find clarity in the chaos.
 
@@ -8,33 +8,35 @@ ZenSort is a digital organization tool designed to bring peace and order to your
 
 ## ✨ Features
 
--   **Rediscover Your Library**: Effortlessly organize your entire liked video library.
--   **AI-Powered "Smart Shelves"**: Our AI uses k-means clustering to automatically group your videos into intelligent, well-defined shelves.
--   **Export to Playlists**: Turn your Shelves into new YouTube playlists to escape the algorithm.
--   **Find Lost Music**: Locate and restore your legacy music uploads.
+- **Rediscover Your Library**: Effortlessly organize your entire liked video library.
+- **AI-Powered "Smart Shelves"**: Our AI uses k-means clustering to automatically group your videos into intelligent, well-defined shelves.
+- **Export to Playlists**: Turn your Shelves into new YouTube playlists to escape the algorithm.
+- **Find Lost Music**: Locate and restore your legacy music uploads.
 
 ## 🚀 Getting Started
 
 ### Prerequisites
 
--   [Flutter SDK](https://flutter.dev/docs/get-started/install)
--   [Firebase CLI](https://firebase.google.com/docs/cli)
--   An editor like [VS Code](https://code.visualstudio.com/) or [Android Studio](https://developer.android.com/studio).
+- [Flutter SDK](https://flutter.dev/docs/get-started/install)
+- [Firebase CLI](https://firebase.google.com/docs/cli)
+- An editor like [VS Code](https://code.visualstudio.com/) or [Android Studio](https://developer.android.com/studio).
 
 ### Installation
 
-1.  **Clone the repository:**
+1. **Clone the repository:**
+
     ```sh
-    git clone <repository-url>
+    git clone https://github.com/dev-ro/zensort.git
     cd zensort
     ```
 
-2.  **Install Flutter dependencies:**
+2. **Install Flutter dependencies:**
+
     ```sh
     flutter pub get
     ```
 
-3.  **Set up Firebase:**
+3. **Set up Firebase:**
     - This project uses different Firebase configurations for development and production.
     - Place your `google-services.json` (for Android) and `GoogleService-Info.plist` (for iOS) in the respective platform directories.
     - The app uses two different Firebase projects: one for development (`zensort-dev`) and one for production (`zensort-prod`). The correct configuration is chosen at build time.
@@ -43,21 +45,25 @@ ZenSort is a digital organization tool designed to bring peace and order to your
 
 The application uses a flavor system to separate development and production environments.
 
--   **To run in development mode:**
+- **To run in development mode:**
+
     ```sh
     flutter run --dart-define=FLAVOR=dev
     ```
+
     This will use the `firebase_options_dev.dart` configuration.
 
--   **To run in production mode:**
+- **To run in production mode:**
+
     ```sh
     flutter run --dart-define=FLAVOR=prod
     ```
+
     This will use the `firebase_options.dart` configuration.
 
 ## 📁 Project Structure
 
-```
+```text
 zensort/
 ├── android/         # Android specific files
 ├── assets/          # Images, fonts, and other static assets
@@ -74,6 +80,7 @@ zensort/
 ## ☁️ Firebase Cloud Functions
 
 The `functions` directory contains the backend logic for ZenSort, including:
+
 - `add_to_waitlist`: Adds a user's email to the waitlist in Firestore.
 - `sync_youtube_liked_videos`: A function to sync a user's liked videos from YouTube.
 

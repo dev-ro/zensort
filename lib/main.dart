@@ -9,6 +9,7 @@ import 'firebase_options.dart' as prod_options;
 import 'firebase_options_dev.dart' as dev_options;
 import 'legal/privacy_policy.dart';
 import 'legal/terms_of_service.dart';
+import 'theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,17 +34,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'ZenSort - Find clarity in the chaos.',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF9800A6),
-          primary: const Color(0xFF9800A6),
-          secondary: const Color(0xFFF11E5A),
-          tertiary: const Color(0xFFFF9D00),
-          brightness: Brightness.light,
-        ),
-        textTheme: GoogleFonts.nunitoTextTheme(textTheme),
-        useMaterial3: true,
-      ),
+      theme: getLightTheme(),
       home: const LandingPage(),
     );
   }
@@ -60,7 +51,7 @@ class _LandingPageState extends State<LandingPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: ListView(
         children: [
           const HeroSection(),
@@ -100,17 +91,13 @@ class HeroSection extends StatelessWidget {
               Text(
                 'Find clarity in the chaos.',
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
+                style: Theme.of(context).textTheme.headlineMedium,
               ),
               const SizedBox(height: 24),
               Text(
                 'It all starts with your liked videos. ZenSort is the essential tool for organizing your YouTube library into clean, beautiful shelves. Stop endlessly scrolling and rediscover the content you love. Your journey to digital clarity begins here.',
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
+                style: Theme.of(context).textTheme.bodyLarge,
               ),
             ],
           ),
@@ -169,16 +156,7 @@ class _FeaturesSectionState extends State<FeaturesSection> {
                         width: 4,
                         height: 20,
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [
-                              Color(0xFFFF9D00),
-                              Color(0xFFF75830),
-                              Color(0xFFF11E5A),
-                              Color(0xFF9800A6),
-                            ],
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                          ),
+                          gradient: ZenSortTheme.primaryGradient,
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
@@ -186,10 +164,7 @@ class _FeaturesSectionState extends State<FeaturesSection> {
                       Text(
                         'Key Features',
                         style: Theme.of(context).textTheme.headlineSmall
-                            ?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context).colorScheme.onSurface,
-                            ),
+                            ?.copyWith(fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -235,13 +210,17 @@ class _FeaturesSectionState extends State<FeaturesSection> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Icon(icon, color: Theme.of(context).colorScheme.tertiary, size: 28),
+            Icon(
+              icon,
+              color: Theme.of(context).colorScheme.secondary,
+              size: 28,
+            ),
             const SizedBox(width: 16),
             Expanded(
               child: Text(
                 title,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.tertiary,
+                  color: Theme.of(context).colorScheme.secondary,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -253,9 +232,7 @@ class _FeaturesSectionState extends State<FeaturesSection> {
           padding: const EdgeInsets.only(left: 44), // Aligns with text
           child: Text(
             description,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
+            style: Theme.of(context).textTheme.bodyLarge,
           ),
         ),
       ],
@@ -284,7 +261,6 @@ class _HowItWorksSectionState extends State<HowItWorksSection> {
                 'How It Works',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
               const SizedBox(height: 40),
@@ -374,15 +350,12 @@ class _BuildStepState extends State<_BuildStep> {
                       widget.title,
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       widget.description,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+                      style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ],
                 ),
@@ -483,16 +456,7 @@ class _CallToActionSectionState extends State<CallToActionSection>
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [
-                      Color(0xFFFF9D00),
-                      Color(0xFFF75830),
-                      Color(0xFFF11E5A),
-                      Color(0xFF9800A6),
-                    ],
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                  ),
+                  gradient: ZenSortTheme.primaryGradient,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
                     color: Theme.of(context).colorScheme.primary.withAlpha(102),
@@ -544,9 +508,7 @@ class _CallToActionSectionState extends State<CallToActionSection>
                 child: Text(
                   'Join 50+ early adopters on the journey to digital clarity!',
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
               const SizedBox(height: 24),
@@ -573,10 +535,7 @@ class _CallToActionSectionState extends State<CallToActionSection>
                     ),
                   ),
                 ),
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
+                style: Theme.of(context).textTheme.bodyLarge,
               ),
               const SizedBox(height: 24),
               MouseRegion(
@@ -609,16 +568,7 @@ class _CallToActionSectionState extends State<CallToActionSection>
                       ),
                       child: Ink(
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [
-                              Color(0xFFFF9D00),
-                              Color(0xFFF75830),
-                              Color(0xFFF11E5A),
-                              Color(0xFF9800A6),
-                            ],
-                            begin: Alignment.centerLeft,
-                            end: Alignment.centerRight,
-                          ),
+                          gradient: ZenSortTheme.primaryGradient,
                           borderRadius: BorderRadius.circular(16),
                         ),
                         child: Container(
