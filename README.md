@@ -1,6 +1,6 @@
 # ZenSort
 
-![ZenSort Logo](assets/images/zensort_logo_wordmark_inkscape.png)
+![ZenSort Logo](assets/images/zensort_logo_wordmark.png)
 
 > Find clarity in the chaos.
 

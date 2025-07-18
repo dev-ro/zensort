@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -10,6 +9,26 @@ import 'firebase_options_dev.dart' as dev_options;
 import 'legal/privacy_policy.dart';
 import 'legal/terms_of_service.dart';
 import 'theme.dart';
+class CustomMarkdownStyle {
+  static MarkdownStyleSheet getTheme(BuildContext context) {
+    final pStyle = Theme.of(context).textTheme.bodyMedium;
+    final fontSize = pStyle?.fontSize ?? 14.0;
+    return MarkdownStyleSheet(
+      a: TextStyle(
+        decoration: TextDecoration.none,
+        foreground: Paint()
+          ..shader = ZenSortTheme.orangePurpleGradient.createShader(
+            Rect.fromLTWH(0, 0, 70, fontSize),
+          ),
+      ),
+      blockquoteDecoration: BoxDecoration(
+        color: ZenSortTheme.purple.withAlpha(26),
+        borderRadius: BorderRadius.circular(8.0),
+      ),
+      blockquotePadding: const EdgeInsets.all(16.0),
+    );
+  }
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,7 +49,6 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'ZenSort - Find clarity in the chaos.',
@@ -152,19 +170,27 @@ class _FeaturesSectionState extends State<FeaturesSection> {
                 children: [
                   Row(
                     children: [
-                      Container(
-                        width: 4,
-                        height: 20,
-                        decoration: BoxDecoration(
-                          gradient: ZenSortTheme.primaryGradient,
-                          borderRadius: BorderRadius.circular(2),
+                      SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: SvgPicture.asset(
+                          'assets/images/zensort_logo.svg',
                         ),
                       ),
                       const SizedBox(width: 12),
-                      Text(
-                        'Key Features',
-                        style: Theme.of(context).textTheme.headlineSmall
-                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ShaderMask(
+                        shaderCallback: (bounds) =>
+                            ZenSortTheme.orangePurpleGradient.createShader(
+                              Rect.fromLTWH(0, 0, bounds.width, bounds.height),
+                            ),
+                        child: Text(
+                          'Features',
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                        ),
                       ),
                     ],
                   ),
@@ -174,6 +200,7 @@ class _FeaturesSectionState extends State<FeaturesSection> {
                     Icons.video_library_outlined,
                     'Rediscover Your Library',
                     'Effortlessly organize your entire liked video library, no matter the size.',
+                    ZenSortTheme.orangePurpleGradient,
                   ),
                   const SizedBox(height: 20),
                   _buildFeatureItem(
@@ -181,6 +208,7 @@ class _FeaturesSectionState extends State<FeaturesSection> {
                     Icons.playlist_play_outlined,
                     'Break the Plateau',
                     'Turn your Shelves into new YouTube playlists to escape the algorithm.',
+                    ZenSortTheme.orangePurpleGradient,
                   ),
                   const SizedBox(height: 20),
                   _buildFeatureItem(
@@ -188,6 +216,31 @@ class _FeaturesSectionState extends State<FeaturesSection> {
                     Icons.music_note_outlined,
                     'Find Lost Music',
                     'Locate and restore your legacy music uploads.',
+                    ZenSortTheme.orangePurpleGradient,
+                  ),
+                  const SizedBox(height: 20),
+                  _buildFeatureItem(
+                    context,
+                    Icons.delete_sweep_outlined,
+                    'Effortless Cleanup',
+                    'For those with exceptionally large liked lists, mass unlike videos to start fresh.',
+                    ZenSortTheme.orangePurpleGradient,
+                  ),
+                  const SizedBox(height: 20),
+                  _buildFeatureItem(
+                    context,
+                    Icons.history_outlined,
+                    'Travel Back in Time',
+                    "Rediscover what you loved with 'Timely Shelves', perfect for nostalgic journeys through your library.",
+                    ZenSortTheme.orangePurpleGradient,
+                  ),
+                  const SizedBox(height: 20),
+                  _buildFeatureItem(
+                    context,
+                    Icons.sync_problem_outlined,
+                    'Track Unavailable Videos',
+                    'Get notified when liked videos are made private or deleted, so you never lose track of content.',
+                    ZenSortTheme.orangePurpleGradient,
                   ),
                 ],
               ),
@@ -203,6 +256,7 @@ class _FeaturesSectionState extends State<FeaturesSection> {
     IconData icon,
     String title,
     String description,
+    Gradient gradient,
   ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -210,18 +264,25 @@ class _FeaturesSectionState extends State<FeaturesSection> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Icon(
-              icon,
-              color: Theme.of(context).colorScheme.secondary,
-              size: 28,
+            ShaderMask(
+              shaderCallback: (bounds) => gradient.createShader(
+                Rect.fromLTWH(0, 0, bounds.width, bounds.height),
+              ),
+              child: Icon(
+                icon,
+                color: Colors.white, // This color is necessary for ShaderMask
+                size: 28,
+              ),
             ),
             const SizedBox(width: 16),
             Expanded(
-              child: Text(
-                title,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.secondary,
-                  fontWeight: FontWeight.w600,
+              child: ShaderMask(
+                shaderCallback: (bounds) => gradient.createShader(
+                  Rect.fromLTWH(0, 0, bounds.width, bounds.height),
+                ),
+                child: Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
             ),
@@ -257,11 +318,30 @@ class _HowItWorksSectionState extends State<HowItWorksSection> {
           constraints: const BoxConstraints(maxWidth: 500),
           child: Column(
             children: [
-              Text(
-                'How It Works',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: SvgPicture.asset('assets/images/zensort_logo.svg'),
+                  ),
+                  const SizedBox(width: 8),
+                  ShaderMask(
+                    shaderCallback: (bounds) =>
+                        ZenSortTheme.orangePurpleGradient.createShader(
+                          Rect.fromLTWH(0, 0, bounds.width, bounds.height),
+                        ),
+                    child: Text(
+                      'How It Works',
+                      style: Theme.of(context).textTheme.headlineMedium
+                          ?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 40),
               const _BuildStep(
@@ -331,13 +411,35 @@ class _BuildStepState extends State<_BuildStep> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CircleAvatar(
-                radius: 24,
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                child: Text(
-                  widget.stepNumber,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onPrimary,
+              Container(
+                padding: const EdgeInsets.all(2.0),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: ZenSortTheme.orangePurpleGradient,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withAlpha(_isHovered ? 51 : 26),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: CircleAvatar(
+                  radius: 24,
+                  backgroundColor: ZenSortTheme.scaffoldBackground,
+                  child: ShaderMask(
+                    shaderCallback: (bounds) =>
+                        ZenSortTheme.orangePurpleGradient.createShader(
+                          Rect.fromLTWH(0, 0, bounds.width, bounds.height),
+                        ),
+                    child: Text(
+                      widget.stepNumber,
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                    ),
                   ),
                 ),
               ),
@@ -420,10 +522,21 @@ class _CallToActionSectionState extends State<CallToActionSection>
       );
       final result = await callable.call({'email': _emailController.text});
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(result.data['message'])));
-      _emailController.clear();
+
+      final message = result.data['message'];
+      if (message.contains('is already on our waitlist')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+        _emailController.clear();
+      }
     } on FirebaseFunctionsException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -454,14 +567,10 @@ class _CallToActionSectionState extends State<CallToActionSection>
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Container(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(2.0),
                 decoration: BoxDecoration(
                   gradient: ZenSortTheme.primaryGradient,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: Theme.of(context).colorScheme.primary.withAlpha(102),
-                    width: 2,
-                  ),
                   boxShadow: [
                     BoxShadow(
                       color: Theme.of(
@@ -472,41 +581,44 @@ class _CallToActionSectionState extends State<CallToActionSection>
                     ),
                   ],
                 ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.primary.withAlpha(51),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(
-                        Icons.local_offer,
-                        color: Theme.of(context).colorScheme.onPrimaryContainer,
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Text(
-                        'Join the waitlist now and be one of the first 100 subscribers to get 50% off for life.',
-                        textAlign: TextAlign.left,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(
-                              color: Theme.of(context).colorScheme.onPrimary,
+                child: Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: ZenSortTheme.scaffoldBackground,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Row(
+                    children: [
+                      ShaderMask(
+                        shaderCallback: (bounds) =>
+                            ZenSortTheme.orangePurpleGradient.createShader(
+                              Rect.fromLTWH(0, 0, bounds.width, bounds.height),
                             ),
+                        child: const Icon(
+                          Icons.local_offer,
+                          color: Colors.white, // Needs to be non-transparent
+                          size: 20,
+                        ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Text(
+                          'Join the waitlist now and be one of the first 100 subscribers to get 50% off for life.',
+                          textAlign: TextAlign.left,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(color: ZenSortTheme.darkText),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8.0),
                 child: Text(
-                  'Join 50+ early adopters on the journey to digital clarity!',
+                  '''We won't send a confirmation email. To check if you're on the list, just enter your email again. We'll only email you at launch.
+Tip: Use your primary YouTube Gmail for early adopter rewards!''',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
@@ -641,6 +753,7 @@ class Footer extends StatelessWidget {
             child: SingleChildScrollView(
               child: MarkdownBody(
                 data: content,
+                styleSheet: CustomMarkdownStyle.getTheme(context),
                 onTapLink: (text, href, title) {
                   if (href != null) {
                     launchUrl(Uri.parse(href));

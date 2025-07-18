@@ -3,22 +3,25 @@ import 'package:google_fonts/google_fonts.dart';
 
 class ZenSortTheme {
   // Colors
-  static const Color scaffoldBackground = Color(0xFFF5F5F5);
-  static const Color darkText = Color(0xFF333333);
+  static const Color scaffoldBackground = Color(0xFFFAFAFA); // Clean off-white
+  static const Color darkText = Color(0xFF4A5568); // From "Zen" in logo
   static const Color lightText = Color(0xFFFFFFFF);
-  static const Color primaryColor = Color(0xFF6A8A82);
-  static const Color accentColor = Color(0xFFC2DCD3);
+  static const Color primaryColor = Color(0xFF424242); // Dark Grey
+  static const Color accentColor = Color(0xFFBDBDBD); // Medium Grey
+  static const Color purple = Color(0xFF9800A6);
 
   // Gradient Colors for Buttons
   static const LinearGradient primaryGradient = LinearGradient(
-    colors: [
-      Color(0xFFFF9D00),
-      Color(0xFFF75830),
-      Color(0xFFF11E5A),
-      Color(0xFF9800A6),
-    ],
+    colors: [Color(0xFFFF9D00), Color(0xFFF75830), Color(0xFF9800A6)],
     begin: Alignment.centerLeft,
     end: Alignment.centerRight,
+  );
+
+  static const LinearGradient orangePurpleGradient = LinearGradient(
+    colors: [Color(0xFFF75830), Color(0xFF9800A6)],
+    begin: Alignment.centerLeft,
+    end: Alignment.centerRight,
+    tileMode: TileMode.mirror,
   );
 
   // Text Styles
@@ -57,8 +60,6 @@ ThemeData getLightTheme() {
       onSecondary: ZenSortTheme.darkText,
       error: Colors.red,
       onError: ZenSortTheme.lightText,
-      background: ZenSortTheme.scaffoldBackground,
-      onBackground: ZenSortTheme.darkText,
       surface: Color(0xFFFFFFFF),
       onSurface: ZenSortTheme.darkText,
     ),
@@ -83,5 +84,6 @@ ThemeData getLightTheme() {
           bodyColor: ZenSortTheme.darkText,
           displayColor: ZenSortTheme.darkText,
         ),
+    fontFamily: GoogleFonts.nunito().fontFamily,
   );
 }

@@ -70,5 +70,6 @@ By continuing to access or use our Service after any revisions become effective,
 **11. Contact Us**
 
 If you have any questions about these Terms, please contact us:
-> [hi@zensort.app](mailto:hi@zensort.app)
+
+[hi@zensort.app](mailto:hi@zensort.app)
 """;
