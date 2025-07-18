@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:zensort/theme.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'firebase_options.dart';
+import 'legal/privacy_policy.dart';
+import 'legal/terms_of_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,12 +19,20 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'ZenSort - Find clarity in the chaos.',
       theme: ThemeData(
-        primarySwatch: Colors.blue,
-        visualDensity: VisualDensity.adaptivePlatformDensity,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF9800A6),
+          primary: const Color(0xFF9800A6),
+          secondary: const Color(0xFFF11E5A),
+          tertiary: const Color(0xFFFF9D00),
+          brightness: Brightness.light,
+        ),
+        textTheme: GoogleFonts.nunitoTextTheme(textTheme),
+        useMaterial3: true,
       ),
       home: const LandingPage(),
     );
@@ -35,12 +46,359 @@ class LandingPage extends StatefulWidget {
   State<LandingPage> createState() => _LandingPageState();
 }
 
-class _LandingPageState extends State<LandingPage>
+class _LandingPageState extends State<LandingPage> {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      body: ListView(
+        children: [
+          const HeroSection(),
+          const FeaturesSection(),
+          HowItWorksSection(),
+          const CallToActionSection(),
+          const Footer(),
+        ],
+      ),
+    );
+  }
+}
+
+class HeroSection extends StatelessWidget {
+  const HeroSection({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(24.0),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 500),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SvgPicture.asset(
+                'assets/images/zensort_logo_wordmark.svg',
+                height: 75,
+                placeholderBuilder: (BuildContext context) => Container(
+                  padding: const EdgeInsets.all(30.0),
+                  child: const CircularProgressIndicator(),
+                ),
+              ),
+              const SizedBox(height: 48),
+              Text(
+                'Find clarity in the chaos.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'It all starts with your liked videos. ZenSort is the essential tool for organizing your YouTube library into clean, beautiful shelves. Stop endlessly scrolling and rediscover the content you love. Your journey to digital clarity begins here.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class FeaturesSection extends StatefulWidget {
+  const FeaturesSection({super.key});
+
+  @override
+  State<FeaturesSection> createState() => _FeaturesSectionState();
+}
+
+class _FeaturesSectionState extends State<FeaturesSection> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40.0),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 500),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface.withAlpha(128),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.outlineVariant.withAlpha(128),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withAlpha(_isHovered ? 51 : 26),
+                    blurRadius: _isHovered ? 30 : 20,
+                    offset: Offset(0, _isHovered ? 15 : 10),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 4,
+                        height: 20,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [
+                              Color(0xFFFF9D00),
+                              Color(0xFFF75830),
+                              Color(0xFFF11E5A),
+                              Color(0xFF9800A6),
+                            ],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Key Features',
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).colorScheme.onSurface,
+                            ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  _buildFeatureItem(
+                    context,
+                    Icons.video_library_outlined,
+                    'Rediscover Your Library',
+                    'Effortlessly organize your entire liked video library, no matter the size.',
+                  ),
+                  const SizedBox(height: 20),
+                  _buildFeatureItem(
+                    context,
+                    Icons.playlist_play_outlined,
+                    'Break the Plateau',
+                    'Turn your Shelves into new YouTube playlists to escape the algorithm.',
+                  ),
+                  const SizedBox(height: 20),
+                  _buildFeatureItem(
+                    context,
+                    Icons.music_note_outlined,
+                    'Find Lost Music',
+                    'Locate and restore your legacy music uploads.',
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFeatureItem(
+    BuildContext context,
+    IconData icon,
+    String title,
+    String description,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Icon(icon, color: Theme.of(context).colorScheme.tertiary, size: 28),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                title,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.tertiary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Padding(
+          padding: const EdgeInsets.only(left: 44), // Aligns with text
+          child: Text(
+            description,
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class HowItWorksSection extends StatefulWidget {
+  const HowItWorksSection({super.key});
+
+  @override
+  State<HowItWorksSection> createState() => _HowItWorksSectionState();
+}
+
+class _HowItWorksSectionState extends State<HowItWorksSection> {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40.0),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 500),
+          child: Column(
+            children: [
+              Text(
+                'How It Works',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 40),
+              const _BuildStep(
+                stepNumber: '1',
+                title: 'Connect Your YouTube Account',
+                description:
+                    'Securely link your YouTube account to ZenSort in just a few clicks.',
+              ),
+              const SizedBox(height: 48),
+              const _BuildStep(
+                stepNumber: '2',
+                title: 'AI-Powered "Smart Shelves"',
+                description:
+                    'Our AI uses k-means clustering to automatically group your videos into intelligent, well-defined shelves.',
+              ),
+              const SizedBox(height: 48),
+              const _BuildStep(
+                stepNumber: '3',
+                title: 'Rediscover & Export',
+                description:
+                    'Enjoy your newly organized library and export Shelves to YouTube playlists.',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BuildStep extends StatefulWidget {
+  final String stepNumber;
+  final String title;
+  final String description;
+
+  const _BuildStep({
+    required this.stepNumber,
+    required this.title,
+    required this.description,
+  });
+
+  @override
+  State<_BuildStep> createState() => _BuildStepState();
+}
+
+class _BuildStepState extends State<_BuildStep> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        decoration: BoxDecoration(
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(_isHovered ? 26 : 0),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                child: Text(
+                  widget.stepNumber,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onPrimary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 24),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.title,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      widget.description,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class CallToActionSection extends StatefulWidget {
+  const CallToActionSection({super.key});
+
+  @override
+  State<CallToActionSection> createState() => _CallToActionSectionState();
+}
+
+class _CallToActionSectionState extends State<CallToActionSection>
     with SingleTickerProviderStateMixin {
   final _emailController = TextEditingController();
   late AnimationController _animationController;
   late Animation<double> _animation;
   bool _isLoading = false;
+  bool _isHovering = false;
 
   @override
   void initState() {
@@ -78,121 +436,318 @@ class _LandingPageState extends State<LandingPage>
         'add_to_waitlist',
       );
       final result = await callable.call({'email': _emailController.text});
-
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(result.data['message'])));
       _emailController.clear();
     } on FirebaseFunctionsException catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Error: ${e.message}')));
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('An unexpected error occurred: $e')),
       );
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: ZenSortTheme.scaffoldBackground,
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 500),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SvgPicture.asset(
-                  'assets/images/zensort_logo_wordmark.svg',
-                  height: 75,
-                  placeholderBuilder: (BuildContext context) => Container(
-                    padding: const EdgeInsets.all(30.0),
-                    child: const CircularProgressIndicator(),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(24.0, 0, 24.0, 40.0),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 500),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [
+                      Color(0xFFFF9D00),
+                      Color(0xFFF75830),
+                      Color(0xFFF11E5A),
+                      Color(0xFF9800A6),
+                    ],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
                   ),
-                ),
-                const SizedBox(height: 48),
-                Text(
-                  'Find clarity in the chaos.',
-                  textAlign: TextAlign.center,
-                  style: ZenSortTheme.headline,
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  'It all starts with your liked videos. ZenSort is the essential tool for organizing your YouTube library into clean, beautiful shelves. Stop endlessly scrolling and rediscover the content you love. Your journey to digital clarity begins here.',
-                  textAlign: TextAlign.center,
-                  style: ZenSortTheme.body,
-                ),
-                const SizedBox(height: 48),
-                TextField(
-                  controller: _emailController,
-                  onSubmitted: (_) => _joinWaitlist(),
-                  decoration: InputDecoration(
-                    hintText: 'Enter your email',
-                    filled: true,
-                    fillColor: Colors.white,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 16,
-                    ),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.primary.withAlpha(102),
+                    width: 2,
                   ),
-                ),
-                const SizedBox(height: 24),
-                ScaleTransition(
-                  scale: _animation,
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _joinWaitlist,
-                    style: ElevatedButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 5,
-                      backgroundColor: Colors.transparent,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primary.withAlpha(51),
+                      blurRadius: 15,
+                      offset: const Offset(0, 8),
                     ),
-                    child: Ink(
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [
-                            ZenSortTheme.gradientStart,
-                            ZenSortTheme.gradientEnd,
-                          ],
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                        ),
-                        borderRadius: BorderRadius.circular(12),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.primary.withAlpha(51),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        alignment: Alignment.center,
-                        child: _isLoading
-                            ? const CircularProgressIndicator(
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  Colors.white,
+                      child: Icon(
+                        Icons.local_offer,
+                        color: Theme.of(context).colorScheme.onPrimaryContainer,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Text(
+                        'Join the waitlist now and be one of the first 100 subscribers to get 50% off for life.',
+                        textAlign: TextAlign.left,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              color: Theme.of(context).colorScheme.onPrimary,
+                            ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                child: Text(
+                  'Join 50+ early adopters on the journey to digital clarity!',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              TextField(
+                controller: _emailController,
+                onSubmitted: (_) => _joinWaitlist(),
+                decoration: InputDecoration(
+                  hintText: 'Enter your email',
+                  hintStyle: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  prefixIcon: Icon(
+                    Icons.email_outlined,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16.0),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16.0),
+                    borderSide: BorderSide(
+                      color: Theme.of(context).colorScheme.primary,
+                      width: 2.0,
+                    ),
+                  ),
+                ),
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 24),
+              MouseRegion(
+                onEnter: (event) => setState(() => _isHovering = true),
+                onExit: (event) => setState(() => _isHovering = false),
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.primary.withAlpha(77),
+                        blurRadius: 20,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: ScaleTransition(
+                    scale: _animation,
+                    child: ElevatedButton(
+                      onPressed: _isLoading ? null : _joinWaitlist,
+                      style: ElevatedButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        elevation: 0,
+                        backgroundColor: Colors.transparent,
+                      ),
+                      child: Ink(
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [
+                              Color(0xFFFF9D00),
+                              Color(0xFFF75830),
+                              Color(0xFFF11E5A),
+                              Color(0xFF9800A6),
+                            ],
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 20),
+                          alignment: Alignment.center,
+                          child: _isLoading
+                              ? CircularProgressIndicator(
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Theme.of(context).colorScheme.onPrimary,
+                                  ),
+                                )
+                              : Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    AnimatedPadding(
+                                      duration: const Duration(
+                                        milliseconds: 200,
+                                      ),
+                                      curve: Curves.easeOut,
+                                      padding: EdgeInsets.only(
+                                        right: _isHovering ? 5.0 : 0.0,
+                                      ),
+                                      child: Icon(
+                                        Icons.arrow_forward,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onPrimary,
+                                        size: 20,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      'Join the Waitlist',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelLarge
+                                          ?.copyWith(
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.onPrimary,
+                                          ),
+                                    ),
+                                  ],
                                 ),
-                              )
-                            : Text(
-                                'Join the Waitlist',
-                                style: ZenSortTheme.button,
-                              ),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class Footer extends StatelessWidget {
+  const Footer({super.key});
+
+  void _showLegalDialog(BuildContext context, String title, String content) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(title),
+          content: SizedBox(
+            width: 500,
+            child: SingleChildScrollView(child: MarkdownBody(data: content)),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('Close'),
             ),
+          ],
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Theme.of(
+        context,
+      ).colorScheme.surfaceContainerHighest.withAlpha(77),
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 500),
+          child: Column(
+            children: [
+              Text(
+                '© ${DateTime.now().year} ZenSort. All rights reserved.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  TextButton(
+                    onPressed: () {
+                      _showLegalDialog(
+                        context,
+                        'Privacy Policy',
+                        privacyPolicyText,
+                      );
+                    },
+                    child: Text(
+                      'Privacy Policy',
+                      style: Theme.of(context).textTheme.labelSmall,
+                    ),
+                  ),
+                  Text(
+                    '•',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      _showLegalDialog(
+                        context,
+                        'Terms of Service',
+                        termsOfServiceText,
+                      );
+                    },
+                    child: Text(
+                      'Terms of Service',
+                      style: Theme.of(context).textTheme.labelSmall,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
