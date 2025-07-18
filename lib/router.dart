@@ -7,30 +7,33 @@ import 'package:zensort/legal/disclaimer.dart';
 
 final GoRouter router = GoRouter(
   initialLocation: '/',
+  restorationScopeId: 'router',
   routes: <GoRoute>[
     GoRoute(
       path: '/',
-      builder: (BuildContext context, GoRouterState state) {
-        return const LandingPage();
-      },
-    ),
-    GoRoute(
-      path: '/privacy',
-      builder: (BuildContext context, GoRouterState state) {
-        return const PrivacyPolicyPage();
-      },
-    ),
-    GoRoute(
-      path: '/terms',
-      builder: (BuildContext context, GoRouterState state) {
-        return const TermsOfServicePage();
-      },
-    ),
-    GoRoute(
-      path: '/disclaimer',
-      builder: (BuildContext context, GoRouterState state) {
-        return const DisclaimerPage();
-      },
+      pageBuilder: (context, state) =>
+          MaterialPage(key: state.pageKey, child: const LandingPage()),
+      routes: [
+        GoRoute(
+          path: 'privacy',
+          pageBuilder: (context, state) => MaterialPage(
+            key: state.pageKey,
+            child: const PrivacyPolicyPage(),
+          ),
+        ),
+        GoRoute(
+          path: 'terms',
+          pageBuilder: (context, state) => MaterialPage(
+            key: state.pageKey,
+            child: const TermsOfServicePage(),
+          ),
+        ),
+        GoRoute(
+          path: 'disclaimer',
+          pageBuilder: (context, state) =>
+              MaterialPage(key: state.pageKey, child: const DisclaimerPage()),
+        ),
+      ],
     ),
   ],
 );

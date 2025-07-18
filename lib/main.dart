@@ -4,11 +4,8 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'firebase_options.dart' as prod_options;
 import 'firebase_options_dev.dart' as dev_options;
-import 'legal/privacy_policy.dart';
-import 'legal/terms_of_service.dart';
 import 'theme.dart';
 import 'package:zensort/router.dart';
 
@@ -57,6 +54,7 @@ class MyApp extends StatelessWidget {
       title: 'ZenSort',
       theme: getLightTheme(),
       routerConfig: router,
+      restorationScopeId: 'app',
       debugShowCheckedModeBanner: false,
     );
   }
@@ -75,6 +73,7 @@ class _LandingPageState extends State<LandingPage> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: ListView(
+        key: const PageStorageKey<String>('landingPage'),
         children: [
           Hero(tag: 'zensort_logo', child: const HeroSection()),
           const FeaturesSection(),
@@ -641,7 +640,7 @@ class _CallToActionSectionState extends State<CallToActionSection>
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8.0),
                 child: Text(
-                  '''We won't send a confirmation email. To check if you're on the list, just enter your email again and a confirmation will appear at the bottom of your screen. \nWe'll only email you at launch.
+                  '''To check if you're on the list, just enter your email again and a confirmation will appear at the bottom of your screen. We'll only email you at launch.
 Tip: Use your primary YouTube Gmail for early adopter rewards!''',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodySmall,
@@ -783,7 +782,7 @@ class Footer extends StatelessWidget {
                 children: [
                   TextButton(
                     onPressed: () {
-                      context.go('/privacy');
+                      context.push('/privacy');
                     },
                     child: Text(
                       'Privacy Policy',
@@ -798,7 +797,7 @@ class Footer extends StatelessWidget {
                   ),
                   TextButton(
                     onPressed: () {
-                      context.go('/terms');
+                      context.push('/terms');
                     },
                     child: Text(
                       'Terms of Service',
@@ -813,7 +812,7 @@ class Footer extends StatelessWidget {
                   ),
                   TextButton(
                     onPressed: () {
-                      context.go('/disclaimer');
+                      context.push('/disclaimer');
                     },
                     child: Text(
                       'Disclaimer',
