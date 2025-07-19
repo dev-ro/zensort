@@ -19,7 +19,7 @@ class CustomMarkdownStyle {
       a: TextStyle(
         decoration: TextDecoration.none,
         foreground: Paint()
-          ..shader = ZenSortTheme.orangePurpleGradient.createShader(
+          ..shader = ZenSortTheme.primaryGradient.createShader(
             Rect.fromLTWH(0, 0, 70, fontSize),
           ),
       ),
@@ -168,7 +168,7 @@ class _FeaturesSectionState extends State<FeaturesSection> {
                 child: Container(
                   padding: const EdgeInsets.all(1.5), // Border width
                   decoration: const BoxDecoration(
-                    gradient: ZenSortTheme.orangePurpleGradient,
+                    gradient: ZenSortTheme.primaryGradient,
                   ),
                   child: Container(
                     padding: const EdgeInsets.all(22.5), // Content padding
@@ -190,9 +190,8 @@ class _FeaturesSectionState extends State<FeaturesSection> {
                             ),
                             const SizedBox(width: 12),
                             ShaderMask(
-                              shaderCallback: (bounds) => ZenSortTheme
-                                  .orangePurpleGradient
-                                  .createShader(
+                              shaderCallback: (bounds) =>
+                                  ZenSortTheme.primaryGradient.createShader(
                                     Rect.fromLTWH(
                                       0,
                                       0,
@@ -219,7 +218,7 @@ class _FeaturesSectionState extends State<FeaturesSection> {
                           title: 'Rediscover Your Library',
                           description:
                               'Effortlessly organize your entire liked video library, no matter the size.',
-                          gradient: ZenSortTheme.orangePurpleGradient,
+                          gradient: ZenSortTheme.primaryGradient,
                         ),
                         const SizedBox(height: 20),
                         const _FeatureItem(
@@ -227,7 +226,7 @@ class _FeaturesSectionState extends State<FeaturesSection> {
                           title: 'Break the Plateau',
                           description:
                               'Turn your Shelves into new YouTube playlists to escape the algorithm.',
-                          gradient: ZenSortTheme.orangePurpleGradient,
+                          gradient: ZenSortTheme.primaryGradient,
                         ),
                         const SizedBox(height: 20),
                         const _FeatureItem(
@@ -235,14 +234,14 @@ class _FeaturesSectionState extends State<FeaturesSection> {
                           title: 'Find Lost Music',
                           description:
                               'Locate and restore your legacy music uploads.',
-                          gradient: ZenSortTheme.orangePurpleGradient,
+                          gradient: ZenSortTheme.primaryGradient,
                         ),
                         const SizedBox(height: 20),
                         const _FeatureItem(
                           icon: Icons.delete_sweep_outlined,
                           title: 'Effortless Cleanup',
                           description: 'Mass unlike videos to start fresh.',
-                          gradient: ZenSortTheme.orangePurpleGradient,
+                          gradient: ZenSortTheme.primaryGradient,
                         ),
                         const SizedBox(height: 20),
                         const _FeatureItem(
@@ -250,7 +249,7 @@ class _FeaturesSectionState extends State<FeaturesSection> {
                           title: 'Travel Back in Time',
                           description:
                               "Rediscover what you loved with Timely Shelves, perfect for nostalgic journeys.",
-                          gradient: ZenSortTheme.orangePurpleGradient,
+                          gradient: ZenSortTheme.primaryGradient,
                         ),
                         const SizedBox(height: 20),
                         const _FeatureItem(
@@ -258,7 +257,7 @@ class _FeaturesSectionState extends State<FeaturesSection> {
                           title: 'Track Unavailable Videos',
                           description:
                               'Get notified when liked videos are made private or deleted.',
-                          gradient: ZenSortTheme.orangePurpleGradient,
+                          gradient: ZenSortTheme.primaryGradient,
                         ),
                       ],
                     ),
@@ -356,7 +355,7 @@ class _HowItWorksSectionState extends State<HowItWorksSection> {
                   const SizedBox(width: 8),
                   ShaderMask(
                     shaderCallback: (bounds) =>
-                        ZenSortTheme.orangePurpleGradient.createShader(
+                        ZenSortTheme.primaryGradient.createShader(
                           Rect.fromLTWH(0, 0, bounds.width, bounds.height),
                         ),
                     child: Text(
@@ -442,7 +441,7 @@ class _BuildStepState extends State<_BuildStep> {
                 padding: const EdgeInsets.all(2.0),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: ZenSortTheme.orangePurpleGradient,
+                  gradient: ZenSortTheme.primaryGradient,
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withAlpha(_isHovered ? 51 : 26),
@@ -456,7 +455,7 @@ class _BuildStepState extends State<_BuildStep> {
                   backgroundColor: ZenSortTheme.scaffoldBackground,
                   child: ShaderMask(
                     shaderCallback: (bounds) =>
-                        ZenSortTheme.orangePurpleGradient.createShader(
+                        ZenSortTheme.primaryGradient.createShader(
                           Rect.fromLTWH(0, 0, bounds.width, bounds.height),
                         ),
                     child: Text(
@@ -614,7 +613,7 @@ class _CallToActionSectionState extends State<CallToActionSection>
                     children: [
                       ShaderMask(
                         shaderCallback: (bounds) =>
-                            ZenSortTheme.orangePurpleGradient.createShader(
+                            ZenSortTheme.primaryGradient.createShader(
                               Rect.fromLTWH(0, 0, bounds.width, bounds.height),
                             ),
                         child: const Icon(
