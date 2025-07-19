@@ -63,45 +63,47 @@ The application uses a flavor system to separate development and production envi
 
 ## 🚀 Deployment
 
-This project uses a combination of manual and automated deployments to ensure safety and consistency.
+Deployment is handled by an automated CI/CD pipeline using GitHub Actions, triggered by your Git workflow.
 
-### Manual Deployment (Local)
+### Development & Staging Environment
 
-The manual deployment process includes a safety check to prevent deploying the wrong build to the wrong environment.
+- **Trigger:** Every push to the `main` branch.
+- **Action:** The workflow automatically builds the **dev** version of the app and deploys it to the development project on Firebase.
+- **URL:** [https://zensort-dev.web.app](https://zensort-dev.web.app)
 
-1. **Switch to your target Firebase project:**
-    - For production: `firebase use prod`
-    - For development: `firebase use dev`
+This provides a constantly updated staging environment for testing.
 
-2. **Build the app with the correct flavor:**
-    - The `build.sh` script handles this. It must be run from a Bash-compatible terminal like Git Bash on Windows.
-    - For production: `./build.sh prod`
-    - For development: `./build.sh dev`
+### Production Environment
 
-3. **Deploy:**
-    - `firebase deploy`
+Deploying to production is an intentional, manual action driven by a single script that handles versioning and deployment.
 
-    If the build flavor does not match the target project, the deployment will be automatically aborted with an error message.
+- **Prerequisite:** You must have a Bash-compatible terminal like **Git Bash** on Windows.
+- **Command:** To deploy, run the `deploy.sh` script with the type of release you are making (`major`, `minor`, or `patch`).
 
-### Automated Deployment (GitHub Actions)
-
-The CI/CD pipeline is configured to deploy automatically based on your Git workflow.
-
-- **Development Deployment:**
-  - **Trigger:** Pushing commits to the `main` branch.
-  - **Action:** Automatically builds the **dev** version of the app and deploys it to the `zensort-dev` project. This keeps your staging environment up-to-date.
-
-- **Production Deployment:**
-  - **Trigger:** Pushing a new Git tag that starts with `v` (e.g., `v1.0.1`, `v1.1`).
-  - **Action:** Automatically builds the **prod** version of the app and deploys it to the `zensort-a7b47` (production) project.
-  - **Example Command:**
+  - For a small bug fix (e.g., `1.3.0` -> `1.3.1`):
 
     ```sh
-        # Create a new version tag
-        git tag v1.0.1
-        # Push the tag to GitHub to trigger the production deploy
-        git push origin v1.0.1
-        ```
+    ./scripts/deploy.sh patch
+    ```
+
+  - For a new feature (e.g., `1.3.1` -> `1.4.0`):
+
+    ```sh
+    ./scripts/deploy.sh minor
+    ```
+
+  - For a major, breaking change (e.g., `1.4.0` -> `2.0.0`):
+
+    ```sh
+    ./scripts/deploy.sh major
+    ```
+
+- **Action:** The script will automatically:
+    1. Perform safety checks (e.g., ensure you are on the `main` branch).
+    2. Increment the version number in the `scripts/VERSION` file.
+    3. Ask for your final confirmation.
+    4. Commit the version bump, create a new Git tag, and push to GitHub.
+    5. This push triggers the GitHub Actions workflow to build the **prod** version and deploy it to the production project.
 
 ## 📁 Project Structure
 
@@ -115,8 +117,13 @@ zensort/
 │   ├── legal/       # Privacy Policy and Terms of Service
 │   ├── main.dart    # Main application entry point
 │   └── theme.dart   # Application theme
+├── scripts/         # Automation and helper scripts
+│   ├── build.sh
+│   ├── check_build_flavor.sh
+│   ├── deploy.sh
+│   └── VERSION
 ├── test/            # Widget tests
-└── ...              # Other platform-specific directories (Linux, macOS, web, Windows)
+└── ...              # Other platform-specific directories
 ```
 
 ## ☁️ Firebase Cloud Functions
