@@ -3,7 +3,5 @@
     "default": "zensort-dev",
     "dev": "zensort-dev",
     "prod": "zensort-a7b47"
-  },
-  "targets": {},
-  "etags": {}
+  }
 }

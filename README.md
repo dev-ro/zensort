@@ -61,6 +61,48 @@ The application uses a flavor system to separate development and production envi
 
     This will use the `firebase_options.dart` configuration.
 
+## 🚀 Deployment
+
+This project uses a combination of manual and automated deployments to ensure safety and consistency.
+
+### Manual Deployment (Local)
+
+The manual deployment process includes a safety check to prevent deploying the wrong build to the wrong environment.
+
+1. **Switch to your target Firebase project:**
+    - For production: `firebase use prod`
+    - For development: `firebase use dev`
+
+2. **Build the app with the correct flavor:**
+    - The `build.sh` script handles this. It must be run from a Bash-compatible terminal like Git Bash on Windows.
+    - For production: `./build.sh prod`
+    - For development: `./build.sh dev`
+
+3. **Deploy:**
+    - `firebase deploy`
+
+    If the build flavor does not match the target project, the deployment will be automatically aborted with an error message.
+
+### Automated Deployment (GitHub Actions)
+
+The CI/CD pipeline is configured to deploy automatically based on your Git workflow.
+
+- **Development Deployment:**
+  - **Trigger:** Pushing commits to the `main` branch.
+  - **Action:** Automatically builds the **dev** version of the app and deploys it to the `zensort-dev` project. This keeps your staging environment up-to-date.
+
+- **Production Deployment:**
+  - **Trigger:** Pushing a new Git tag that starts with `v` (e.g., `v1.0.1`, `v1.1`).
+  - **Action:** Automatically builds the **prod** version of the app and deploys it to the `zensort-a7b47` (production) project.
+  - **Example Command:**
+
+    ```sh
+        # Create a new version tag
+        git tag v1.0.1
+        # Push the tag to GitHub to trigger the production deploy
+        git push origin v1.0.1
+        ```
+
 ## 📁 Project Structure
 
 ```text
