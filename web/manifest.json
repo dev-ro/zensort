@@ -1,12 +1,12 @@
 {
-	"name": "ZenSort - AI-Powered YouTube Library Organization",
+	"name": "ZenSort",
 	"short_name": "ZenSort",
-	"start_url": "https://zensort.app",
-	"display": "fullscreen",
-	"background_color": "#FDF6E3",
-	"theme_color": "#FDF6E3",
+	"start_url": ".",
+	"display": "standalone",
+	"background_color": "#F75830",
+	"theme_color": "#F75830",
 	"description": "ZenSort uses AI to automatically organize your YouTube liked videos into 'Smart Shelves.' Rediscover your favorite content, create new playlists, and find digital clarity.",
-	"orientation": "any",
+	"orientation": "portrait-primary",
 	"prefer_related_applications": false,
 	"icons": [
 		{
