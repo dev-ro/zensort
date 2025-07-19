@@ -43,7 +43,7 @@
 		}
 	],
 	"hosting": {
-		"predeploy": ["bash ./check_build_flavor.sh"],
+		"predeploy": ["bash ./scripts/check_build_flavor.sh"],
 		"public": "build/web",
 		"ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
 		"rewrites": [{ "source": "**", "destination": "/index.html" }]

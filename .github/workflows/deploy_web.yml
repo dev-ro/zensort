@@ -32,10 +32,10 @@ jobs:
                   fi
 
             - name: Make build script executable
-              run: chmod +x ./build.sh
+              run: chmod +x ./scripts/build.sh
 
             - name: Build web application
-              run: ./build.sh ${{ steps.determine_flavor.outputs.flavor }}
+              run: ./scripts/build.sh ${{ steps.determine_flavor.outputs.flavor }}
 
             - name: Deploy to Firebase Hosting (Dev)
               if: github.ref == 'refs/heads/main'

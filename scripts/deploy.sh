@@ -2,23 +2,30 @@
 set -e
 
 # --- Configuration ---
-VERSION_FILE="VERSION"
+VERSION_FILE="scripts/VERSION"
 
 # --- Pre-flight Checks ---
 
-# 1. Ensure we are on the main branch
+# 1. Check for release type argument
+if [ -z "$1" ]; then
+    echo "❌ Error: Release type not specified."
+    echo "Usage: ./scripts/deploy.sh [major|minor|patch]"
+    exit 1
+fi
+
+# 2. Ensure we are on the main branch
 if [[ $(git rev-parse --abbrev-ref HEAD) != "main" ]]; then
   echo "❌ Error: You must be on the 'main' branch to deploy."
   exit 1
 fi
 
-# 2. Ensure the working directory is clean
+# 3. Ensure the working directory is clean
 if [[ -n $(git status --porcelain) ]]; then
   echo "❌ Error: Your working directory is not clean. Please commit or stash your changes."
   exit 1
 fi
 
-# 3. Fetch the latest changes from the remote
+# 4. Fetch the latest changes from the remote
 echo "Checking for remote changes..."
 git remote update
 if [[ $(git rev-list HEAD...origin/main --count) != "0" ]]; then
@@ -35,13 +42,32 @@ if [ ! -f "$VERSION_FILE" ]; then
     exit 1
 fi
 
-# Read the current version and increment the patch number
 CURRENT_VERSION=$(cat "$VERSION_FILE")
 IFS='.' read -r -a version_parts <<< "$CURRENT_VERSION"
-version_parts[2]=$((version_parts[2] + 1))
+
+case "$1" in
+  major)
+    version_parts[0]=$((version_parts[0] + 1))
+    version_parts[1]=0
+    version_parts[2]=0
+    ;;
+  minor)
+    version_parts[1]=$((version_parts[1] + 1))
+    version_parts[2]=0
+    ;;
+  patch)
+    version_parts[2]=$((version_parts[2] + 1))
+    ;;
+  *)
+    echo "❌ Error: Invalid release type '$1'. Use 'major', 'minor', or 'patch'."
+    exit 1
+    ;;
+esac
+
 NEW_VERSION="${version_parts[0]}.${version_parts[1]}.${version_parts[2]}"
 
 echo ""
+echo "Release Type:  $1"
 echo "Current version: $CURRENT_VERSION"
 echo "   New version: $NEW_VERSION"
 echo ""

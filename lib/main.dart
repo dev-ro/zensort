@@ -641,7 +641,7 @@ class _CallToActionSectionState extends State<CallToActionSection>
                 padding: const EdgeInsets.symmetric(horizontal: 8.0),
                 child: Text(
                   '''To check if you're on the list, just enter your email again and a confirmation will appear at the bottom of your screen. We'll only email you at launch.
-Tip: Use your primary YouTube Gmail for early adopter rewards!''',
+Tip: Use your primary YouTube Gmail for early adopter rewards!\n TESTING PROD''',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
