@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:zensort/theme.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 class AnimatedGradientAppBar extends StatefulWidget
     implements PreferredSizeWidget {
@@ -43,6 +44,11 @@ class _AnimatedGradientAppBarState extends State<AnimatedGradientAppBar>
       animation: _animation,
       builder: (context, child) {
         return AppBar(
+          title: SvgPicture.asset(
+            'assets/images/zensort_logo_wordmark_white.svg',
+            height: 45,
+          ),
+          centerTitle: true,
           backgroundColor: Colors.transparent,
           elevation: 0,
           flexibleSpace: Container(
