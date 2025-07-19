@@ -8,6 +8,8 @@ import 'firebase_options.dart' as prod_options;
 import 'firebase_options_dev.dart' as dev_options;
 import 'theme.dart';
 import 'package:zensort/router.dart';
+import 'package:zensort/widgets/animated_gradient_app_bar.dart';
+import 'package:email_validator/email_validator.dart';
 
 class CustomMarkdownStyle {
   static MarkdownStyleSheet getTheme(BuildContext context) {
@@ -71,6 +73,8 @@ class _LandingPageState extends State<LandingPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBodyBehindAppBar: true,
+      appBar: const AnimatedGradientAppBar(),
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: ListView(
         key: const PageStorageKey<String>('landingPage'),
@@ -92,7 +96,7 @@ class HeroSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(24.0),
+      padding: const EdgeInsets.fromLTRB(24.0, 80.0, 24.0, 24.0),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 500),
@@ -507,6 +511,7 @@ class _CallToActionSectionState extends State<CallToActionSection>
   late Animation<double> _animation;
   bool _isLoading = false;
   bool _isHovering = false;
+  final _formKey = GlobalKey<FormState>();
 
   @override
   void initState() {
@@ -528,53 +533,48 @@ class _CallToActionSectionState extends State<CallToActionSection>
   }
 
   void _joinWaitlist() async {
-    if (_emailController.text.isEmpty || !_emailController.text.contains('@')) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid email.')),
-      );
-      return;
-    }
+    if (_formKey.currentState!.validate()) {
+      setState(() {
+        _isLoading = true;
+      });
 
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable(
-        'add_to_waitlist',
-      );
-      final result = await callable.call({'email': _emailController.text});
-      if (!mounted) return;
-
-      final message = result.data['message'];
-      if (message.contains('is already on our waitlist')) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(message),
-            duration: const Duration(seconds: 2),
-          ),
+      try {
+        final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable(
+          'add_to_waitlist',
         );
-      } else {
+        final result = await callable.call({'email': _emailController.text});
+        if (!mounted) return;
+
+        final message = result.data['message'];
+        if (message.contains('is already on our waitlist')) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(message),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(message)));
+          _emailController.clear();
+        }
+      } on FirebaseFunctionsException catch (e) {
+        if (!mounted) return;
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(message)));
-        _emailController.clear();
-      }
-    } on FirebaseFunctionsException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: ${e.message}')));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('An unexpected error occurred: $e')),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        ).showSnackBar(SnackBar(content: Text('Error: ${e.message}')));
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('An unexpected error occurred: $e')),
+        );
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
       }
     }
   }
@@ -647,30 +647,42 @@ Tip: Use your primary YouTube Gmail for early adopter rewards!''',
                 ),
               ),
               const SizedBox(height: 24),
-              TextField(
-                controller: _emailController,
-                onSubmitted: (_) => _joinWaitlist(),
-                decoration: InputDecoration(
-                  hintText: 'Enter your email',
-                  hintStyle: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                  prefixIcon: Icon(
-                    Icons.email_outlined,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16.0),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16.0),
-                    borderSide: BorderSide(
-                      color: Theme.of(context).colorScheme.primary,
-                      width: 2.0,
+              Form(
+                key: _formKey,
+                child: TextFormField(
+                  controller: _emailController,
+                  decoration: InputDecoration(
+                    hintText: 'Enter your email',
+                    hintStyle: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    prefixIcon: Icon(
+                      Icons.email_outlined,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16.0),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16.0),
+                      borderSide: BorderSide(
+                        color: Theme.of(context).colorScheme.primary,
+                        width: 2.0,
+                      ),
                     ),
                   ),
+                  style: Theme.of(context).textTheme.bodyLarge,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter your email';
+                    }
+                    if (!EmailValidator.validate(value)) {
+                      return 'Please enter a valid email';
+                    }
+                    return null;
+                  },
+                  onFieldSubmitted: (_) => _joinWaitlist(),
                 ),
-                style: Theme.of(context).textTheme.bodyLarge,
               ),
               const SizedBox(height: 24),
               MouseRegion(
