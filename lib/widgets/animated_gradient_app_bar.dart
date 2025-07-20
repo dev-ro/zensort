@@ -24,12 +24,14 @@ class _AnimatedGradientAppBarState extends State<AnimatedGradientAppBar>
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 10),
-    )..repeat(reverse: true);
+    )..repeat(); // No reverse, for continuous left-to-right motion
 
+    // Animate from 0 to -1 to slide the gradient to the left, which creates a
+    // rightward motion effect.
     _animation = Tween<double>(
       begin: -1.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+      end: 0.0,
+    ).animate(_controller); // Linear curve for constant speed
   }
 
   @override
@@ -54,16 +56,30 @@ class _AnimatedGradientAppBarState extends State<AnimatedGradientAppBar>
           flexibleSpace: Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: ZenSortTheme.primaryGradient.colors
-                    .map((color) => color.withOpacity(0.8))
+                colors: ZenSortTheme.appBarGradient.colors
+                    .map((color) => color.withOpacity(0.7))
                     .toList(),
-                begin: Alignment(_animation.value, -1.0),
-                end: Alignment(-_animation.value, 1.0),
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+                tileMode: TileMode.repeated,
+                transform: _SlideGradientTransform(percent: _animation.value),
               ),
             ),
           ),
         );
       },
     );
+  }
+}
+
+/// A gradient transform that slides the gradient horizontally.
+class _SlideGradientTransform extends GradientTransform {
+  const _SlideGradientTransform({required this.percent});
+
+  final double percent;
+
+  @override
+  Matrix4? transform(Rect bounds, {TextDirection? textDirection}) {
+    return Matrix4.translationValues(bounds.width * percent, 0.0, 0.0);
   }
 }

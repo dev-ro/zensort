@@ -13,16 +13,7 @@ import 'package:email_validator/email_validator.dart';
 
 class CustomMarkdownStyle {
   static MarkdownStyleSheet getTheme(BuildContext context) {
-    final pStyle = Theme.of(context).textTheme.bodyMedium;
-    final fontSize = pStyle?.fontSize ?? 14.0;
     return MarkdownStyleSheet(
-      a: TextStyle(
-        decoration: TextDecoration.none,
-        foreground: Paint()
-          ..shader = ZenSortTheme.primaryGradient.createShader(
-            Rect.fromLTWH(0, 0, 70, fontSize),
-          ),
-      ),
       blockquoteDecoration: BoxDecoration(
         color: ZenSortTheme.purple.withAlpha(26),
         borderRadius: BorderRadius.circular(8.0),

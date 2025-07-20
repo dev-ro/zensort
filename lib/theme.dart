@@ -17,6 +17,18 @@ class ZenSortTheme {
     end: Alignment.centerRight,
   );
 
+  static const LinearGradient appBarGradient = LinearGradient(
+    colors: [
+      Color(0xFFFF9D00), // Orange
+      Color(0xFFF75830), // Orange-Red
+      Color(0xFF9800A6), // Purple
+      Color(0xFFF75830), // Orange-Red
+      Color(0xFFFF9D00), // Orange
+    ],
+    begin: Alignment.centerLeft,
+    end: Alignment.centerRight,
+  );
+
   static const LinearGradient orangePurpleGradient = LinearGradient(
     colors: [Color(0xFFF75830), Color(0xFF9800A6)],
     begin: Alignment.centerLeft,
