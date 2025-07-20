@@ -12,18 +12,20 @@ class ZenSortTheme {
 
   // Gradient Colors for Buttons
   static const LinearGradient primaryGradient = LinearGradient(
-    colors: [Color(0xFFFF9D00), Color(0xFFF75830), Color(0xFF9800A6)],
+    colors: [Color(0xFFFF9D00), Color(0xFFF75830), Color(0xFFF11E5A), Color(0xFF9800A6)],
     begin: Alignment.centerLeft,
     end: Alignment.centerRight,
   );
 
   static const LinearGradient appBarGradient = LinearGradient(
     colors: [
-      Color(0xFFFF9D00), // Orange
-      Color(0xFFF75830), // Orange-Red
       Color(0xFF9800A6), // Purple
+      Color(0xFFF11E5A), // Pink
       Color(0xFFF75830), // Orange-Red
       Color(0xFFFF9D00), // Orange
+      Color(0xFFF75830), // Orange-Red
+      Color(0xFFF11E5A), // Pink
+      Color(0xFF9800A6), // Purple
     ],
     begin: Alignment.centerLeft,
     end: Alignment.centerRight,
