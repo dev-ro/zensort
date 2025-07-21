@@ -1,10 +1,4 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:zensort/main.dart';
 
-const String disclaimerText = """
 # Disclaimer for ZenSort
 
 **Effective Date: July 19, 2025**
@@ -35,45 +29,4 @@ Under no circumstance shall we have any liability to you for any loss or damage 
 
 ### 7. Contact Us
 
-If you have any questions about this Disclaimer, you can contact us at: **legal@zensort.app**
-""";
-
-class DisclaimerPage extends StatelessWidget {
-  const DisclaimerPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Disclaimer'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              context.go('/');
-            }
-          },
-        ),
-      ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: MarkdownBody(
-            data: disclaimerText,
-            styleSheet: CustomMarkdownStyle.getTheme(context),
-            onTapLink: (text, href, title) async {
-              if (href != null) {
-                final url = Uri.parse(href);
-                if (await canLaunchUrl(url)) {
-                  await launchUrl(url);
-                }
-              }
-            },
-          ),
-        ),
-      ),
-    );
-  }
-}
+If you have any questions about this Disclaimer, you can contact us at: **legal@zensort.app** 

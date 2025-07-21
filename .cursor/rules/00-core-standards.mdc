@@ -1,5 +1,5 @@
 ---
-description: Core coding standards for the ZenSort project, including naming, formatting, and general best practices.
+description: Enforces core project standards for ZenSort, including Material 3 design, use of latest docs, coding principles, and a strict no-placeholder policy.
 globs:
   - "**/*.dart"
 alwaysApply: true
@@ -20,13 +20,18 @@ Adhere strictly to the following pragmatic principles:
 
 **You MUST NOT use placeholders.** Always provide complete, production-ready code. Comments like `// TODO` or `// Implement later` are strictly forbidden. The user expects fully realized code in every response.
 
-## 3. Naming Conventions
+## 3. Framework & Design System
+
+- **Source of Truth for Flutter:** Flutter's APIs and best practices can change frequently. Your internal knowledge may be outdated. For all Flutter-related questions and code generation, you **MUST** prioritize the information provided in the **`@Docs(flutter-docs)`** as the single source of truth.
+- **Material 3 Design:** This application **MUST** use Material 3 design exclusively. The `ThemeData` is configured with `useMaterial3: true`. Ensure all widgets and components used are the modern Material 3 versions (e.g., `ElevatedButton` instead of `RaisedButton`, `NavigationBar` instead of `BottomNavigationBar` where appropriate).
+
+## 4. Naming Conventions
 
 - **Files & Directories:** `snake_case` (e.g., `animated_gradient_app_bar.dart`).
 - **Classes, Enums, Typedefs:** `PascalCase` (e.g., `HeroSection`, `NetworkStatus`).
 - **Variables, Methods, Constants:** `camelCase` (e.g., `emailController`, `joinWaitlist`).
 
-## 4. Import Formatting
+## 5. Import Formatting
 
 Organize imports in the following order, separated by a blank line:
 

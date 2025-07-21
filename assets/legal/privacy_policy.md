@@ -1,10 +1,4 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:zensort/main.dart';
 
-const String privacyPolicyText = """
 # Privacy Policy for ZenSort
 
 **Effective Date: July 19, 2025**
@@ -78,45 +72,4 @@ We may update this Privacy Policy from time to time. We will notify you of any c
 
 ### 9. Contact Us
 
-If you have any questions or concerns about this Privacy Policy, please contact us at: **legal@zensort.app**
-""";
-
-class PrivacyPolicyPage extends StatelessWidget {
-  const PrivacyPolicyPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Privacy Policy'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              context.go('/');
-            }
-          },
-        ),
-      ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: MarkdownBody(
-            data: privacyPolicyText,
-            styleSheet: CustomMarkdownStyle.getTheme(context),
-            onTapLink: (text, href, title) async {
-              if (href != null) {
-                final url = Uri.parse(href);
-                if (await canLaunchUrl(url)) {
-                  await launchUrl(url);
-                }
-              }
-            },
-          ),
-        ),
-      ),
-    );
-  }
-}
+If you have any questions or concerns about this Privacy Policy, please contact us at: **legal@zensort.app** 

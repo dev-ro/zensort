@@ -9,6 +9,8 @@ import 'firebase_options_dev.dart' as dev_options;
 import 'theme.dart';
 import 'package:zensort/router.dart';
 import 'package:zensort/widgets/animated_gradient_app_bar.dart';
+import 'package:zensort/widgets/logo_heading.dart';
+import 'package:zensort/screens/splash_screen.dart';
 import 'package:email_validator/email_validator.dart';
 
 class CustomMarkdownStyle {
@@ -23,32 +25,52 @@ class CustomMarkdownStyle {
   }
 }
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // To run in prod mode: flutter run --dart-define=FLAVOR=prod
-  const flavor = String.fromEnvironment('FLAVOR');
-
-  final options = flavor == 'prod'
-      ? prod_options.DefaultFirebaseOptions.currentPlatform
-      : dev_options.DefaultFirebaseOptions.currentPlatform;
-
-  await Firebase.initializeApp(options: options);
-  runApp(const MyApp());
+  runApp(const ZenSortRoot());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class ZenSortRoot extends StatefulWidget {
+  const ZenSortRoot({super.key});
 
-  // This widget is the root of your application.
+  @override
+  State<ZenSortRoot> createState() => _ZenSortRootState();
+}
+
+class _ZenSortRootState extends State<ZenSortRoot> {
+  late final Future<void> _initFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    const flavor = String.fromEnvironment('FLAVOR');
+    final options = flavor == 'prod'
+        ? prod_options.DefaultFirebaseOptions.currentPlatform
+        : dev_options.DefaultFirebaseOptions.currentPlatform;
+    _initFuture = Firebase.initializeApp(options: options);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp.router(
-      title: 'ZenSort',
-      theme: getLightTheme(),
-      routerConfig: router,
-      restorationScopeId: 'app',
-      debugShowCheckedModeBanner: false,
+    return FutureBuilder(
+      future: _initFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          // Show animated splash loader while initializing
+          return const MaterialApp(
+            home: SplashScreen(),
+            debugShowCheckedModeBanner: false,
+          );
+        }
+        // Show your main app after initialization
+        return MaterialApp.router(
+          title: 'ZenSort',
+          theme: getLightTheme(),
+          routerConfig: router,
+          restorationScopeId: 'app',
+          debugShowCheckedModeBanner: false,
+        );
+      },
     );
   }
 }
@@ -170,38 +192,10 @@ class _FeaturesSectionState extends State<FeaturesSection> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: SvgPicture.asset(
-                                'assets/images/zensort_logo.svg',
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            ShaderMask(
-                              shaderCallback: (bounds) =>
-                                  ZenSortTheme.primaryGradient.createShader(
-                                    Rect.fromLTWH(
-                                      0,
-                                      0,
-                                      bounds.width,
-                                      bounds.height,
-                                    ),
-                                  ),
-                              child: Text(
-                                'Features',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .headlineMedium
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                              ),
-                            ),
-                          ],
+                        LogoHeading(
+                          title: 'Features',
+                          logoSize: 24,
+                          spacing: 4,
                         ),
                         const SizedBox(height: 20),
                         const _FeatureItem(
@@ -285,9 +279,10 @@ class _FeatureItem extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             ShaderMask(
-              shaderCallback: (bounds) => gradient.createShader(
-                Rect.fromLTWH(0, 0, bounds.width, bounds.height),
-              ),
+              shaderCallback: (bounds) =>
+                  ZenSortTheme.primaryGradient.createShader(
+                    Rect.fromLTWH(0, 0, bounds.width, bounds.height),
+                  ),
               child: Icon(
                 icon,
                 color: Colors.white, // This color is necessary for ShaderMask
@@ -335,31 +330,7 @@ class _HowItWorksSectionState extends State<HowItWorksSection> {
           constraints: const BoxConstraints(maxWidth: 500),
           child: Column(
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(
-                    width: 28,
-                    height: 28,
-                    child: SvgPicture.asset('assets/images/zensort_logo.svg'),
-                  ),
-                  const SizedBox(width: 8),
-                  ShaderMask(
-                    shaderCallback: (bounds) =>
-                        ZenSortTheme.primaryGradient.createShader(
-                          Rect.fromLTWH(0, 0, bounds.width, bounds.height),
-                        ),
-                    child: Text(
-                      'How It Works',
-                      style: Theme.of(context).textTheme.headlineMedium
-                          ?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                    ),
-                  ),
-                ],
-              ),
+              LogoHeading(title: 'How It Works', logoSize: 28, spacing: 4),
               const SizedBox(height: 40),
               const _BuildStep(
                 stepNumber: '1',
