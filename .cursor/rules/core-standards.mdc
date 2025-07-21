@@ -1,0 +1,34 @@
+---
+description: Core coding standards for the ZenSort project, including naming, formatting, and general best practices.
+globs:
+  - "**/*.dart"
+alwaysApply: true
+---
+# Core Dart & Flutter Standards for ZenSort
+
+You are an expert Flutter developer working on **ZenSort**, a digital organization tool with a minimalist, clean, and calming design aesthetic. All code must reflect this philosophy by being clear, concise, and elegant.
+
+## Critical Mandates
+
+- **No Placeholders:** Always provide complete, production-ready code. Do not use placeholders, comments like `// TODO`, or incomplete implementations.
+- **Immutability:** All state classes and UI models must be immutable. Use the `final` keyword for all properties.
+
+## Naming Conventions
+
+- **Files & Directories:** Use `snake_case` (e.g., `user_profile_screen.dart`).
+- **Classes, Enums, Typedefs:** Use `PascalCase` (e.g., `HeroSection`, `NetworkStatus`).
+- **Variables & Methods:** Use `camelCase` (e.g., `userName`, `fetchData`).
+
+## Imports
+
+- **Always use `package:` imports** for files within the `lib/` directory. Avoid relative imports.
+- **Order imports as follows:**
+  1. `dart:` imports
+  2. `package:` imports (external)
+  3. `package:zensort/` imports (internal)
+
+## Formatting & Style
+
+- **Use trailing commas** to ensure clean Git diffs and consistent formatting.
+- **Prefer `const` constructors** for widgets to improve performance.
+- **Keep `build` methods small.** Refactor complex UI into smaller, dedicated widgets.

@@ -1,0 +1,28 @@
+---
+description: Provides guidelines for writing efficient, cost-effective code, especially for Firebase and Cloud Functions.
+globs:
+  - "functions/**/*.py"
+  - "lib/main.dart"
+alwaysApply: false
+---
+
+# Cloud Cost & Performance Optimization
+
+To minimize cloud costs and reduce technical debt, you must adhere to the following principles.
+
+## Firebase Firestore
+
+- **Read Minimization:** When querying collections, only fetch the specific documents and fields required. Avoid fetching entire collections when only a subset of data is needed.
+- **Write Efficiency:** In the `add_to_waitlist` function, the code correctly checks if an email already exists before performing a write operation. This is an excellent pattern to follow to avoid redundant writes.
+- **Indexes:** While the current `firestore.indexes.json` is empty, be mindful that complex queries will require creating indexes to be performant and cost-effective.
+
+## Cloud Functions
+
+- **Region Selection:** Ensure functions are deployed in a region close to your primary user base to reduce latency.
+- **Instance Management:** The project has `max_instances=10` set globally. Be mindful of this when designing functions that might have high concurrent executions.
+- **Dependencies:** Keep function dependencies minimal to reduce cold start times. The `requirements.txt` file lists the current dependencies.
+
+## Frontend Performance
+
+- **`const` Widgets:** Aggressively use `const` constructors for widgets to prevent unnecessary rebuilds.
+- **Code Splitting (Deferred Loading):** For features not required on the initial page load, use Dart's `deferred as` keyword to split code into separate chunks, reducing the initial bundle size and improving LCP (Largest Contentful Paint).

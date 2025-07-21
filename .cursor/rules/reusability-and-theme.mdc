@@ -1,0 +1,27 @@
+---
+description: Enforces the use of the centralized ZenSort theme for consistent and reusable UI components.
+globs:
+  - "lib/widgets/**/*.dart"
+  - "lib/main.dart"
+  - "lib/theme.dart"
+alwaysApply: false
+---
+
+# ZenSort Theme & Reusability
+
+To maintain a consistent, clean, and calming design, all UI components MUST use the centralized theme defined in `lib/theme.dart`. Do not use hardcoded colors, gradients, or text styles.
+
+## Gradients
+
+- **Primary Gradient:** For all primary call-to-action buttons and highlighted borders, you MUST use `ZenSortTheme.primaryGradient`. Do not recreate this `LinearGradient` manually.
+- **App Bar Gradient:** The `AnimatedGradientAppBar` uses `ZenSortTheme.appBarGradient`. Reuse this widget instead of creating new animated app bars.
+
+## Colors & Text
+
+- Use `Theme.of(context)` to access colors and text styles (e.g., `Theme.of(context).textTheme.headlineMedium`).
+- For specific, non-standard colors, use the constants defined in `ZenSortTheme` (e.g., `ZenSortTheme.purple`).
+
+## Reusable Widgets
+
+- When asked to create a new UI element, first check if a similar component already exists in `lib/widgets/`.
+- Prioritize abstracting new UI into reusable widgets rather than creating one-off implementations. For example, the `_FeatureItem` and `_BuildStep` widgets in `main.dart` are good examples of reusable components that should be moved to their own files in `lib/widgets/`.
