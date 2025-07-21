@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:zensort/theme.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -23,7 +24,7 @@ class _AnimatedGradientAppBarState extends State<AnimatedGradientAppBar>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 10),
+      duration: const Duration(seconds: 20),
     )..repeat(); // No reverse, for continuous left-to-right motion
 
     // Animate from 0 to -1 to slide the gradient to the left, which creates a
@@ -46,9 +47,12 @@ class _AnimatedGradientAppBarState extends State<AnimatedGradientAppBar>
       animation: _animation,
       builder: (context, child) {
         return AppBar(
-          title: SvgPicture.asset(
-            'assets/images/zensort_logo_wordmark_white.svg',
-            height: 45,
+          title: InkWell(
+            onTap: () => GoRouter.of(context).go('/'),
+            child: SvgPicture.asset(
+              'assets/images/zensort_logo_wordmark_white.svg',
+              height: 45,
+            ),
           ),
           centerTitle: true,
           backgroundColor: Colors.transparent,
@@ -56,7 +60,7 @@ class _AnimatedGradientAppBarState extends State<AnimatedGradientAppBar>
           flexibleSpace: Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: ZenSortTheme.appBarGradient.colors
+                colors: ZenSortTheme.calmAppBarGradient.colors
                     .map((color) => color.withOpacity(0.7))
                     .toList(),
                 begin: Alignment.centerLeft,

@@ -1,4 +1,7 @@
 ---
+description: Enforces a clean, multi-layered, feature-first architecture and the SOLID principles.
+globs:
+  - "lib/**/*.dart"
 alwaysApply: true
 ---
 # ZenSort Application Architecture

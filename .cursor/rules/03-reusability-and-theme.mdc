@@ -2,9 +2,8 @@
 description: Enforces the use of the centralized ZenSort theme and the creation of reusable UI components.
 globs:
   - "lib/**/*.dart"
-alwaysApply: false
+alwaysApply: true
 ---
-
 # UI: Reusability & Theme Consistency
 
 To maintain a consistent, clean, and calming design, and to keep the code DRY, all UI components MUST adhere to the following rules.

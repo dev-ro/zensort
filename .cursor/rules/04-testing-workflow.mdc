@@ -1,9 +1,9 @@
 ---
-description: Guides the AI to follow a strict Test-Driven Development (TDD) workflow for all new features and logic.
-globs:
-alwaysApply: false
----
 
+description: Guides the AI to follow a strict Test-Driven Development (TDD) workflow for all new features and logic.
+
+alwaysApply: true
+---
 # Workflow: Test-Driven Development (TDD)
 
 When asked to create any new feature, business logic, or widget, you MUST follow this Test-Driven Development workflow. Do not write implementation code until a failing test exists.

@@ -4,8 +4,7 @@ globs:
   - "functions/**/*.py"
   - "lib/main.dart"
   - "firebase.json"
-
-alwaysApply: true
+alwaysApply: false
 ---
 # Firebase & Cloud Best Practices
 
