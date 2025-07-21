@@ -12,7 +12,6 @@ import 'package:zensort/widgets/animated_gradient_app_bar.dart';
 import 'package:zensort/widgets/logo_heading.dart';
 import 'package:zensort/screens/splash_screen.dart';
 import 'package:email_validator/email_validator.dart';
-import 'package:zensort/widgets/footer.dart';
 
 class CustomMarkdownStyle {
   static MarkdownStyleSheet getTheme(BuildContext context) {

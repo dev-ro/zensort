@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:zensort/main.dart';
 import 'package:zensort/screens/legal_screen.dart';
 import 'package:zensort/auth_gate.dart';
 
