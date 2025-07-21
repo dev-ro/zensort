@@ -1,0 +1,11 @@
+<!-- 
+  ZenSort Logo: Enso Dot (White Version)
+  - All elements are pure white for use on dark/gradient backgrounds.
+-->
+<svg class="zensort-logo" width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>ZenSort Logo - Enso Dot (White)</title>
+  <!-- The Open Circle (Enso) -->
+  <path d="M85,50 A35,35 0 1 1 50,15" stroke="#FFFFFF" stroke-width="14" stroke-linecap="round"/>
+  <!-- The Dot -->
+  <circle cx="68" cy="32" r="8" fill="#FFFFFF"/>
+</svg> 

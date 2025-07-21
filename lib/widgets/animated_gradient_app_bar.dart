@@ -53,7 +53,7 @@ class _AnimatedGradientAppBarState extends State<AnimatedGradientAppBar>
         return AppBar(
           leading: widget.leading,
           iconTheme: const IconThemeData(color: Colors.white),
-          title: null, // We'll handle title in flexibleSpace
+          title: null, // We'll handle title/logo in flexibleSpace
           centerTitle: true,
           backgroundColor: Colors.transparent,
           elevation: 0,
@@ -75,33 +75,37 @@ class _AnimatedGradientAppBarState extends State<AnimatedGradientAppBar>
                   ),
                 ),
               ),
-              // Left-aligned logo (with padding to account for back button)
-              Positioned(
-                left: kToolbarHeight - 8, // 8px padding after back button
-                top: 0,
-                bottom: 0,
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: SvgPicture.asset(
-                    'assets/images/zensort_logo_wordmark_white.svg',
-                    height: 45, // Adjust as needed
-                  ),
-                ),
+              // Centered logo and title (if any)
+              Center(
+                child: widget.title == null
+                    ? SvgPicture.asset(
+                        'assets/images/zensort_logo_wordmark_white.svg',
+                        height: 55,
+                      )
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          SvgPicture.asset(
+                            'assets/images/zensort_logo_white.svg',
+                            height: 35,
+                          ),
+                          const SizedBox(width: 10),
+                          Flexible(
+                            child: Text(
+                              widget.title!,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
               ),
-              // Centered title
-              if (widget.title != null)
-                Center(
-                  child: Text(
-                    widget.title!,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
             ],
           ),
         );
