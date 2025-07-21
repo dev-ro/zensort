@@ -1,0 +1,29 @@
+---
+alwaysApply: true
+---
+# ZenSort Application Architecture
+
+This project MUST follow a clean, feature-first architectural pattern to ensure high cohesion and low coupling between different parts of the application.
+
+## 1. Feature-First Structure
+
+All new features should be organized into their own directory under `lib/features/`. Each feature directory should be further subdivided by layer:
+
+- `lib/features/<feature_name>/presentation/`: Contains UI-related code (Widgets, Screens, and state management like BLoC/Riverpod).
+- `lib/features/<feature_name>/domain/`: Contains core business logic and entities. This layer MUST NOT have any dependencies on Flutter or Firebase. It should contain pure Dart objects and abstract repository interfaces.
+- `lib/features/<feature_name>/data/`: Contains the implementation of the repository interfaces from the domain layer, handling all interactions with data sources like Firestore.
+
+## 2. SOLID Principles
+
+All code must adhere to the SOLID principles.
+
+- **Single Responsibility Principle (SRP):** A class must have only one reason to change. For example, a widget should only be responsible for UI; business logic should be in a separate state management class.
+- **Open-Closed Principle (OCP):** Code should be open for extension, but closed for modification. Use abstract classes or interfaces to allow new functionality without changing existing code.
+- **Dependency Inversion Principle (DIP):** High-level modules (like UI) must depend on abstractions (repository interfaces in the domain layer), not low-level details (Firestore implementation in the data layer).
+
+## 3. Anti-Pattern Avoidance
+
+You MUST avoid architectural anti-patterns.
+
+- **God Objects:** Do not create classes that handle too many responsibilities.
+- **Big Ball of Mud:** Enforce the feature-first structure to prevent a disorganized codebase.

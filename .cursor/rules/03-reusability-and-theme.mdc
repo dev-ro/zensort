@@ -1,0 +1,22 @@
+---
+description: Enforces the use of the centralized ZenSort theme and the creation of reusable UI components.
+globs:
+  - "lib/**/*.dart"
+alwaysApply: false
+---
+
+# UI: Reusability & Theme Consistency
+
+To maintain a consistent, clean, and calming design, and to keep the code DRY, all UI components MUST adhere to the following rules.
+
+## 1. Centralized Theme
+
+- All UI elements MUST use the centralized theme defined in `lib/theme.dart`.
+- **DO NOT** use hardcoded `Color`, `TextStyle`, or `Gradient` values in widget files.
+- **Primary Gradient:** For all primary calls-to-action and highlighted borders, you MUST use `ZenSortTheme.primaryGradient`. Do not manually recreate this `LinearGradient`.
+
+## 2. Component Abstraction
+
+- When asked to create a new UI element, first check if a similar component already exists that can be reused or adapted.
+- **Refactor for Reusability:** Prioritize abstracting UI logic into its own reusable widget. For example, widgets like `_FeatureItem`, `_BuildStep`, and `HeroSection` currently in `main.dart` should be refactored into their own files under `lib/widgets/`.
+- A method should never return a widget. Always create a new `StatelessWidget` or `StatefulWidget` class.

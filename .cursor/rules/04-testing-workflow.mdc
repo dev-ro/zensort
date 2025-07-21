@@ -1,0 +1,24 @@
+---
+description: Guides the AI to follow a strict Test-Driven Development (TDD) workflow for all new features and logic.
+globs:
+alwaysApply: false
+---
+
+# Workflow: Test-Driven Development (TDD)
+
+When asked to create any new feature, business logic, or widget, you MUST follow this Test-Driven Development workflow. Do not write implementation code until a failing test exists.
+
+**Step 1: Plan the Test**
+First, state which file you will create the test in (e.g., `test/features/auth/auth_bloc_test.dart`). Outline the specific behavior you are about to test (e.g., "Test that when `LoginEvent` is added, the BLoC emits `LoadingState` then `SuccessState`").
+
+**Step 2: Write the Failing Test**
+Write the complete test code. This test should target code that does not yet exist, so it will naturally fail to compile or run.
+
+**Step 3: Write the Minimal Implementation**
+Next, write the absolute minimum amount of implementation code required to make the test from Step 2 pass.
+
+**Step 4: Confirm and Refactor**
+State that the tests now pass. If necessary, refactor the implementation code for clarity and efficiency, ensuring the tests continue to pass.
+
+**Step 5: Repeat**
+Continue this cycle for each piece of functionality required.

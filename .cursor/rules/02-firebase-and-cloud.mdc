@@ -1,0 +1,31 @@
+---
+description: Provides strict guidelines for secure, cost-effective Firebase usage, acknowledging the dual dev/prod environment.
+globs:
+  - "functions/**/*.py"
+  - "lib/main.dart"
+  - "firebase.json"
+
+alwaysApply: true
+---
+# Firebase & Cloud Best Practices
+
+This project uses two separate Firebase projects: `zensort-dev` for development and staging, and `zensort-a7b47` (prod) for production. All Firebase-related code must be efficient, secure, and mindful of this dual-environment setup.
+
+## 1. Cloud Cost Optimization
+
+To reduce technical debt and minimize cloud costs, you MUST follow these rules:
+
+- **Firestore Read Minimization:** Queries must be precise. Never fetch entire documents or collections when only a subset of fields or documents is required. Design data models using denormalization to avoid expensive joins and reduce read operations.
+- **Firestore Write Efficiency:** Before performing a write operation, check if the data already exists to prevent redundant writes. The `add_to_waitlist` function is a good example of this pattern.
+- **Cloud Functions:** Functions must be idempotent. For secrets management, you MUST use a secure solution like Secret Manager. Do not hardcode secrets or store them in environment variables.
+
+## 2. Security (Principle of Least Privilege)
+
+- **Firebase Security Rules:** Start all rules in a "locked mode" (`allow read, write: if false;`) and grant access only as needed. Rules are the primary defense for the database.
+- **IAM for Cloud Functions:** Grant only the minimum necessary permissions for a function's service account to perform its job. Avoid using default service accounts.
+
+## 3. CI/CD & Build Flavors
+
+- The application uses a flavor system to switch between Firebase projects, controlled by the `--dart-define=FLAVOR` flag in `scripts/build.sh`.
+- The `main.dart` file correctly initializes the appropriate Firebase project based on the flavor. This pattern must be maintained.
+- Deployment is automated via GitHub Actions (`.github/workflows/`), which use the build scripts to target the correct environment (`zensort-dev` from the `main` branch, `zensort-a7b47` on version tags).

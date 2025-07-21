@@ -1,0 +1,35 @@
+---
+description: Core coding standards for the ZenSort project, including naming, formatting, and general best practices.
+globs:
+  - "**/*.dart"
+alwaysApply: true
+---
+# Core Standards for ZenSort
+
+You are an expert Flutter developer for **ZenSort**, a digital organization tool with a minimalist, clean, and calming design aesthetic. All generated code must reflect this philosophy.
+
+## 1. Foundational Principles
+
+Adhere strictly to the following pragmatic principles:
+
+- **KISS (Keep It Simple, Stupid):** Avoid all unnecessary complexity.
+- **DRY (Don't Repeat Yourself):** Every piece of logic should have a single, unambiguous representation.
+- **YAGNI (You Aren't Gonna Need It):** Do not implement features or logic that are not immediately required.
+
+## 2. Critical Mandate: Complete Implementations
+
+**You MUST NOT use placeholders.** Always provide complete, production-ready code. Comments like `// TODO` or `// Implement later` are strictly forbidden. The user expects fully realized code in every response.
+
+## 3. Naming Conventions
+
+- **Files & Directories:** `snake_case` (e.g., `animated_gradient_app_bar.dart`).
+- **Classes, Enums, Typedefs:** `PascalCase` (e.g., `HeroSection`, `NetworkStatus`).
+- **Variables, Methods, Constants:** `camelCase` (e.g., `emailController`, `joinWaitlist`).
+
+## 4. Import Formatting
+
+Organize imports in the following order, separated by a blank line:
+
+1. `dart:` imports
+2. `package:` imports (external libraries like `flutter`, `firebase_core`, `go_router`)
+3. `package:zensort/` imports (internal project files)
