@@ -1,7 +1,7 @@
 
 # Privacy Policy for ZenSort
 
-**Effective Date: July 19, 2025**
+## **Effective Date: July 19, 2025**
 
 ## 1. Introduction
 
