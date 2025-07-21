@@ -45,3 +45,7 @@ app.*.map.json
 /android/app/release
 
 .firebase/hosting.YnVpbGRcd2Vi.cache
+
+# IDE specific files
+.idea/
+.vscode/
