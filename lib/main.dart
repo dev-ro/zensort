@@ -10,6 +10,9 @@ import 'theme.dart';
 import 'package:zensort/router.dart';
 import 'package:zensort/widgets/animated_gradient_app_bar.dart';
 import 'package:email_validator/email_validator.dart';
+import 'package:provider/provider.dart';
+import 'package:zensort/auth_wrapper.dart';
+import 'package:zensort/services/auth_service.dart';
 
 class CustomMarkdownStyle {
   static MarkdownStyleSheet getTheme(BuildContext context) {
@@ -34,7 +37,16 @@ void main() async {
       : dev_options.DefaultFirebaseOptions.currentPlatform;
 
   await Firebase.initializeApp(options: options);
-  runApp(const MyApp());
+  runApp(
+    MultiProvider(
+      providers: [
+        Provider<AuthService>(
+          create: (_) => AuthService(),
+        ),
+      ],
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -49,6 +61,7 @@ class MyApp extends StatelessWidget {
       routerConfig: router,
       restorationScopeId: 'app',
       debugShowCheckedModeBanner: false,
+      home: const AuthWrapper(),
     );
   }
 }

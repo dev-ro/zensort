@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:zensort/services/auth_service.dart';
 import 'package:zensort/theme.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -66,6 +68,43 @@ class _AnimatedGradientAppBarState extends State<AnimatedGradientAppBar>
               ),
             ),
           ),
+          actions: [
+            Consumer<AuthService>(
+              builder: (context, authService, child) {
+                return authService.user == null
+                    ? Padding(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            await authService.signInWithGoogle();
+                          },
+                          icon: SvgPicture.asset(
+                            'assets/images/google_logo.svg',
+                            height: 18,
+                          ),
+                          label: const Text('Sign in with Google'),
+                          style: ElevatedButton.styleFrom(
+                            foregroundColor: Colors.black,
+                            backgroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                          ),
+                        ),
+                      )
+                    : Padding(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            await authService.signOut();
+                          },
+                          icon: const Icon(Icons.logout),
+                          label: const Text('Sign Out'),
+                        ),
+                      );
+              },
+            ),
+          ],
         );
       },
     );
