@@ -1,0 +1,21 @@
+---
+description: Defines the state management architecture for the project, focusing on scalability and testability.
+globs:
+  - "lib/**/*.dart"
+alwaysApply: false
+---
+# State Management Architecture
+
+To ensure the application is scalable, maintainable, and testable, you MUST follow a structured state management approach.
+
+## 1. State Management Progression
+
+- **`setState`:** Use `setState` ONLY for local, ephemeral state that is confined to a single widget (e.g., the current value of a text field).
+- **Provider:** For simple application state that needs to be shared across widgets, the `provider` package is an acceptable choice.
+- **Riverpod/BLoC:** For complex features involving asynchronous logic and multiple state dependencies, a more robust solution is required. This project prefers a modern, compile-safe approach. **Riverpod** is the recommended solution.
+
+## 2. Riverpod Best Practices
+
+- **Provider Types:** When using Riverpod, prefer modern providers like `NotifierProvider` and `AsyncNotifierProvider` for managing state.
+- **Immutability:** State objects managed by a provider MUST be immutable.
+- **Handling Firebase Streams:** To manage real-time data from Firebase, you MUST use a `StreamProvider`. This ensures automatic lifecycle management (subscription and disposal) and provides the state as an `AsyncValue` for cleanly handling loading, data, and error states in the UI.

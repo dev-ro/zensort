@@ -1,0 +1,20 @@
+---
+description: Provides guidelines for implementing meaningful and performant animations in Flutter.
+globs:
+  - "lib/widgets/**/*.dart"
+  - "lib/main.dart"
+alwaysApply: false
+---
+# Meaningful Motion: Animation Guidelines
+
+Animations should provide meaning, guide the user's attention, and create a sense of fluidity. They must be performant and implemented using the correct technique for the task.
+
+## 1. Choosing the Right Animation Type
+
+- **Implicit Animations:** For simple, one-off state changes (e.g., a button changing color on press), you MUST use implicit animation widgets like `AnimatedContainer` or `AnimatedOpacity`. This is the preferred method for simple UI feedback.
+- **Explicit Animations:** For complex, continuous, or interactive animations that require lifecycle control (play, stop, loop), you MUST use explicit animations. This involves an `AnimationController` managed within a `StatefulWidget` that has a `TickerProviderStateMixin`.
+
+## 2. Integrating Designer-Made Animations
+
+- **For Non-Interactive Animations:** To implement high-fidelity, non-interactive animations created by a designer (e.g., loading indicators, success checkmarks), you SHOULD use the **Lottie** package with the exported JSON file.
+- **For Interactive Animations:** For complex, stateful graphics that need to respond to user input (e.g., an interactive character, a dynamic button), you SHOULD use the **Rive** package. Rive's State Machine provides the necessary interactivity.

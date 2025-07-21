@@ -1,0 +1,27 @@
+---
+description: Enforces advanced best practices for Firestore security, data modeling, and query performance.
+globs:
+  - "firestore.rules"
+  - "functions/**/*.py"
+  - "lib/features/**/data/*.dart"
+alwaysApply: false
+---
+# Advanced Firebase Patterns
+
+All Firebase interactions must be secure, performant, and cost-effective.
+
+## 1. Firestore Security Rules
+
+- **Start Locked:** All new collections in `firestore.rules` MUST start in a "locked mode" (`allow read, write: if false;`). You must then explicitly grant access as needed.
+- **Content-Owner Only Access:** A common pattern is to restrict access to a user's own data. This MUST be implemented by matching the document ID or a field with the user's UID from the request (`request.auth.uid`).
+- **Role-Based Access Control (RBAC):** For advanced permissions (e.g., admins), you MUST use **Custom Claims**. Claims are to be set from a secure backend environment (a Cloud Function) and checked within security rules via `request.auth.token.<claimName>`. Do not store roles in Firestore documents for security checks.
+
+## 2. Performance & Cost Optimization
+
+- **Pagination:** When fetching large lists of data, you MUST NOT use `offset()`. It is inefficient and costly. You MUST implement pagination using **query cursors** (`startAfter()` or `startAfterDocument()`).
+- **Indexes:** For complex queries involving multiple fields, you MUST create a **composite index**. The error message from the Firebase SDK provides a direct link to create it.
+
+## 3. Data Modeling
+
+- **Type-Safe Models:** Do not pass `Map<String, dynamic>` through your app logic. All Firestore documents MUST be represented by type-safe Dart model classes that include `fromJson` and `toJson` methods.
+- **Denormalization:** To improve read performance and reduce costs, you SHOULD strategically denormalize (duplicate) data. For example, store `authorName` directly on a `post` document instead of requiring a separate lookup to the `users` collection.

@@ -1,0 +1,29 @@
+---
+description: Enforces the creation of beautiful, responsive, and adaptive UIs based on the ZenSort design philosophy.
+globs:
+  - "lib/**/*.dart"
+alwaysApply: false
+---
+# UI/UX Perfection: Responsive & Adaptive Design
+
+All UI code must adhere to the principles of responsive and adaptive design to ensure a beautiful and intuitive experience on any device.
+
+## 1. Responsive Layouts
+
+- **No Hardcoded Sizes:** Do not use hardcoded pixel values for screen widths or heights.
+- **Use Responsive Widgets:** You MUST build responsive layouts using the following widgets:
+  - `LayoutBuilder`: To make decisions based on the parent widget's constraints.
+  - `MediaQuery`: To get overall screen dimensions and orientation.
+  - `Expanded` and `Flexible`: To manage space within `Row` and `Column` widgets.
+
+## 2. Adaptive Components
+
+ZenSort must feel native on every platform.
+
+- **Platform-Aware Widgets:** For components with strong platform conventions (e.g., dialogs, switches, buttons, date pickers), you MUST render the appropriate Cupertino widget on iOS and the Material widget on other platforms.
+- **Adaptive Constructors:** Prefer using adaptive constructors like `Switch.adaptive` where available. For more complex cases, check the platform with `Platform.isIOS`.
+
+## 3. Avoiding Common UI Pitfalls
+
+- **Extract Widgets:** You MUST NOT create large `build` methods. Aggressively refactor UI sections into smaller, reusable `StatelessWidget` or `StatefulWidget` classes to improve readability and performance.
+- **Controller Lifecycle:** For every `AnimationController`, `TextEditingController`, or `ScrollController` initialized in `initState`, you MUST ensure it is properly cleaned up in the `dispose` method to prevent memory leaks.
