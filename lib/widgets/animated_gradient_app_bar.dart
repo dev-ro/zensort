@@ -60,7 +60,7 @@ class _AnimatedGradientAppBarState extends State<AnimatedGradientAppBar>
           flexibleSpace: Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: ZenSortTheme.calmAppBarGradient.colors
+                colors: ZenSortTheme.appBarGradient.colors
                     .map((color) => color.withOpacity(0.7))
                     .toList(),
                 begin: Alignment.centerLeft,

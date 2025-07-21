@@ -12,7 +12,12 @@ class ZenSortTheme {
 
   // Gradient Colors for Buttons
   static const LinearGradient primaryGradient = LinearGradient(
-    colors: [Color(0xFFFF9D00), Color(0xFFF75830), Color(0xFFF11E5A), Color(0xFF9800A6)],
+    colors: [
+      Color(0xFFFF9D00),
+      Color(0xFFF75830),
+      Color(0xFFF11E5A),
+      Color(0xFF9800A6),
+    ],
     begin: Alignment.centerLeft,
     end: Alignment.centerRight,
   );
