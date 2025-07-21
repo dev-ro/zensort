@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zensort/main.dart';
 import 'package:zensort/widgets/animated_gradient_app_bar.dart';
-import 'package:flutter_svg/flutter_svg.dart';
+import 'package:zensort/widgets/gradient_loader.dart';
 
 class LegalScreen extends StatefulWidget {
   final String docName;

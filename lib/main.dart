@@ -12,6 +12,7 @@ import 'package:zensort/widgets/animated_gradient_app_bar.dart';
 import 'package:zensort/widgets/logo_heading.dart';
 import 'package:zensort/screens/splash_screen.dart';
 import 'package:email_validator/email_validator.dart';
+import 'package:zensort/widgets/footer.dart';
 
 class CustomMarkdownStyle {
   static MarkdownStyleSheet getTheme(BuildContext context) {
@@ -744,6 +745,7 @@ class Footer extends StatelessWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 500),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 '© ${DateTime.now().year} ZenSort. All rights reserved.',

@@ -64,7 +64,7 @@ class ZenSortScaffold extends StatelessWidget {
       primary: primary,
       drawerDragStartBehavior: drawerDragStartBehavior,
       extendBody: extendBody,
-      extendBodyBehindAppBar: true,
+      extendBodyBehindAppBar: extendBodyBehindAppBar,
       restorationId: restorationId,
     );
   }

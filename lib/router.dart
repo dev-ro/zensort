@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:zensort/main.dart';
 import 'package:zensort/screens/legal_screen.dart';
+import 'package:zensort/auth_gate.dart';
 
 final GoRouter router = GoRouter(
   initialLocation: '/',
@@ -10,7 +11,7 @@ final GoRouter router = GoRouter(
     GoRoute(
       path: '/',
       pageBuilder: (context, state) =>
-          MaterialPage(key: state.pageKey, child: const LandingPage()),
+          MaterialPage(key: state.pageKey, child: const AuthGate()),
       routes: [
         GoRoute(
           path: 'privacy',

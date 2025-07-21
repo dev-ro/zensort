@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:zensort/widgets/animated_gradient_app_bar.dart';
+import 'package:zensort/widgets/gradient_loader.dart';
 
 class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});

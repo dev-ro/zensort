@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:zensort/theme.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:zensort/widgets/google_sign_in_button.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class AnimatedGradientAppBar extends StatefulWidget
     implements PreferredSizeWidget {
@@ -45,66 +47,74 @@ class _AnimatedGradientAppBarState extends State<AnimatedGradientAppBar>
 
   @override
   Widget build(BuildContext context) {
+    final bool isLandingPage = widget.title == null;
+
     return AnimatedBuilder(
       animation: _animation,
       builder: (context, child) {
         return AppBar(
           leading: widget.leading,
-          iconTheme: const IconThemeData(color: Colors.white),
-          title: null, // We'll handle title/logo in flexibleSpace
-          centerTitle: true,
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          flexibleSpace: Stack(
-            children: [
-              // Gradient background
-              Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: ZenSortTheme.appBarGradient.colors
-                        .map((color) => color.withOpacity(0.7))
-                        .toList(),
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                    tileMode: TileMode.repeated,
-                    transform: _SlideGradientTransform(
-                      percent: _animation.value,
+          title: isLandingPage
+              ? SvgPicture.asset(
+                  'assets/images/zensort_logo_wordmark_white.svg',
+                  height: 55,
+                )
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SvgPicture.asset(
+                      'assets/images/zensort_logo_white.svg',
+                      height: 35,
+                    ),
+                    const SizedBox(width: 10),
+                    Flexible(
+                      child: Text(
+                        widget.title!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+          actions: isLandingPage
+              ? [
+                  Padding(
+                    padding: const EdgeInsets.only(right: 16.0),
+                    child: StreamBuilder<User?>(
+                      stream: FirebaseAuth.instance.authStateChanges(),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasData) {
+                          return ElevatedButton(
+                            onPressed: () => FirebaseAuth.instance.signOut(),
+                            child: const Text('Sign Out'),
+                          );
+                        }
+                        return GoogleSignInButton(onSignIn: () async {});
+                      },
                     ),
                   ),
-                ),
+                ]
+              : null,
+          centerTitle: !isLandingPage,
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          flexibleSpace: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: ZenSortTheme.appBarGradient.colors
+                    .map((color) => color.withOpacity(0.7))
+                    .toList(),
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+                tileMode: TileMode.repeated,
+                transform: _SlideGradientTransform(percent: _animation.value),
               ),
-              // Centered logo and title (if any)
-              Center(
-                child: widget.title == null
-                    ? SvgPicture.asset(
-                        'assets/images/zensort_logo_wordmark_white.svg',
-                        height: 55,
-                      )
-                    : Row(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          SvgPicture.asset(
-                            'assets/images/zensort_logo_white.svg',
-                            height: 35,
-                          ),
-                          const SizedBox(width: 10),
-                          Flexible(
-                            child: Text(
-                              widget.title!,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-              ),
-            ],
+            ),
           ),
         );
       },
@@ -121,51 +131,5 @@ class _SlideGradientTransform extends GradientTransform {
   @override
   Matrix4? transform(Rect bounds, {TextDirection? textDirection}) {
     return Matrix4.translationValues(bounds.width * percent, 0.0, 0.0);
-  }
-}
-
-/// A branded spinning loader using the ZenSort circular logo SVG.
-class GradientLoader extends StatefulWidget {
-  const GradientLoader({Key? key, this.size = 40.0}) : super(key: key);
-
-  final double size;
-
-  @override
-  State<GradientLoader> createState() => _GradientLoaderState();
-}
-
-class _GradientLoaderState extends State<GradientLoader>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 1),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: widget.size,
-      height: widget.size,
-      child: RotationTransition(
-        turns: _controller,
-        child: SvgPicture.asset(
-          'assets/images/zensort_logo.svg',
-          width: widget.size,
-          height: widget.size,
-        ),
-      ),
-    );
   }
 }
