@@ -10,6 +10,7 @@ part 'auth_state.dart';
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final AuthRepository _authRepository;
   StreamSubscription<User?>? _authStateSubscription;
+  String? _pendingAccessToken;
 
   AuthBloc(this._authRepository) : super(AuthInitial()) {
     on<AuthStateChanged>(_onAuthStateChanged);
@@ -26,11 +27,19 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     Emitter<AuthState> emit,
   ) async {
     if (event.user != null) {
-      // Fetch the access token when user is authenticated
-      final accessToken = await _authRepository.getAccessToken() ?? '';
+      // Use the pending access token from sign-in if available
+      String accessToken = '';
+      if (_pendingAccessToken != null) {
+        accessToken = _pendingAccessToken!;
+        _pendingAccessToken = null; // Clear it after use
+      } else {
+        // Try to get the access token from the repository
+        accessToken = await _authRepository.getAccessToken() ?? '';
+      }
       emit(Authenticated(event.user!, accessToken));
     } else {
       emit(const Unauthenticated());
+      _pendingAccessToken = null; // Clear on sign out
     }
   }
 
@@ -45,9 +54,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       if (accessToken == null) {
         // User cancelled the sign-in
         emit(const Unauthenticated());
+      } else {
+        // Store the access token for the auth state changed handler
+        _pendingAccessToken = accessToken;
+        // The auth state listener will handle emitting the Authenticated state
       }
-      // If sign-in was successful, the auth state listener will handle
-      // emitting the Authenticated state via AuthStateChanged event
     } catch (e) {
       emit(Unauthenticated(error: e.toString()));
     }
