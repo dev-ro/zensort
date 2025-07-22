@@ -1,5 +1,6 @@
 rules:
-  - id: project-context
+
+- id: project-context
     description: "Project: ZenSort, a digital organization tool with a minimalist, clean, and calming design."
-  - id: no-placeholders
-    description: "Always provide complete code implementations. Do not use placeholders like //TODO." 
+- id: no-placeholders
+    description: "Always provide complete code implementations. Do not use placeholders like //TODO."

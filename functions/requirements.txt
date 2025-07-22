@@ -1,7 +1,9 @@
 firebase-functions
 firebase-admin
 google-auth
+google-auth-oauthlib
 google-api-python-client
 requests
 functions-framework
 Flask
+pytest

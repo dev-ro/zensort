@@ -1,153 +1,384 @@
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime, timezone
-import sys
+from flask import Flask
 
-# Mock the missing dependencies before importing the module
-with patch.dict(
-    "sys.modules",
-    {
-        "firebase_functions": MagicMock(),
-        "firebase_admin": MagicMock(),
-        "google.cloud.firestore_v1": MagicMock(),
-    },
-):
-    import sync_youtube_liked_videos
-    from sync_youtube_liked_videos import (
-        Video,
-        fetch_liked_videos,
-        save_video_to_firestore,
-        syncYouTubeLikedVideos,
-    )
+from firebase_functions import https_fn
+from googleapiclient.errors import HttpError
 
 
-class TestVideoDataStructure(unittest.TestCase):
-    def test_video_dataclass_fields(self):
-        now = datetime.now(timezone.utc)
-        video = Video(
-            videoId="abc123",
-            title="Test Title",
-            description="Test Description",
-            thumbnailUrl="http://example.com/thumb.jpg",
-            channelTitle="Test Channel",
-            syncedAt=now,
-        )
-        self.assertEqual(video.videoId, "abc123")
-        self.assertEqual(video.title, "Test Title")
-        self.assertEqual(video.description, "Test Description")
-        self.assertEqual(video.thumbnailUrl, "http://example.com/thumb.jpg")
-        self.assertEqual(video.channelTitle, "Test Channel")
-        self.assertEqual(video.syncedAt, now)
+class TestYouTubeSyncFunctions(unittest.TestCase):
+    """Test suite for YouTube sync Cloud Functions."""
 
+    def setUp(self):
+        """Set up test app context."""
+        self.app = Flask(__name__)
+        self.app_context = self.app.app_context()
+        self.app_context.push()
 
-class TestYouTubeSync(unittest.TestCase):
-    @patch("googleapiclient.discovery.build")
-    def test_fetch_liked_videos_pagination(self, mock_build):
-        # Mock the YouTube API client and paginated responses
-        mock_youtube = MagicMock()
-        mock_videos = MagicMock()
+    def tearDown(self):
+        """Clean up app context."""
+        self.app_context.pop()
+
+    @patch("main.firestore")
+    @patch("main.Credentials")
+    @patch("main.build")
+    def test_get_liked_videos_total_success(
+        self, mock_build, mock_credentials, mock_firestore
+    ):
+        """Test successful retrieval of liked videos count."""
+        # Import after patching
+        from main import get_liked_videos_total
+
+        # Mock the YouTube API response
+        mock_youtube = Mock()
+        mock_request = Mock()
+        mock_request.execute.return_value = {"pageInfo": {"totalResults": 42}}
+        mock_youtube.videos.return_value.list.return_value = mock_request
         mock_build.return_value = mock_youtube
-        mock_youtube.videos.return_value = mock_videos
-        # Simulate two pages of results
-        first_page = {
+
+        # Mock credentials
+        mock_credentials.return_value = Mock()
+
+        # Create mock request
+        mock_req = Mock(spec=https_fn.CallableRequest)
+        mock_req.data = {"access_token": "test_token"}
+
+        # Call the function
+        result = get_liked_videos_total(mock_req)
+
+        # Verify the results
+        self.assertEqual(result, {"total": 42})
+        mock_build.assert_called_once_with(
+            "youtube", "v3", credentials=mock_credentials.return_value
+        )
+
+    @patch("main.firestore")
+    @patch("main.Credentials")
+    @patch("main.build")
+    def test_get_liked_videos_total_401_error(
+        self, mock_build, mock_credentials, mock_firestore
+    ):
+        """Test handling of 401 Unauthorized error from YouTube API."""
+        from main import get_liked_videos_total
+
+        # Create a mock 401 error
+        mock_response = Mock()
+        mock_response.status = 401
+        mock_error = HttpError(resp=mock_response, content=b"Unauthorized")
+
+        # Mock the YouTube API to raise the error
+        mock_youtube = Mock()
+        mock_request = Mock()
+        mock_request.execute.side_effect = mock_error
+        mock_youtube.videos.return_value.list.return_value = mock_request
+        mock_build.return_value = mock_youtube
+
+        # Mock credentials
+        mock_credentials.return_value = Mock()
+
+        # Create mock request
+        mock_req = Mock(spec=https_fn.CallableRequest)
+        mock_req.data = {"access_token": "test_token"}
+
+        # Call the function and verify it raises the correct error
+        with self.assertRaises(https_fn.HttpsError) as context:
+            get_liked_videos_total(mock_req)
+
+        self.assertEqual(
+            context.exception.code, https_fn.FunctionsErrorCode.UNAUTHENTICATED
+        )
+        self.assertEqual(
+            context.exception.message, "Invalid or expired YouTube access token."
+        )
+
+    @patch("main.firestore")
+    @patch("main.Credentials")
+    @patch("main.build")
+    def test_get_liked_videos_total_other_api_error(
+        self, mock_build, mock_credentials, mock_firestore
+    ):
+        """Test handling of other API errors from YouTube."""
+        from main import get_liked_videos_total
+
+        # Create a mock 403 error
+        mock_response = Mock()
+        mock_response.status = 403
+        mock_error = HttpError(resp=mock_response, content=b"Forbidden")
+
+        # Mock the YouTube API to raise the error
+        mock_youtube = Mock()
+        mock_request = Mock()
+        mock_request.execute.side_effect = mock_error
+        mock_youtube.videos.return_value.list.return_value = mock_request
+        mock_build.return_value = mock_youtube
+
+        # Mock credentials
+        mock_credentials.return_value = Mock()
+
+        # Create mock request
+        mock_req = Mock(spec=https_fn.CallableRequest)
+        mock_req.data = {"access_token": "test_token"}
+
+        # Call the function and verify it raises the correct error
+        with self.assertRaises(https_fn.HttpsError) as context:
+            get_liked_videos_total(mock_req)
+
+        self.assertEqual(context.exception.code, https_fn.FunctionsErrorCode.INTERNAL)
+        self.assertIn("YouTube API error", context.exception.message)
+
+    @patch("main.firestore")
+    def test_get_liked_videos_total_missing_access_token(self, mock_firestore):
+        """Test error when access token is missing."""
+        from main import get_liked_videos_total
+
+        # Create mock request without access token
+        mock_req = Mock(spec=https_fn.CallableRequest)
+        mock_req.data = {}
+
+        # Call the function and verify it raises the correct error
+        with self.assertRaises(https_fn.HttpsError) as context:
+            get_liked_videos_total(mock_req)
+
+        self.assertEqual(
+            context.exception.code, https_fn.FunctionsErrorCode.INVALID_ARGUMENT
+        )
+        self.assertEqual(
+            context.exception.message,
+            "The function must be called with an access_token.",
+        )
+
+    @patch("main.firestore")
+    @patch("main.Credentials")
+    @patch("main.build")
+    def test_fetch_liked_videos_success_with_pagination(
+        self, mock_build, mock_credentials, mock_firestore
+    ):
+        """Test successful fetching of liked videos with pagination."""
+        from main import fetch_liked_videos
+
+        # Mock YouTube API responses
+        mock_youtube = Mock()
+
+        # First page response
+        first_page_response = {
             "items": [
                 {
-                    "id": "id1",
+                    "id": "video1",
                     "snippet": {
-                        "title": "Title1",
-                        "description": "Desc1",
-                        "thumbnails": {"default": {"url": "url1"}},
-                        "channelTitle": "Chan1",
+                        "title": "Test Video 1",
+                        "description": "Description 1",
+                        "thumbnails": {"default": {"url": "http://thumb1.jpg"}},
+                        "channelTitle": "Channel 1",
                     },
-                },
+                }
             ],
-            "nextPageToken": "token2",
+            "nextPageToken": "page2",
         }
-        second_page = {
+
+        # Second page response (last page)
+        second_page_response = {
             "items": [
                 {
-                    "id": "id2",
+                    "id": "video2",
                     "snippet": {
-                        "title": "Title2",
-                        "description": "Desc2",
-                        "thumbnails": {"default": {"url": "url2"}},
-                        "channelTitle": "Chan2",
+                        "title": "Test Video 2",
+                        "description": "Description 2",
+                        "thumbnails": {"default": {"url": "http://thumb2.jpg"}},
+                        "channelTitle": "Channel 2",
                     },
-                },
-            ],
+                }
+            ]
         }
-        mock_videos.list.return_value.execute.side_effect = [first_page, second_page]
 
-        # Since fetch_liked_videos is not implemented yet, we'll test the structure
-        # by creating a mock that returns the expected Video objects
-        with patch.object(
-            sync_youtube_liked_videos, "fetch_liked_videos"
-        ) as mock_fetch:
-            video1 = Video(
-                "id1", "Title1", "Desc1", "url1", "Chan1", datetime.now(timezone.utc)
-            )
-            video2 = Video(
-                "id2", "Title2", "Desc2", "url2", "Chan2", datetime.now(timezone.utc)
-            )
-            mock_fetch.return_value = [video1, video2]
-            videos = list(mock_fetch("fake_token"))
-            self.assertEqual(len(videos), 2)
-            self.assertEqual(videos[0].videoId, "id1")
-            self.assertEqual(videos[1].videoId, "id2")
+        # Set up mock to return different responses
+        mock_request_1 = Mock()
+        mock_request_1.execute.return_value = first_page_response
+        mock_request_2 = Mock()
+        mock_request_2.execute.return_value = second_page_response
 
-    @patch("sync_youtube_liked_videos.firestore")
-    def test_save_video_to_firestore(self, mock_firestore):
-        mock_db = MagicMock()
-        mock_firestore.client.return_value = mock_db
-        video = Video(
-            videoId="abc123",
-            title="Test Title",
-            description="Test Description",
-            thumbnailUrl="http://example.com/thumb.jpg",
-            channelTitle="Test Channel",
+        # Use side_effect to return different mock requests for each call
+        mock_youtube.videos.return_value.list.side_effect = [
+            mock_request_1,
+            mock_request_2,
+        ]
+        mock_build.return_value = mock_youtube
+
+        # Mock credentials
+        mock_credentials.return_value = Mock()
+
+        # Fetch videos
+        videos = list(fetch_liked_videos("test_token"))
+
+        # Verify results
+        self.assertEqual(len(videos), 2)
+        self.assertEqual(videos[0].videoId, "video1")
+        self.assertEqual(videos[0].title, "Test Video 1")
+        self.assertEqual(videos[1].videoId, "video2")
+        self.assertEqual(videos[1].title, "Test Video 2")
+
+    @patch("main.firestore")
+    @patch("main.Credentials")
+    @patch("main.build")
+    def test_fetch_liked_videos_401_error(
+        self, mock_build, mock_credentials, mock_firestore
+    ):
+        """Test fetch_liked_videos handles 401 error correctly."""
+        from main import fetch_liked_videos
+
+        # Create a mock 401 error
+        mock_response = Mock()
+        mock_response.status = 401
+        mock_error = HttpError(resp=mock_response, content=b"Unauthorized")
+
+        # Mock the YouTube API to raise the error
+        mock_youtube = Mock()
+        mock_request = Mock()
+        mock_request.execute.side_effect = mock_error
+        mock_youtube.videos.return_value.list.return_value = mock_request
+        mock_build.return_value = mock_youtube
+
+        # Mock credentials
+        mock_credentials.return_value = Mock()
+
+        # Call the generator and verify it raises the correct error
+        with self.assertRaises(https_fn.HttpsError) as context:
+            list(fetch_liked_videos("test_token"))
+
+        self.assertEqual(
+            context.exception.code, https_fn.FunctionsErrorCode.UNAUTHENTICATED
+        )
+        self.assertEqual(
+            context.exception.message, "Invalid or expired YouTube access token."
+        )
+
+    @patch("main.firestore")
+    @patch("main.save_video_to_firestore")
+    @patch("main.fetch_liked_videos")
+    def test_sync_youtube_liked_videos_success(
+        self, mock_fetch, mock_save, mock_firestore
+    ):
+        """Test successful sync of YouTube liked videos."""
+        from main import sync_youtube_liked_videos, Video
+
+        # Mock fetch_liked_videos to return test videos
+        test_videos = [
+            Video(
+                videoId="video1",
+                title="Test Video 1",
+                description="Description 1",
+                thumbnailUrl="http://thumb1.jpg",
+                channelTitle="Channel 1",
+                syncedAt=datetime.now(timezone.utc),
+            ),
+            Video(
+                videoId="video2",
+                title="Test Video 2",
+                description="Description 2",
+                thumbnailUrl="http://thumb2.jpg",
+                channelTitle="Channel 2",
+                syncedAt=datetime.now(timezone.utc),
+            ),
+        ]
+        mock_fetch.return_value = iter(test_videos)
+
+        # Create mock request
+        mock_req = Mock(spec=https_fn.CallableRequest)
+        mock_req.data = {"access_token": "test_token"}
+
+        # Call the function
+        result = sync_youtube_liked_videos(mock_req)
+
+        # Verify results
+        self.assertEqual(result, {"synced": 2})
+        mock_fetch.assert_called_once_with("test_token")
+        self.assertEqual(mock_save.call_count, 2)
+
+    @patch("main.firestore")
+    def test_sync_youtube_liked_videos_missing_access_token(self, mock_firestore):
+        """Test sync function with missing access token."""
+        from main import sync_youtube_liked_videos
+
+        # Create mock request without access token
+        mock_req = Mock(spec=https_fn.CallableRequest)
+        mock_req.data = {}
+
+        # Call the function and verify it raises the correct error
+        with self.assertRaises(https_fn.HttpsError) as context:
+            sync_youtube_liked_videos(mock_req)
+
+        self.assertEqual(
+            context.exception.code, https_fn.FunctionsErrorCode.INVALID_ARGUMENT
+        )
+        self.assertEqual(
+            context.exception.message,
+            "The function must be called with an access_token.",
+        )
+
+    @patch("main.firestore")
+    @patch("main.save_video_to_firestore")
+    @patch("main.fetch_liked_videos")
+    def test_sync_youtube_liked_videos_fetch_error(
+        self, mock_fetch, mock_save, mock_firestore
+    ):
+        """Test sync function handles errors from fetch_liked_videos."""
+        from main import sync_youtube_liked_videos
+
+        # Mock fetch to raise an HttpsError
+        mock_fetch.side_effect = https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.UNAUTHENTICATED,
+            message="Invalid or expired YouTube access token.",
+        )
+
+        # Create mock request
+        mock_req = Mock(spec=https_fn.CallableRequest)
+        mock_req.data = {"access_token": "test_token"}
+
+        # Call the function and verify it re-raises the error
+        with self.assertRaises(https_fn.HttpsError) as context:
+            sync_youtube_liked_videos(mock_req)
+
+        self.assertEqual(
+            context.exception.code, https_fn.FunctionsErrorCode.UNAUTHENTICATED
+        )
+        self.assertEqual(
+            context.exception.message, "Invalid or expired YouTube access token."
+        )
+        mock_save.assert_not_called()
+
+    @patch("main.firestore")
+    @patch("main.save_video_to_firestore")
+    @patch("main.fetch_liked_videos")
+    def test_sync_youtube_liked_videos_save_error(
+        self, mock_fetch, mock_save, mock_firestore
+    ):
+        """Test sync function handles errors during save."""
+        from main import sync_youtube_liked_videos, Video
+
+        # Mock fetch to return one video
+        test_video = Video(
+            videoId="video1",
+            title="Test Video 1",
+            description="Description 1",
+            thumbnailUrl="http://thumb1.jpg",
+            channelTitle="Channel 1",
             syncedAt=datetime.now(timezone.utc),
         )
+        mock_fetch.return_value = iter([test_video])
 
-        # Since save_video_to_firestore is not implemented yet, we'll test the expected behavior
-        # by creating a mock that simulates the Firestore write
-        with patch.object(
-            sync_youtube_liked_videos, "save_video_to_firestore"
-        ) as mock_save:
-            mock_save(video)
-            mock_save.assert_called_once_with(video)
+        # Mock save to raise an exception
+        mock_save.side_effect = Exception("Firestore error")
 
-    @patch.object(sync_youtube_liked_videos, "fetch_liked_videos")
-    @patch.object(sync_youtube_liked_videos, "save_video_to_firestore")
-    def test_syncYouTubeLikedVideos_success(self, mock_save, mock_fetch):
-        # Simulate two videos returned from fetch_liked_videos
-        video1 = Video("id1", "t1", "d1", "u1", "c1", datetime.now(timezone.utc))
-        video2 = Video("id2", "t2", "d2", "u2", "c2", datetime.now(timezone.utc))
-        mock_fetch.return_value = [video1, video2]
-        req = MagicMock()
-        req.headers = {"Authorization": "Bearer testtoken"}
+        # Create mock request
+        mock_req = Mock(spec=https_fn.CallableRequest)
+        mock_req.data = {"access_token": "test_token"}
 
-        # Since syncYouTubeLikedVideos is not implemented yet, we'll test the expected behavior
-        # by creating a mock that returns the expected response
-        with patch.object(
-            sync_youtube_liked_videos, "syncYouTubeLikedVideos"
-        ) as mock_sync:
-            mock_sync.return_value = {"synced": 2}
-            resp = mock_sync(req)
-            self.assertEqual(resp, {"synced": 2})
+        # Call the function and verify it handles the error
+        with self.assertRaises(https_fn.HttpsError) as context:
+            sync_youtube_liked_videos(mock_req)
 
-    @patch.object(sync_youtube_liked_videos, "fetch_liked_videos")
-    def test_syncYouTubeLikedVideos_auth_failure(self, mock_fetch):
-        req = MagicMock()
-        req.headers = {}  # No Authorization header
-
-        # Since syncYouTubeLikedVideos is not implemented yet, we'll test the expected behavior
-        # by creating a mock that raises an exception for missing auth
-        with patch.object(
-            sync_youtube_liked_videos, "syncYouTubeLikedVideos"
-        ) as mock_sync:
-            mock_sync.side_effect = Exception("Missing authorization header")
-            with self.assertRaises(Exception):
-                mock_sync(req)
+        self.assertEqual(context.exception.code, https_fn.FunctionsErrorCode.INTERNAL)
+        self.assertIn("unexpected error", context.exception.message)
 
 
 if __name__ == "__main__":

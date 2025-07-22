@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:zensort/features/auth/domain/repositories/auth_repository.dart';
+import 'package:zensort/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:zensort/widgets/animated_gradient_app_bar.dart';
 import 'package:zensort/widgets/zen_sort_scaffold.dart';
 import 'package:zensort/theme.dart';
@@ -35,21 +38,25 @@ class _SyncProgressScreenState extends State<SyncProgressScreen> {
       if (user == null) {
         throw Exception("User is not authenticated.");
       }
-      final idToken = await user.getIdToken();
 
-      final getTotalVideosCallable = FirebaseFunctions.instance.httpsCallable('get_liked_videos_total');
-      final totalResult = await getTotalVideosCallable.call({'access_token': idToken});
-      setState(() {
-        _totalVideos = totalResult.data['total'];
-      });
+      // Get the YouTube access token from the auth repository
+      final authRepository = context.read<AuthRepository>();
+      final accessToken = await authRepository.getAccessToken();
 
-      final syncCallable = FirebaseFunctions.instance.httpsCallable('sync_youtube_liked_videos');
-      final syncResult = await syncCallable.call({'access_token': idToken});
-
-      setState(() {
-        _syncedVideos = syncResult.data['synced'];
-        _isLoading = false;
-      });
+      if (accessToken == null) {
+        // If we can't get a fresh token, try to get it from the auth state
+        final authState = context.read<AuthBloc>().state;
+        if (authState is Authenticated && authState.accessToken.isNotEmpty) {
+          // Use the access token from the auth state
+          await _syncWithToken(authState.accessToken);
+        } else {
+          throw Exception(
+            "YouTube access token not available. Please sign in again.",
+          );
+        }
+      } else {
+        await _syncWithToken(accessToken);
+      }
     } on FirebaseFunctionsException catch (e) {
       setState(() {
         _error = e.message;
@@ -57,10 +64,32 @@ class _SyncProgressScreenState extends State<SyncProgressScreen> {
       });
     } catch (e) {
       setState(() {
-        _error = "An unknown error occurred.";
+        _error = e.toString();
         _isLoading = false;
       });
     }
+  }
+
+  Future<void> _syncWithToken(String accessToken) async {
+    final getTotalVideosCallable = FirebaseFunctions.instance.httpsCallable(
+      'get_liked_videos_total',
+    );
+    final totalResult = await getTotalVideosCallable.call({
+      'access_token': accessToken,
+    });
+    setState(() {
+      _totalVideos = totalResult.data['total'];
+    });
+
+    final syncCallable = FirebaseFunctions.instance.httpsCallable(
+      'sync_youtube_liked_videos',
+    );
+    final syncResult = await syncCallable.call({'access_token': accessToken});
+
+    setState(() {
+      _syncedVideos = syncResult.data['synced'];
+      _isLoading = false;
+    });
   }
 
   @override
@@ -76,7 +105,10 @@ class _SyncProgressScreenState extends State<SyncProgressScreen> {
               if (_isLoading && _totalVideos == 0)
                 const CircularProgressIndicator()
               else if (_error != null)
-                Text('Error: $_error', style: const TextStyle(color: Colors.red))
+                Text(
+                  'Error: $_error',
+                  style: const TextStyle(color: Colors.red),
+                )
               else
                 SyncProgressIndicator(
                   total: _totalVideos,
