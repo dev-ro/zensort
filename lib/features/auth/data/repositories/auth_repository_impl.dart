@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:zensort/features/auth/domain/repositories/auth_repository.dart';
+import 'package:zensort/features/auth/domain/entities/sign_in_result.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
   final FirebaseAuth _firebaseAuth;
@@ -17,9 +18,9 @@ class AuthRepositoryImpl implements AuthRepository {
   Stream<User?> get authStateChanges => _firebaseAuth.authStateChanges();
 
   @override
-  Future<String?> signInWithGoogle() async {
+  Future<SignInResult?> signInWithGoogle() async {
     try {
-      UserCredential? userCredential;
+      UserCredential userCredential;
       String? accessToken;
 
       if (kIsWeb) {
@@ -50,8 +51,15 @@ class AuthRepositoryImpl implements AuthRepository {
         );
         userCredential = await _firebaseAuth.signInWithCredential(credential);
       }
-      await _createUserDocument(userCredential.user);
-      return accessToken;
+
+      final user = userCredential.user;
+      if (user == null || accessToken == null) {
+        throw Exception('Sign-in failed: User or access token is null');
+      }
+
+      await _createUserDocument(user);
+
+      return SignInResult(user: user, accessToken: accessToken);
     } catch (e) {
       // It's better to let the BLoC handle the error state.
       rethrow;
