@@ -33,24 +33,42 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: isSyncing
                 ? null
                 : () {
-                    print(
-                      'Sync button pressed. Current Auth State: ${context.read<AuthBloc>().state}',
-                    );
-                    final authState = context.read<AuthBloc>().state;
-                    if (authState is Authenticated) {
+                    try {
                       print(
-                        'Auth state is Authenticated. Dispatching sync with token...',
+                        'Sync button pressed. Current Auth State: ${context.read<AuthBloc>().state}',
                       );
-                      context.read<YouTubeBloc>().add(SyncLikedVideos());
-                    } else {
-                      print('Auth state is NOT Authenticated. Doing nothing.');
+                      final authState = context.read<AuthBloc>().state;
+                      if (authState is Authenticated) {
+                        print(
+                          'Auth state is Authenticated. Access token available: ${authState.accessToken != null}',
+                        );
+                        print(
+                          'Payload being sent to sync: access_token available = ${authState.accessToken != null}',
+                        );
+                        if (authState.accessToken != null) {
+                          print(
+                            'Access token first 20 chars: ${authState.accessToken!.substring(0, 20)}...',
+                          );
+                        }
+                        print(
+                          'Dispatching SyncLikedVideos event to YouTubeBloc...',
+                        );
+                        context.read<YouTubeBloc>().add(SyncLikedVideos());
+                      } else {
+                        print(
+                          'Auth state is NOT Authenticated. Doing nothing.',
+                        );
+                      }
+                    } catch (e) {
+                      print('Error in sync button onPressed: $e');
+                      print('Stack trace: ${StackTrace.current}');
                     }
                   },
           ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () {
-              context.read<AuthBloc>().add(SignOut());
+              context.read<AuthBloc>().add(SignOutRequested());
             },
           ),
         ],

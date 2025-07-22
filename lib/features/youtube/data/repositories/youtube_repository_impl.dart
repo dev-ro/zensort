@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:zensort/features/auth/domain/repositories/auth_repository.dart';
 import 'package:zensort/features/youtube/domain/entities/liked_video.dart';
 import 'package:zensort/features/youtube/domain/entities/sync_progress.dart';
 import 'package:zensort/features/youtube/domain/repositories/youtube_repository.dart';
@@ -7,14 +9,67 @@ import 'package:zensort/features/youtube/domain/repositories/youtube_repository.
 class YoutubeRepositoryImpl implements YoutubeRepository {
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
+  final AuthRepository _authRepository;
 
-  YoutubeRepositoryImpl(this._firestore, this._auth);
+  YoutubeRepositoryImpl(this._firestore, this._auth, this._authRepository);
 
   @override
   Future<void> syncLikedVideos() async {
-    // This will be triggered by a cloud function,
-    // so the client doesn't need to do anything here.
-    return;
+    try {
+      print('=== YouTubeRepositoryImpl.syncLikedVideos() called ===');
+      print('Current user: ${_auth.currentUser?.uid}');
+
+      final user = _auth.currentUser;
+      if (user == null) {
+        throw Exception("User is not authenticated.");
+      }
+
+      // Get the YouTube access token from the auth repository
+      print('Getting access token from auth repository...');
+      final accessToken = await _authRepository.getAccessToken();
+
+      if (accessToken == null) {
+        throw Exception(
+          "YouTube access token not available. Please sign in again.",
+        );
+      }
+
+      print('Access token obtained, calling Cloud Functions...');
+      print('Access token first 20 chars: ${accessToken.substring(0, 20)}...');
+      await _syncWithToken(accessToken);
+      print('Cloud Function sync completed successfully');
+    } catch (e) {
+      print('Error in YouTubeRepositoryImpl.syncLikedVideos(): $e');
+      print('Stack trace: ${StackTrace.current}');
+      rethrow;
+    }
+  }
+
+  Future<void> _syncWithToken(String accessToken) async {
+    print('=== _syncWithToken() called ===');
+    print(
+      'Payload being sent: {access_token: ${accessToken.substring(0, 20)}...}',
+    );
+
+    // First get total count
+    print('Calling get_liked_videos_total...');
+    final getTotalVideosCallable = FirebaseFunctions.instance.httpsCallable(
+      'get_liked_videos_total',
+    );
+    final totalResult = await getTotalVideosCallable.call({
+      'access_token': accessToken,
+    });
+    final totalVideos = totalResult.data['total'];
+    print('Total videos to sync: $totalVideos');
+
+    // Then sync the videos
+    print('Calling sync_youtube_liked_videos...');
+    final syncCallable = FirebaseFunctions.instance.httpsCallable(
+      'sync_youtube_liked_videos',
+    );
+    final syncResult = await syncCallable.call({'access_token': accessToken});
+    final syncedVideos = syncResult.data['synced'];
+    print('Videos synced: $syncedVideos');
   }
 
   @override

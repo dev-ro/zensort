@@ -63,13 +63,15 @@ class ZenSortApp extends StatelessWidget {
           create: (context) => YoutubeRepositoryImpl(
             FirebaseFirestore.instance,
             FirebaseAuth.instance,
+            context.read<AuthRepository>(),
           ),
         ),
       ],
       child: MultiBlocProvider(
         providers: [
           BlocProvider<AuthBloc>(
-            create: (context) => AuthBloc(context.read<AuthRepository>()),
+            create: (context) =>
+                AuthBloc(authRepository: context.read<AuthRepository>()),
           ),
           BlocProvider<YouTubeBloc>(
             create: (context) => YouTubeBloc(context.read<YoutubeRepository>()),

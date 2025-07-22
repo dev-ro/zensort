@@ -15,7 +15,7 @@ class AuthGate extends StatelessWidget {
         if (state is Authenticated) {
           return const HomeScreen();
         }
-        if (state is Unauthenticated) {
+        if (state is AuthUnauthenticated) {
           return const SignInScreen();
         }
         return const Scaffold(body: Center(child: GradientLoader(size: 40)));

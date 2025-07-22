@@ -46,9 +46,9 @@ class _SyncProgressScreenState extends State<SyncProgressScreen> {
       if (accessToken == null) {
         // If we can't get a fresh token, try to get it from the auth state
         final authState = context.read<AuthBloc>().state;
-        if (authState is Authenticated && authState.accessToken.isNotEmpty) {
+        if (authState is Authenticated && authState.accessToken != null) {
           // Use the access token from the auth state
-          await _syncWithToken(authState.accessToken);
+          await _syncWithToken(authState.accessToken!);
         } else {
           throw Exception(
             "YouTube access token not available. Please sign in again.",

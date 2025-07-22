@@ -19,10 +19,10 @@ class SignInScreen extends StatelessWidget {
             const SizedBox(height: 48),
             BlocConsumer<AuthBloc, AuthState>(
               listener: (context, state) {
-                if (state is Unauthenticated && state.error != null) {
+                if (state is AuthError) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Sign-in failed: ${state.error}'),
+                      content: Text(state.message),
                       backgroundColor: Colors.red,
                     ),
                   );
@@ -47,7 +47,7 @@ class SignInScreen extends StatelessWidget {
                     ),
                   ),
                   onPressed: () {
-                    context.read<AuthBloc>().add(SignInWithGoogle());
+                    context.read<AuthBloc>().add(SignInWithGoogleRequested());
                   },
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
