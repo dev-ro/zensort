@@ -1,9 +1,12 @@
-from dataclasses import dataclass
+import os
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Generator
 from firebase_admin import firestore
+from firebase_functions import https_fn
 import requests
 from googleapiclient.discovery import build
+import json
 
 
 @dataclass
@@ -57,36 +60,72 @@ def fetch_liked_videos(access_token: str) -> Generator[Video, None, None]:
             break
 
 
-def save_video_to_firestore(video: Video):
+def save_video_to_firestore(video: Video, user_id: str):
     """
-    Save a Video object to Firestore in the 'videos' collection, using videoId as the document ID.
+    Save a Video object to Firestore in a user-specific 'videos' subcollection,
+    using videoId as the document ID.
     """
     db = firestore.client()
-    doc_ref = db.collection("videos").document(video.videoId)
-    doc_ref.set(
-        {
-            "videoId": video.videoId,
-            "title": video.title,
-            "description": video.description,
-            "thumbnailUrl": video.thumbnailUrl,
-            "channelTitle": video.channelTitle,
-            "syncedAt": video.syncedAt,
-        }
+    doc_ref = (
+        db.collection("users")
+        .document(user_id)
+        .collection("videos")
+        .document(video.videoId)
     )
+    doc_ref.set(asdict(video))
 
 
-def syncYouTubeLikedVideos(req):
+@https_fn.on_call(max_instances=10)
+def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
     """
-    HTTP Cloud Function to sync a user's liked YouTube videos to Firestore.
-    Expects OAuth2 access token in the Authorization header.
-    Returns a dict with the number of videos synced.
+    A callable function to sync a user's liked YouTube videos to their profile.
     """
-    auth_header = req.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        raise Exception("Missing or invalid authorization header")
-    access_token = auth_header.split(" ", 1)[1]
-    count = 0
-    for video in fetch_liked_videos(access_token):
-        save_video_to_firestore(video)
-        count += 1
-    return {"synced": count}
+    # 1. Check for authenticated user
+    if req.auth is None:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.UNAUTHENTICATED,
+            message="The function must be called by an authenticated user.",
+        )
+    user_id = req.auth.uid
+
+    # 2. Get access token from request data
+    access_token = req.data.get("accessToken")
+    if not isinstance(access_token, str):
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            message="The function must be called with a valid 'accessToken'.",
+        )
+
+    try:
+        # 3. Fetch liked videos and save them to Firestore
+        count = 0
+        for video in fetch_liked_videos(access_token):
+            save_video_to_firestore(video, user_id)
+            count += 1
+
+        # 4. Return success response
+        return {"synced": count}
+
+    except requests.exceptions.HTTPError as e:
+        # Log the detailed error from the YouTube API
+        error_content = json.loads(e.response.content.decode("utf-8"))
+        status_code = e.response.status_code
+        error_details = error_content.get("error", {})
+        error_reason = error_details.get("errors", [{}])[0].get("reason")
+
+        print(
+            f"YouTube API Error - Status: {status_code}, Reason: {error_reason}, Details: {json.dumps(error_details)}"
+        )
+
+        # Improve the error message returned to the client
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INTERNAL,
+            message=f"YouTube API Error {status_code}: {error_reason}",
+            details=error_details,
+        )
+    except Exception as e:
+        print(f"Error syncing liked videos: {e}")
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INTERNAL,
+            message="An unexpected error occurred while syncing videos.",
+        )

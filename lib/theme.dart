@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 
 class ZenSortTheme {
   // Colors
@@ -64,6 +65,42 @@ class ZenSortTheme {
     fontSize: 18,
     fontWeight: FontWeight.bold,
     color: lightText,
+  );
+}
+
+class CustomMarkdownStyle {
+  static MarkdownStyleSheet getTheme(BuildContext context) {
+    return MarkdownStyleSheet(
+      blockquoteDecoration: BoxDecoration(
+        color: ZenSortTheme.purple.withAlpha(26),
+        borderRadius: BorderRadius.circular(8.0),
+      ),
+      blockquotePadding: const EdgeInsets.all(16.0),
+    );
+  }
+}
+
+ThemeData getDarkTheme() {
+  return ThemeData(
+    useMaterial3: true,
+    brightness: Brightness.dark,
+    scaffoldBackgroundColor: const Color(0xFF121212),
+    colorScheme: const ColorScheme(
+      brightness: Brightness.dark,
+      primary: ZenSortTheme.primaryColor,
+      onPrimary: ZenSortTheme.darkText,
+      secondary: ZenSortTheme.accentColor,
+      onSecondary: ZenSortTheme.lightText,
+      error: Colors.red,
+      onError: ZenSortTheme.darkText,
+      surface: Color(0xFF1E1E1E),
+      onSurface: ZenSortTheme.lightText,
+    ),
+    textTheme: getLightTheme().textTheme.apply(
+      bodyColor: ZenSortTheme.lightText,
+      displayColor: ZenSortTheme.lightText,
+    ),
+    fontFamily: GoogleFonts.nunito().fontFamily,
   );
 }
 

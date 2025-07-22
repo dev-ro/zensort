@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:zensort/main.dart';
+import 'package:zensort/theme.dart';
 import 'package:zensort/widgets/animated_gradient_app_bar.dart';
 import 'package:zensort/widgets/gradient_loader.dart';
 

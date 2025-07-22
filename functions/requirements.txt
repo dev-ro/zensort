@@ -3,3 +3,5 @@ firebase-admin
 google-auth
 google-api-python-client
 requests
+functions-framework
+Flask

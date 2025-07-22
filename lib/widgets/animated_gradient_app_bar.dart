@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:zensort/theme.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:zensort/widgets/google_sign_in_button.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class AnimatedGradientAppBar extends StatefulWidget
@@ -94,7 +93,7 @@ class _AnimatedGradientAppBarState extends State<AnimatedGradientAppBar>
                             child: const Text('Sign Out'),
                           );
                         }
-                        return GoogleSignInButton(onSignIn: () async {});
+                        return const SizedBox.shrink();
                       },
                     ),
                   ),

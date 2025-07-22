@@ -1,29 +1,41 @@
----
-description: Provides strict guidelines for secure, cost-effective Firebase usage, acknowledging the dual dev/prod environment.
-globs:
-  - "functions/**/*.py"
-  - "lib/main.dart"
-  - "firebase.json"
-alwaysApply: false
----
-# Firebase & Cloud Best Practices
+# Firebase & Cloud Functions
 
-This project uses two separate Firebase projects: `zensort-dev` for development and staging, and `zensort-a7b47` (prod) for production. All Firebase-related code must be efficient, secure, and mindful of this dual-environment setup.
+This project uses Firebase for its backend, including Authentication, Firestore, and Cloud Functions. All code must adhere to the following rules to ensure security, cost-effectiveness, and consistency between development (`zensort-dev`) and production (`zensort-a7b47`) environments.
 
-## 1. Cloud Cost Optimization
+## 1. Environment-Specific Configurations
 
-To reduce technical debt and minimize cloud costs, you MUST follow these rules:
+- You **MUST** use the correct Firebase project for the current environment.
+- The Flutter app uses `.firebaserc` and `--dart-define=FLAVOR=...` to switch between `dev` and `prod` configurations.
+- Cloud Functions **MUST** use environment variables (e.g., `os.getenv('GCP_PROJECT')`) to adapt their behavior, such as using different API keys or connecting to different services based on the environment.
+- All Cloud Functions **MUST** be deployed to both the `dev` and `prod` environments. This ensures that features can be tested end-to-end against a production-like environment before being released. Use the Firebase CLI with the `--project` flag to target the correct environment during deployment (e.g., `firebase deploy --only functions --project zensort-dev`).
 
-- **Firestore Read Minimization:** Queries must be precise. Never fetch entire documents or collections when only a subset of fields or documents is required. Design data models using denormalization to avoid expensive joins and reduce read operations.
-- **Firestore Write Efficiency:** Before performing a write operation, check if the data already exists to prevent redundant writes. The `add_to_waitlist` function is a good example of this pattern.
-- **Cloud Functions:** Functions must be idempotent. For secrets management, you MUST use a secure solution like Secret Manager. Do not hardcode secrets or store them in environment variables.
+## 2. Firestore Security Rules
 
-## 2. Security (Principle of Least Privilege)
+- Firestore rules **MUST** be written to be as restrictive as possible.
+- The principle of least privilege must be applied. Users should only have the minimum access required to perform their tasks.
+- Rules must be tested thoroughly using the Firebase Emulator Suite before deployment.
 
-- **Firebase Security Rules:** Start all rules in a "locked mode" (`allow read, write: if false;`) and grant access only as needed. Rules are the primary defense for the database.
+## 3. Cost Management
+
+- Cloud Function logic must be designed to minimize execution time and resource allocation.
+- Avoid unnecessary reads/writes to Firestore. Utilize caching and efficient queries.
+- When interacting with external APIs (like the YouTube Data API), be mindful of quotas and implement caching strategies to avoid excessive usage.
+
+## 4. Cloud Function Networking (Python)
+
+All Python HTTPS Cloud Functions that are called from the web client **MUST** include logic to handle preflight `OPTIONS` requests.
+
+- **CORS Configuration:**
+  - The function must set the correct `Access-Control-Allow-Origin` header based on the execution environment (e.g., allow `localhost` for dev and the production URL for prod). This is critical for preventing CORS errors.
+  - The function **MUST** ensure that headers like `Access-Control-Allow-Origin` are set only **ONCE** in the response. A common pattern is to handle the preflight `OPTIONS` request and return immediately, preventing the main function logic from adding a duplicate header.
+  - The following headers must also be set:
+    - `Access-Control-Allow-Methods`: `'POST, OPTIONS'`
+    - `Access-control-Allow-Headers`: `'Content-Type', 'Authorization'`
+    - `Access-Control-Max-Age`: `'3600'`
+
 - **IAM for Cloud Functions:** Grant only the minimum necessary permissions for a function's service account to perform its job. Avoid using default service accounts.
 
-## 3. CI/CD & Build Flavors
+## 5. CI/CD & Build Flavors
 
 - The application uses a flavor system to switch between Firebase projects, controlled by the `--dart-define=FLAVOR` flag in `scripts/build.sh`.
 - The `main.dart` file correctly initializes the appropriate Firebase project based on the flavor. This pattern must be maintained.
