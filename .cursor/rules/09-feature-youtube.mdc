@@ -1,5 +1,5 @@
 ---
-description: Enforces architectural patterns for the YouTube integration feature, including data caching, API service implementation, and repository structure.
+description: Enforces architectural patterns for the YouTube integration feature, including the denormalized data model, data sync logic, and repository structure.
 globs:
   - "lib/features/youtube*/**/*.dart"
   - "lib/features/auth*/**/*.dart"
@@ -9,35 +9,44 @@ alwaysApply: false
 
 This rule governs the implementation of user authentication and YouTube data handling. It builds upon the foundational principles in `00-core-standards.mdc` and the clean architecture defined in `01-architecture.mdc`.
 
-## 1. Clean Architecture Adherence
+## 1. Clean Architecture Adherence (Unchanged)
 
-[cite_start]This feature **MUST** strictly follow the project's Feature-First architecture[cite: 3]. [cite_start]All code must be placed in the appropriate layer within `lib/features/youtube/` or `lib/features/auth/`[cite: 4].
+This feature **MUST** strictly follow the project's Feature-First architecture. All code must be placed in the appropriate layer within `lib/features/youtube/` or `lib/features/auth/`.
 
-- **Presentation Layer (`/presentation`):**
-  - [cite_start]Contains all UI widgets and state management [BLoC/Riverpod](cite: 4).
-  - [cite_start]**MUST NOT** interact directly with Firebase or the YouTube API[cite: 13]. [cite_start]All data operations must be requested through repository interfaces from the Domain layer[cite: 13].
+- [cite_start]**Presentation Layer (`/presentation`):** **MUST NOT** interact directly with Firebase or the YouTube API[cite: 13].
+- **Domain Layer (`/domain`):** Contains pure Dart business objects and abstract Repository interfaces. [cite_start]**MUST NOT** have dependencies on Flutter or Firebase[cite: 5].
+- [cite_start]**Data Layer (`/data`):** Contains repository implementations and handles all interactions with external data sources[cite: 7].
 
-- **Domain Layer (`/domain`):**
-  - [cite_start]Contains pure Dart business objects (Entities) and abstract Repository interfaces (e.g., `abstract class YouTubeRepository`)[cite: 6].
-  - [cite_start]This layer **MUST NOT** have any dependencies on Flutter or Firebase[cite: 5].
+## 2. Data Sync & Caching Strategy (Updated Logic)
 
-- **Data Layer (`/data`):**
-  - [cite_start]Contains the implementations of the Domain layer's repository interfaces (e.g., `class YouTubeRepositoryImpl implements YouTubeRepository`)[cite: 7].
-  - [cite_start]This layer is responsible for all interactions with the YouTube Data API and the Firestore cache[cite: 7].
+[cite_start]To manage API quotas and minimize cloud costs, a robust sync strategy is mandatory[cite: 32]. The repository **MUST NOT** simply cache raw API responses. It must process them and store them in the normalized structure defined in Section 4.
 
-## 2. YouTube Data API & Caching Strategy
+- **Repository Logic:** The `YouTubeRepositoryImpl` must implement the sync logic as follows:
+    1. Fetch the user's liked videos from the YouTube Data API `playlistItems` endpoint.
+    2. For each video item returned by the API:
+        a.  Check if a document for the video already exists in the root `/videos/{videoId}` collection to prevent redundant writes[cite: 35]. If it does not exist, create it using the video's metadata.
+        b.  Create or update the linking document in the user's `/users/{userId}/likedVideoLinks/{videoId}` subcollection. This document stores the user-specific timestamps.
 
-[cite_start]To manage API quotas and minimize cloud costs[cite: 32], a robust caching strategy is mandatory.
-
-- **API Service:** Create a dedicated `YouTubeApiService` in the `data` layer. This service is responsible for all `googleapis` HTTP calls.
-- [cite_start]**Firestore Cache:** User's liked videos **MUST** be cached in a subcollection within Firestore to minimize reads [cite: 33] and avoid costly, repeated API calls. [cite_start]The data model should be denormalized to prevent expensive client-side joins[cite: 34].
-- **Repository Logic:** The `YouTubeRepositoryImpl` must implement the following logic:
-    1. First, attempt to fetch data from the Firestore cache.
-    2. If the cache is stale or empty, then (and only then) make a call to the `YouTubeApiService`.
-    3. [cite_start]After fetching fresh data from the API, update the Firestore cache to prevent redundant writes on the next request[cite: 35].
-
-## 3. Authentication (`signInWithGoogle`)
+## 3. Authentication (Unchanged)
 
 - The authentication flow must be handled within its own `auth` feature.
-- The `AuthService` or `AuthRepository` is responsible for handling the `signInWithGoogle` flow and providing a `Stream<User?>` of the authentication state.
-- Sensitive information like API keys or secrets **MUST NOT** be hardcoded. [cite_start]Use the project's established method for secrets management[cite: 38].
+- The `AuthRepository` is responsible for the `signInWithGoogle` flow and providing an auth state stream.
+
+## 4. Firestore Data Model (New Section)
+
+The data model is split into two collections to avoid data duplication and allow for future enrichment (e.g., embeddings).
+
+- **Root Videos Collection:** A single source of truth for all video metadata.
+  - **Path:** `/videos/{videoId}`
+  - **Document Fields:**
+    - `title` (String)
+    - `description` (String)
+    - `channelName` (String)
+    - `publishedAt` (Timestamp): The original video publication date from YouTube.
+    - `maxResThumbnailUrl` (String): The URL for the maximum resolution thumbnail available.
+
+- **User's Liked Video Links:** A subcollection linking a user to videos they've liked.
+  - **Path:** `/users/{userId}/likedVideoLinks/{videoId}`
+  - **Document Fields:**
+    - `likedAt` (Timestamp): This timestamp comes from the `publishedAt` field of the `PlaylistItem` resource from the YouTube API, which represents when the user liked the video.
+    - `syncedAt` (Timestamp): A `FieldValue.serverTimestamp()` set when the record is written to Firestore by the application.

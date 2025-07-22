@@ -6,26 +6,26 @@ description: Scaffolds a complete, new feature for ZenSort, including the full f
 
 When I ask you to "scaffold the YouTube liked videos feature", you MUST perform the following steps in order. [cite_start]This is a complete implementation; do not use any placeholders or `// TODO` comments[cite: 21, 22].
 
-### Plan
+## Plan
 
-1. **Create Directory Structure:**
-    - [cite_start]Create the feature-first directory structure under `lib/features/youtube/` with `presentation`, `domain`, and `data` subdirectories[cite: 4].
-    - Inside `presentation`, create `bloc` and `widgets` folders.
-    - Inside `data`, create `repositories` and `services` folders.
+1. **Create Directory Structure:** (Unchanged)
+    - Create the feature-first directory structure under `lib/features/youtube/` with `presentation`, `domain`, and `data` subdirectories.
 
 2. **Domain Layer:**
-    - In `lib/features/youtube/domain/`, create a `youtube_repository.dart` file with an abstract class `YouTubeRepository`. It should define methods like `Future<List<Video>> getLikedVideos()` and `Future<void> syncLikedVideos()`.
-    - [cite_start]Create a pure Dart `video_entity.dart` file for the business object[cite: 5].
+    - In `lib/features/youtube/domain/`, create a `youtube_repository.dart` file with an abstract class `YouTubeRepository`. It should define methods like `Future<List<LikedVideo>> getMyLikedVideos()` and `Future<void> syncMyLikedVideos()`.
+    - Create a `liked_video_entity.dart` file. The `LikedVideo` entity should be a composite object containing all the data needed by the UI, including fields from the root video document (`title`, `channelName`, etc.) and the user's linking document (`likedAt`).
 
 3. **Data Layer:**
-    - In `lib/features/youtube/data/services/`, create a `youtube_api_service.dart` file. It will handle the `googleapis` client and the direct API calls.
-    - [cite_start]In `lib/features/youtube/data/repositories/`, create `youtube_repository_impl.dart` which implements `YouTubeRepository`[cite: 7]. [cite_start]It will contain the caching logic: check Firestore first, then call the API service, then update the cache[cite: 33, 35].
+    - In `lib/features/youtube/data/services/`, create a `youtube_api_service.dart`.
+    - In `lib/features/youtube/data/repositories/`, create `youtube_repository_impl.dart` which implements `YouTubeRepository`.
+    - The `syncMyLikedVideos` method **MUST** implement the two-collection logic: For each video from the API, write to `/videos/{videoId}` if it's new, and then write the user-specific timestamps to `/users/{userId}/likedVideoLinks/{videoId}`.
+    - The `getMyLikedVideos` method must read the user's linking documents from `/users/{userId}/likedVideoLinks/` and then fetch the corresponding full video documents from the root `/videos/` collection to construct and return the list of `LikedVideo` entities.
 
 4. **Presentation Layer:**
     - In `lib/features/youtube/presentation/bloc/`, create the BLoC files: `youtube_bloc.dart`, `youtube_event.dart`, and `youtube_state.dart`.
-    - The state should handle `loading`, `success(List<Video> videos)`, and `failure(String message)` states.
-    - [cite_start]The BLoC will depend on the `YouTubeRepository` abstraction, not the implementation[cite: 13].
+    - The success state should be `Success(List<LikedVideo> videos)`.
+    - [cite_start]The BLoC will depend on the `YouTubeRepository` abstraction[cite: 13].
 
 5. **Final Output:**
-    - Provide me with a list of all the files you created.
-    - [cite_start]Confirm that the implementation is complete and production-ready, adhering to the "no placeholders" mandate[cite: 22].
+    - Provide a list of all files created.
+    - Confirm that the implementation is complete and adheres to the defined data model.
