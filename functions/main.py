@@ -333,58 +333,26 @@ def save_video_to_firestore(video: Video):
 @https_fn.on_call()
 def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
     """
-    HTTP Cloud Function to sync a user's liked YouTube videos to Firestore.
-    Expects OAuth2 access token in the request data.
+    A callable Cloud Function to sync a user's liked YouTube videos to Firestore.
+    Expects the OAuth2 access token in the request data.
     Returns a dict with the number of videos synced.
     """
-    logger.info("=== Starting sync_youtube_liked_videos ===")
-
-    # Log request data (be careful not to log sensitive tokens in production)
-    logger.info(f"Request auth present: {req.auth is not None}")
-    if req.auth:
-        logger.info(f"Request auth uid: {req.auth.get('uid', 'N/A')}")
-    logger.info(f"Request data keys: {list(req.data.keys())}")
-
     access_token = req.data.get("access_token")
     if not access_token:
-        logger.error("No access_token provided in request")
         raise https_fn.HttpsError(
             code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-            message="The function must be called with an access_token.",
+            message="The function must be called with a valid 'access_token'.",
         )
-
-    # Log token info (first few chars only for security)
-    logger.info(f"Access token received (first 20 chars): {access_token[:20]}...")
-    logger.info(f"Access token length: {len(access_token)}")
 
     try:
-        logger.info("Starting video fetch process")
         count = 0
-
-        # Add more detailed logging in fetch_liked_videos
         for video in fetch_liked_videos(access_token):
-            logger.info(
-                f"Processing video {count + 1}: {video.videoId} - {video.title[:50]}..."
-            )
             save_video_to_firestore(video)
             count += 1
-
-            # Log progress every 10 videos
-            if count % 10 == 0:
-                logger.info(f"Progress: Synced {count} videos so far")
-
-        logger.info(f"=== Sync complete: {count} videos synced successfully ===")
         return {"synced": count}
-
-    except https_fn.HttpsError as e:
-        logger.error(f"HttpsError in sync: {e.code} - {e.message}")
-        raise
     except Exception as e:
-        logger.error(
-            f"Unexpected error in sync_youtube_liked_videos: {type(e).__name__}: {str(e)}"
-        )
-        logger.exception("Full traceback:")
+        print(f"Error during video sync: {e}")
         raise https_fn.HttpsError(
             code=https_fn.FunctionsErrorCode.INTERNAL,
-            message=f"Video sync failed: {type(e).__name__}: {str(e)}",
+            message="An unexpected error occurred while syncing videos.",
         )

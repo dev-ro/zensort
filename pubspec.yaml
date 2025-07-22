@@ -45,7 +45,7 @@ dependencies:
     meta_seo: ^3.0.9
     flutter_native_splash: ^2.4.6
     firebase_auth: ^5.7.0
-    google_sign_in: ^6.2.1
+    google_sign_in: ^6.3.0
     cloud_firestore: ^5.6.12
     equatable: ^2.0.7
     flutter_bloc: ^9.1.1

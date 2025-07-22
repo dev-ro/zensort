@@ -37,7 +37,7 @@ class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
         );
   }
 
-  void _onSyncLikedVideos(
+  Future<void> _onSyncLikedVideos(
     SyncLikedVideos event,
     Emitter<YoutubeState> emit,
   ) async {
@@ -46,6 +46,7 @@ class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
       print('Calling repository syncLikedVideos()...');
       await _youtubeRepository.syncLikedVideos();
       print('Repository syncLikedVideos() completed');
+      emit(YoutubeSyncSuccess());
     } catch (e) {
       print('Error calling sync function: $e');
       print('Stack trace: ${StackTrace.current}');

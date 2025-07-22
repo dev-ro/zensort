@@ -9,7 +9,7 @@ class AuthRepositoryImpl implements AuthRepository {
   final FirebaseAuth _firebaseAuth;
   final FirebaseFirestore _firestore;
   final GoogleSignIn _googleSignIn = GoogleSignIn(
-    scopes: ['https://www.googleapis.com/auth/youtube.readonly'],
+    scopes: ['email', 'https://www.googleapis.com/auth/youtube.readonly'],
   );
 
   AuthRepositoryImpl(this._firebaseAuth, this._firestore);
@@ -20,48 +20,55 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<SignInResult?> signInWithGoogle() async {
     try {
-      UserCredential userCredential;
-      String? accessToken;
-
       if (kIsWeb) {
-        final GoogleAuthProvider googleProvider = GoogleAuthProvider();
-        googleProvider.addScope(
-          'https://www.googleapis.com/auth/youtube.readonly',
-        );
-        userCredential = await _firebaseAuth.signInWithPopup(googleProvider);
-        // For web, we need to get the access token from the credential
-        final oauthCredential = userCredential.credential as OAuthCredential?;
-        accessToken = oauthCredential?.accessToken;
-      } else {
-        // IMPORTANT: If you change the scopes, users must sign out and sign back in
-        // to grant the new permissions.
-        final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-        if (googleUser == null) {
-          return null; // User cancelled the sign-in
+        try {
+          // 1. Use GoogleSignIn to get the account and authentication details
+          final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+          if (googleUser == null) {
+            // User cancelled the sign-in
+            return null;
+          }
+          final GoogleSignInAuthentication googleAuth =
+              await googleUser.authentication;
+
+          // 2. Extract the accessToken (THIS IS THE CRITICAL STEP)
+          final String? accessToken = googleAuth.accessToken;
+
+          if (accessToken == null) {
+            throw Exception(
+              'Google Sign-In failed to provide an access token.',
+            );
+          }
+
+          // 3. Create the Firebase credential
+          final AuthCredential credential = GoogleAuthProvider.credential(
+            accessToken: accessToken,
+            idToken: googleAuth.idToken,
+          );
+
+          // 4. Sign in to Firebase
+          final UserCredential userCredential = await _firebaseAuth
+              .signInWithCredential(credential);
+          final User user = userCredential.user!;
+
+          await _createUserDocument(user);
+
+          // 5. Return the result with the user AND the accessToken
+          return SignInResult(user: user, accessToken: accessToken);
+        } catch (e) {
+          // Handle errors
+          print('Error during Google sign-in: $e');
+          return null;
         }
-        final GoogleSignInAuthentication googleAuth =
-            await googleUser.authentication;
-
-        // Store the access token before creating the credential
-        accessToken = googleAuth.accessToken;
-
-        final AuthCredential credential = GoogleAuthProvider.credential(
-          accessToken: googleAuth.accessToken,
-          idToken: googleAuth.idToken,
+      } else {
+        // Mobile implementation would still use the GoogleSignIn flow if needed
+        // For now, throw an exception as this app is web-first
+        throw Exception(
+          'Mobile sign-in not implemented in this web-first version',
         );
-        userCredential = await _firebaseAuth.signInWithCredential(credential);
       }
-
-      final user = userCredential.user;
-      if (user == null || accessToken == null) {
-        throw Exception('Sign-in failed: User or access token is null');
-      }
-
-      await _createUserDocument(user);
-
-      return SignInResult(user: user, accessToken: accessToken);
     } catch (e) {
-      // It's better to let the BLoC handle the error state.
+      // Let the BLoC handle the error state
       rethrow;
     }
   }
@@ -89,16 +96,13 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<String?> getAccessToken() async {
-    // This method can be used to get a fresh access token
-    if (!kIsWeb) {
-      final GoogleSignInAccount? googleUser = _googleSignIn.currentUser;
-      if (googleUser != null) {
-        final GoogleSignInAuthentication googleAuth =
-            await googleUser.authentication;
-        return googleAuth.accessToken;
-      }
+    // Get a fresh access token from the current Google Sign-In session
+    final GoogleSignInAccount? googleUser = _googleSignIn.currentUser;
+    if (googleUser != null) {
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
+      return googleAuth.accessToken;
     }
-    // For web, we might need to implement token refresh logic
     return null;
   }
 }
