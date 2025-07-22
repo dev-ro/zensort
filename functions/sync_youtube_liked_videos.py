@@ -19,16 +19,6 @@ class Video:
     privacyStatus: str
 
 
-def get_total_liked_videos_count(access_token: str) -> int:
-    """Gets the total number of liked videos from the YouTube API."""
-    headers = {"Authorization": f"Bearer {access_token}"}
-    url = "https://www.googleapis.com/youtube/v3/videos"
-    params = {"myRating": "like", "part": "id", "maxResults": 1}
-    response = requests.get(url, headers=headers, params=params)
-    response.raise_for_status()
-    return response.json().get("pageInfo", {}).get("totalResults", 0)
-
-
 def fetch_liked_videos_page(
     access_token: str, page_token: Optional[str] = None
 ) -> Tuple[list[Video], Optional[str]]:
@@ -96,10 +86,7 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
                 message='The function must be called with a valid "accessToken" in the request data.',
             )
 
-        total_videos = get_total_liked_videos_count(access_token)
-        sync_job_ref.set(
-            {"totalCount": total_videos, "syncedCount": 0, "status": "in_progress"}
-        )
+        sync_job_ref.set({"status": "in_progress", "syncedCount": 0})
 
         synced_count = 0
         next_page_token = None
