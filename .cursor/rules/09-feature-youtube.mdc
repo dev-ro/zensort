@@ -1,0 +1,43 @@
+---
+description: Enforces architectural patterns for the YouTube integration feature, including data caching, API service implementation, and repository structure.
+globs:
+  - "lib/features/youtube*/**/*.dart"
+  - "lib/features/auth*/**/*.dart"
+alwaysApply: false
+---
+# YouTube & Auth Feature Architecture
+
+This rule governs the implementation of user authentication and YouTube data handling. It builds upon the foundational principles in `00-core-standards.mdc` and the clean architecture defined in `01-architecture.mdc`.
+
+## 1. Clean Architecture Adherence
+
+[cite_start]This feature **MUST** strictly follow the project's Feature-First architecture[cite: 3]. [cite_start]All code must be placed in the appropriate layer within `lib/features/youtube/` or `lib/features/auth/`[cite: 4].
+
+- **Presentation Layer (`/presentation`):**
+  - [cite_start]Contains all UI widgets and state management [BLoC/Riverpod](cite: 4).
+  - [cite_start]**MUST NOT** interact directly with Firebase or the YouTube API[cite: 13]. [cite_start]All data operations must be requested through repository interfaces from the Domain layer[cite: 13].
+
+- **Domain Layer (`/domain`):**
+  - [cite_start]Contains pure Dart business objects (Entities) and abstract Repository interfaces (e.g., `abstract class YouTubeRepository`)[cite: 6].
+  - [cite_start]This layer **MUST NOT** have any dependencies on Flutter or Firebase[cite: 5].
+
+- **Data Layer (`/data`):**
+  - [cite_start]Contains the implementations of the Domain layer's repository interfaces (e.g., `class YouTubeRepositoryImpl implements YouTubeRepository`)[cite: 7].
+  - [cite_start]This layer is responsible for all interactions with the YouTube Data API and the Firestore cache[cite: 7].
+
+## 2. YouTube Data API & Caching Strategy
+
+[cite_start]To manage API quotas and minimize cloud costs[cite: 32], a robust caching strategy is mandatory.
+
+- **API Service:** Create a dedicated `YouTubeApiService` in the `data` layer. This service is responsible for all `googleapis` HTTP calls.
+- [cite_start]**Firestore Cache:** User's liked videos **MUST** be cached in a subcollection within Firestore to minimize reads [cite: 33] and avoid costly, repeated API calls. [cite_start]The data model should be denormalized to prevent expensive client-side joins[cite: 34].
+- **Repository Logic:** The `YouTubeRepositoryImpl` must implement the following logic:
+    1. First, attempt to fetch data from the Firestore cache.
+    2. If the cache is stale or empty, then (and only then) make a call to the `YouTubeApiService`.
+    3. [cite_start]After fetching fresh data from the API, update the Firestore cache to prevent redundant writes on the next request[cite: 35].
+
+## 3. Authentication (`signInWithGoogle`)
+
+- The authentication flow must be handled within its own `auth` feature.
+- The `AuthService` or `AuthRepository` is responsible for handling the `signInWithGoogle` flow and providing a `Stream<User?>` of the authentication state.
+- Sensitive information like API keys or secrets **MUST NOT** be hardcoded. [cite_start]Use the project's established method for secrets management[cite: 38].
