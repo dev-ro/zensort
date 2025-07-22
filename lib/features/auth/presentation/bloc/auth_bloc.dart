@@ -27,19 +27,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     Emitter<AuthState> emit,
   ) async {
     if (event.user != null) {
-      final googleUser = await GoogleSignIn().signInSilently();
-      final googleAuth = await googleUser?.authentication;
-      final accessToken = googleAuth?.accessToken;
-
-      if (accessToken != null) {
-        emit(Authenticated(event.user!, accessToken));
-      } else {
-        emit(
-          const Unauthenticated(
-            error: 'Could not retrieve access token. Please sign in again.',
-          ),
-        );
-      }
+      emit(Authenticated(event.user!, ''));
     } else {
       emit(const Unauthenticated());
     }
@@ -51,17 +39,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     emit(AuthLoading());
     try {
-      final userCredential = await _authRepository.signInWithGoogle();
-      if (userCredential?.user != null) {
-        final accessToken =
-            (userCredential?.credential as OAuthCredential?)?.accessToken;
-        if (accessToken != null) {
-          emit(Authenticated(userCredential!.user!, accessToken));
-        } else {
-          emit(
-            const Unauthenticated(error: 'Could not retrieve access token.'),
-          );
-        }
+      final accessToken = await _authRepository.signInWithGoogle();
+      final user = await _authRepository.authStateChanges.first;
+
+      if (accessToken != null && user != null) {
+        emit(Authenticated(user, accessToken));
       } else {
         // This can happen if the user closes the sign-in popup.
         emit(const Unauthenticated());

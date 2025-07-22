@@ -8,7 +8,6 @@ import 'package:zensort/features/auth/domain/repositories/auth_repository.dart';
 import 'package:zensort/features/auth/presentation/auth_gate.dart';
 import 'package:zensort/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:zensort/features/youtube/data/repositories/youtube_repository_impl.dart';
-import 'package:zensort/features/youtube/data/services/youtube_api_service.dart';
 import 'package:zensort/features/youtube/domain/repositories/youtube_repository.dart';
 import 'package:zensort/features/youtube/presentation/bloc/youtube_bloc.dart';
 import 'package:zensort/firebase_options_dev.dart' as dev;
@@ -63,12 +62,8 @@ class ZenSortApp extends StatelessWidget {
             FirebaseFirestore.instance,
           ),
         ),
-        RepositoryProvider<YouTubeRepository>(
-          create: (context) => YouTubeRepositoryImpl(
-            YouTubeApiService(
-              FirebaseFunctions.instance,
-              FirebaseAuth.instance,
-            ),
+        RepositoryProvider<YoutubeRepository>(
+          create: (context) => YoutubeRepositoryImpl(
             FirebaseFirestore.instance,
             FirebaseAuth.instance,
           ),
@@ -80,7 +75,7 @@ class ZenSortApp extends StatelessWidget {
             create: (context) => AuthBloc(context.read<AuthRepository>()),
           ),
           BlocProvider<YouTubeBloc>(
-            create: (context) => YouTubeBloc(context.read<YouTubeRepository>()),
+            create: (context) => YouTubeBloc(context.read<YoutubeRepository>()),
           ),
         ],
         child: MaterialApp.router(

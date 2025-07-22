@@ -1,33 +1,41 @@
 part of 'youtube_bloc.dart';
 
-abstract class YouTubeState extends Equatable {
-  const YouTubeState();
+abstract class YoutubeState extends Equatable {
+  const YoutubeState();
 
   @override
   List<Object> get props => [];
 }
 
-class YouTubeInitial extends YouTubeState {}
+class YoutubeInitial extends YoutubeState {}
 
-class YouTubeLoading extends YouTubeState {}
+class YoutubeLoading extends YoutubeState {}
 
-class YouTubeSyncInProgress extends YouTubeState {}
+class YoutubeSyncProgress extends YoutubeState {
+  final int syncedCount;
+  final int totalCount;
 
-class YouTubeSyncSuccess extends YouTubeState {}
+  const YoutubeSyncProgress(this.syncedCount, this.totalCount);
 
-class YouTubeSuccess extends YouTubeState {
+  @override
+  List<Object> get props => [syncedCount, totalCount];
+}
+
+class YoutubeSyncSuccess extends YoutubeState {}
+
+class YoutubeLoaded extends YoutubeState {
   final List<LikedVideo> videos;
 
-  const YouTubeSuccess(this.videos);
+  const YoutubeLoaded(this.videos);
 
   @override
   List<Object> get props => [videos];
 }
 
-class YouTubeFailure extends YouTubeState {
+class YoutubeFailure extends YoutubeState {
   final String error;
 
-  const YouTubeFailure(this.error);
+  const YoutubeFailure(this.error);
 
   @override
   List<Object> get props => [error];

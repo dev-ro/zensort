@@ -1,11 +1,10 @@
 import os
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-from typing import Generator
+from typing import Generator, Optional, Tuple
 from firebase_admin import firestore
 from firebase_functions import https_fn
 import requests
-from googleapiclient.discovery import build
 import json
 
 
@@ -17,36 +16,48 @@ class Video:
     thumbnailUrl: str
     channelTitle: str
     syncedAt: datetime
+    privacyStatus: str
 
 
-def fetch_liked_videos(access_token: str) -> Generator[Video, None, None]:
-    """
-    Fetch all liked videos for a user from the YouTube Data API, handling pagination.
-    Yields Video objects.
-    """
-    youtube = build(
-        "youtube", "v3", developerKey=None, credentials=None, requestBuilder=None
-    )
+def get_total_liked_videos_count(access_token: str) -> int:
+    """Gets the total number of liked videos from the YouTube API."""
     headers = {"Authorization": f"Bearer {access_token}"}
-    base_url = "https://www.googleapis.com/youtube/v3/videos"
+    url = "https://www.googleapis.com/youtube/v3/videos"
+    params = {"myRating": "like", "part": "id", "maxResults": 1}
+    response = requests.get(url, headers=headers, params=params)
+    response.raise_for_status()
+    return response.json().get("pageInfo", {}).get("totalResults", 0)
+
+
+def fetch_liked_videos_page(
+    access_token: str, page_token: Optional[str] = None
+) -> Tuple[list[Video], Optional[str]]:
+    """Fetches a single page of liked videos."""
+    headers = {"Authorization": f"Bearer {access_token}"}
+    base_url = "https://www.googleapis.com/youtube/v3/playlistItems"
     params = {
-        "myRating": "like",
-        "part": "id,snippet",
+        "part": "snippet,status",
         "maxResults": 50,
+        "playlistId": "LL",
     }
-    next_page_token = None
-    while True:
-        if next_page_token:
-            params["pageToken"] = next_page_token
-        else:
-            params.pop("pageToken", None)
-        response = requests.get(base_url, headers=headers, params=params)
-        response.raise_for_status()
-        data = response.json()
-        for item in data.get("items", []):
-            snippet = item.get("snippet", {})
-            yield Video(
-                videoId=item["id"],
+    if page_token:
+        params["pageToken"] = page_token
+
+    response = requests.get(base_url, headers=headers, params=params)
+    response.raise_for_status()
+    data = response.json()
+    videos = []
+    for item in data.get("items", []):
+        snippet = item.get("snippet", {})
+        status = item.get("status", {})
+        # The video ID for a playlistItem is in a different location
+        video_id = snippet.get("resourceId", {}).get("videoId")
+        if not video_id:
+            continue
+
+        videos.append(
+            Video(
+                videoId=video_id,
                 title=snippet.get("title", ""),
                 description=snippet.get("description", ""),
                 thumbnailUrl=snippet.get("thumbnails", {})
@@ -54,78 +65,95 @@ def fetch_liked_videos(access_token: str) -> Generator[Video, None, None]:
                 .get("url", ""),
                 channelTitle=snippet.get("channelTitle", ""),
                 syncedAt=datetime.now(timezone.utc),
+                privacyStatus=status.get("privacyStatus", "unknown"),
             )
-        next_page_token = data.get("nextPageToken")
-        if not next_page_token:
-            break
-
-
-def save_video_to_firestore(video: Video, user_id: str):
-    """
-    Save a Video object to Firestore in a user-specific 'videos' subcollection,
-    using videoId as the document ID.
-    """
-    db = firestore.client()
-    doc_ref = (
-        db.collection("users")
-        .document(user_id)
-        .collection("videos")
-        .document(video.videoId)
-    )
-    doc_ref.set(asdict(video))
+        )
+    return videos, data.get("nextPageToken")
 
 
 @https_fn.on_call(max_instances=10)
 def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
-    """
-    A callable function to sync a user's liked YouTube videos to their profile.
-    """
-    # 1. Check for authenticated user
     if req.auth is None:
         raise https_fn.HttpsError(
-            code=https_fn.FunctionsErrorCode.UNAUTHENTICATED,
-            message="The function must be called by an authenticated user.",
+            https_fn.FunctionsErrorCode.UNAUTHENTICATED,
+            "The function must be called by an authenticated user.",
         )
     user_id = req.auth.uid
 
-    # 2. Get access token from request data
-    access_token = req.data.get("accessToken")
-    if not isinstance(access_token, str):
-        raise https_fn.HttpsError(
-            code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-            message="The function must be called with a valid 'accessToken'.",
-        )
+    db = firestore.client()
+    sync_job_ref = (
+        db.collection("users")
+        .document(user_id)
+        .collection("syncJobs")
+        .document("youtube_liked_videos")
+    )
 
     try:
-        # 3. Fetch liked videos and save them to Firestore
-        count = 0
-        for video in fetch_liked_videos(access_token):
-            save_video_to_firestore(video, user_id)
-            count += 1
+        access_token = req.data.get("accessToken")
+        if not access_token or not isinstance(access_token, str):
+            raise https_fn.HttpsError(
+                code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+                message='The function must be called with a valid "accessToken" in the request data.',
+            )
 
-        # 4. Return success response
-        return {"synced": count}
-
-    except requests.exceptions.HTTPError as e:
-        # Log the detailed error from the YouTube API
-        error_content = json.loads(e.response.content.decode("utf-8"))
-        status_code = e.response.status_code
-        error_details = error_content.get("error", {})
-        error_reason = error_details.get("errors", [{}])[0].get("reason")
-
-        print(
-            f"YouTube API Error - Status: {status_code}, Reason: {error_reason}, Details: {json.dumps(error_details)}"
+        total_videos = get_total_liked_videos_count(access_token)
+        sync_job_ref.set(
+            {"totalCount": total_videos, "syncedCount": 0, "status": "in_progress"}
         )
 
-        # Improve the error message returned to the client
+        synced_count = 0
+        next_page_token = None
+        while True:
+            videos, next_page_token = fetch_liked_videos_page(
+                access_token, next_page_token
+            )
+            for video in videos:
+                video_data = asdict(video)
+                public_video_ref = db.collection("videos").document(video.videoId)
+                user_video_ref = (
+                    db.collection("users")
+                    .document(user_id)
+                    .collection("userVideos")
+                    .document(video.videoId)
+                )
+                link_ref = (
+                    db.collection("users")
+                    .document(user_id)
+                    .collection("likedVideoLinks")
+                    .document(video.videoId)
+                )
+
+                if video.privacyStatus == "public":
+                    doc = public_video_ref.get()
+                    if not doc.exists:
+                        public_video_ref.set(video_data)
+                else:
+                    user_video_ref.set(video_data)
+
+                link_ref.set(
+                    {"videoId": video.videoId, "linkedAt": datetime.now(timezone.utc)}
+                )
+                synced_count += 1
+
+            sync_job_ref.update({"syncedCount": synced_count})
+            if not next_page_token:
+                break
+
+        sync_job_ref.update({"status": "completed"})
+        return {"synced": synced_count}
+
+    except requests.exceptions.HTTPError as e:
+        error_content = json.loads(e.response.content.decode("utf-8"))
+        error_details = error_content.get("error", {})
+        sync_job_ref.set({"status": "failed", "error": error_details})
         raise https_fn.HttpsError(
             code=https_fn.FunctionsErrorCode.INTERNAL,
-            message=f"YouTube API Error {status_code}: {error_reason}",
+            message=f"YouTube API Error: {e.response.reason}",
             details=error_details,
         )
     except Exception as e:
-        print(f"Error syncing liked videos: {e}")
+        sync_job_ref.set({"status": "failed", "error": str(e)})
         raise https_fn.HttpsError(
             code=https_fn.FunctionsErrorCode.INTERNAL,
-            message="An unexpected error occurred while syncing videos.",
+            message="An unexpected error occurred.",
         )

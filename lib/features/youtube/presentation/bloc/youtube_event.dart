@@ -1,19 +1,30 @@
 part of 'youtube_bloc.dart';
 
-abstract class YouTubeEvent extends Equatable {
-  const YouTubeEvent();
+abstract class YoutubeEvent extends Equatable {
+  const YoutubeEvent();
 
   @override
   List<Object> get props => [];
 }
 
-class GetMyLikedVideos extends YouTubeEvent {}
+class LoadLikedVideos extends YoutubeEvent {}
 
-class SyncMyLikedVideos extends YouTubeEvent {
-  final String accessToken;
+class SyncLikedVideos extends YoutubeEvent {}
 
-  const SyncMyLikedVideos(this.accessToken);
+class _YoutubeSyncProgressUpdated extends YoutubeEvent {
+  final SyncProgress progress;
+
+  const _YoutubeSyncProgressUpdated(this.progress);
 
   @override
-  List<Object> get props => [accessToken];
+  List<Object> get props => [progress];
+}
+
+class _LikedVideosUpdated extends YoutubeEvent {
+  final List<LikedVideo> videos;
+
+  const _LikedVideosUpdated(this.videos);
+
+  @override
+  List<Object> get props => [videos];
 }

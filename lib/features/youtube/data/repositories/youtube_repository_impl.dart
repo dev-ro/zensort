@@ -1,40 +1,63 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:zensort/features/youtube/data/services/youtube_api_service.dart';
 import 'package:zensort/features/youtube/domain/entities/liked_video.dart';
+import 'package:zensort/features/youtube/domain/entities/sync_progress.dart';
 import 'package:zensort/features/youtube/domain/repositories/youtube_repository.dart';
 
-class YouTubeRepositoryImpl implements YouTubeRepository {
-  final YouTubeApiService _apiService;
+class YoutubeRepositoryImpl implements YoutubeRepository {
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
 
-  YouTubeRepositoryImpl(this._apiService, this._firestore, this._auth);
+  YoutubeRepositoryImpl(this._firestore, this._auth);
 
   @override
-  Future<void> syncMyLikedVideos(String accessToken) async {
-    await _apiService.syncLikedVideos(accessToken);
+  Future<void> syncLikedVideos() async {
+    // This will be triggered by a cloud function,
+    // so the client doesn't need to do anything here.
+    return;
   }
 
   @override
-  Future<List<LikedVideo>> getMyLikedVideos() async {
+  Stream<List<LikedVideo>> getLikedVideosStream() {
     final user = _auth.currentUser;
     if (user == null) {
       throw Exception('User not authenticated');
     }
 
-    final likedVideosSnapshot = await _firestore
+    return _firestore
         .collection('users')
         .doc(user.uid)
         .collection('likedVideoLinks')
-        .get();
+        .snapshots()
+        .asyncMap((snapshot) async {
+          final List<Future<LikedVideo>> futureLikedVideos = [];
+          for (var doc in snapshot.docs) {
+            final videoId = doc.id;
+            futureLikedVideos.add(_getVideoFromId(videoId));
+          }
+          return await Future.wait(futureLikedVideos);
+        });
+  }
 
-    final List<Future<LikedVideo>> futureLikedVideos = [];
-    for (var doc in likedVideosSnapshot.docs) {
-      final videoId = doc.id;
-      futureLikedVideos.add(_getVideoFromId(videoId));
+  @override
+  Stream<SyncProgress> getSyncProgressStream() {
+    final user = _auth.currentUser;
+    if (user == null) {
+      return Stream.value(const SyncProgress(status: SyncStatus.failed));
     }
-    return await Future.wait(futureLikedVideos);
+    return _firestore
+        .collection('users')
+        .doc(user.uid)
+        .collection('syncJobs')
+        .doc('youtube_liked_videos')
+        .snapshots()
+        .map((snapshot) {
+          if (snapshot.exists && snapshot.data() != null) {
+            return SyncProgress.fromMap(snapshot.data()!);
+          } else {
+            return const SyncProgress(status: SyncStatus.none);
+          }
+        });
   }
 
   Future<LikedVideo> _getVideoFromId(String videoId) async {

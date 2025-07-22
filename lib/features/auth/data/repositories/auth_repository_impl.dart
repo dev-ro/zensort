@@ -14,14 +14,21 @@ class AuthRepositoryImpl implements AuthRepository {
   Stream<User?> get authStateChanges => _firebaseAuth.authStateChanges();
 
   @override
-  Future<UserCredential?> signInWithGoogle() async {
+  Future<String?> signInWithGoogle() async {
     try {
       UserCredential? userCredential;
       if (kIsWeb) {
         final GoogleAuthProvider googleProvider = GoogleAuthProvider();
+        googleProvider.addScope(
+          'https://www.googleapis.com/auth/youtube.readonly',
+        );
         userCredential = await _firebaseAuth.signInWithPopup(googleProvider);
       } else {
-        final GoogleSignIn googleSignIn = GoogleSignIn();
+        // IMPORTANT: If you change the scopes, users must sign out and sign back in
+        // to grant the new permissions.
+        final GoogleSignIn googleSignIn = GoogleSignIn(
+          scopes: ['https://www.googleapis.com/auth/youtube.readonly'],
+        );
         final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
         if (googleUser == null) {
           return null; // User cancelled the sign-in
@@ -35,7 +42,7 @@ class AuthRepositoryImpl implements AuthRepository {
         userCredential = await _firebaseAuth.signInWithCredential(credential);
       }
       await _createUserDocument(userCredential.user);
-      return userCredential;
+      return userCredential.credential?.accessToken;
     } catch (e) {
       // It's better to let the BLoC handle the error state.
       rethrow;
