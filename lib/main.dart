@@ -5,17 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:zensort/features/auth/data/repositories/auth_repository_impl.dart';
 import 'package:zensort/features/auth/domain/repositories/auth_repository.dart';
-import 'package:zensort/features/auth/presentation/auth_gate.dart';
 import 'package:zensort/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:zensort/features/youtube/data/repositories/youtube_repository_impl.dart';
 import 'package:zensort/features/youtube/domain/repositories/youtube_repository.dart';
 import 'package:zensort/features/youtube/presentation/bloc/youtube_bloc.dart';
 import 'package:zensort/firebase_options_dev.dart' as dev;
 import 'package:zensort/firebase_options.dart' as prod;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:zensort/router.dart';
 import 'package:zensort/theme.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 
 // const bool useEmulator = true; // Disabled as per user request
 

@@ -4,7 +4,6 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:zensort/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:zensort/widgets/gradient_loader.dart';
 import 'package:zensort/widgets/logo_heading.dart';
-import 'package:zensort/theme.dart';
 
 class SignInScreen extends StatelessWidget {
   const SignInScreen({super.key});
