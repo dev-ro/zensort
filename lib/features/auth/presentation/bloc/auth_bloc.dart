@@ -10,6 +10,7 @@ part 'auth_state.dart';
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final AuthRepository _authRepository;
   StreamSubscription<User?>? _authStateSubscription;
+  String? _pendingAccessToken;
 
   AuthBloc(this._authRepository) : super(AuthInitial()) {
     on<AuthStateChanged>(_onAuthStateChanged);
@@ -26,7 +27,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     Emitter<AuthState> emit,
   ) async {
     if (event.user != null) {
-      emit(Authenticated(event.user!, ''));
+      // If we have a pending access token from sign-in, use it
+      final accessToken = _pendingAccessToken ?? '';
+      _pendingAccessToken = null; // Clear the pending token
+      emit(Authenticated(event.user!, accessToken));
     } else {
       emit(const Unauthenticated());
     }
@@ -39,12 +43,14 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     emit(AuthLoading());
     try {
       final accessToken = await _authRepository.signInWithGoogle();
-      final user = await _authRepository.authStateChanges.first;
 
-      if (accessToken != null && user != null) {
-        emit(Authenticated(user, accessToken));
+      if (accessToken != null) {
+        // Store the access token for the auth state change handler
+        _pendingAccessToken = accessToken;
+        // Wait for the auth state to change instead of emitting here
+        // The auth state listener will trigger _onAuthStateChanged
       } else {
-        // This can happen if the user closes the sign-in popup.
+        // User cancelled the sign-in
         emit(const Unauthenticated());
       }
     } catch (e) {
