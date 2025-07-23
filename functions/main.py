@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Generator
 from firebase_admin import firestore, initialize_app
-from firebase_functions import https_fn
+from firebase_functions import https_fn, firestore_fn
 from firebase_functions.options import set_global_options
 import requests
 from googleapiclient.discovery import build
@@ -15,6 +15,9 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.errors import HttpError
 import logging
 import json
+from google.cloud import aiplatform
+from google.cloud.aiplatform.gapic.schema import predict
+import time
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -748,3 +751,212 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
             code=https_fn.FunctionsErrorCode.INTERNAL,
             message="An unexpected error occurred while syncing videos.",
         )
+
+
+@firestore_fn.on_document_written(document="videos/{videoId}")
+def process_video_embedding(event: firestore_fn.Event[firestore_fn.DocumentSnapshot]) -> None:
+    """
+    Event-driven function to generate embeddings for videos when they are created or updated.
+    Triggered by onWrite on /videos/{videoId} documents.
+    """
+    try:
+        logger.info(f"Processing embedding for video: {event.params['videoId']}")
+        
+        # Get the video document data
+        video_data = event.data.to_dict() if event.data else None
+        if not video_data:
+            logger.warning(f"No data found for video {event.params['videoId']}")
+            return
+        
+        # Idempotency check: Skip if embedding is already complete or if this is not a new video
+        embedding_status = video_data.get('embedding_status')
+        if embedding_status == 'complete':
+            logger.info(f"Video {event.params['videoId']} already has completed embedding, skipping")
+            return
+        
+        # Only process if status is pending (set by backfill) or if this is a new video creation
+        if embedding_status != 'pending' and not _is_new_video_creation(event):
+            logger.info(f"Video {event.params['videoId']} is not pending embedding processing, skipping")
+            return
+        
+        # Extract text fields for embedding
+        title = video_data.get('title', '').strip()
+        description = video_data.get('description', '').strip()
+        channel_title = video_data.get('channelTitle', '').strip()
+        
+        if not title and not description and not channel_title:
+            logger.warning(f"No text content found for video {event.params['videoId']}")
+            _update_embedding_status(event.params['videoId'], 'failed', error='No text content')
+            return
+        
+        # Combine text fields for embedding
+        combined_text = _prepare_embedding_text(title, description, channel_title)
+        logger.info(f"Prepared text for embedding (length: {len(combined_text)})")
+        
+        # Update status to processing
+        _update_embedding_status(event.params['videoId'], 'processing')
+        
+        # Generate embedding using Vertex AI
+        embedding_vector = _generate_embedding(combined_text)
+        
+        # Update document with embedding and mark as complete
+        db = firestore.client()
+        video_ref = db.collection('videos').document(event.params['videoId'])
+        video_ref.update({
+            'embedding': embedding_vector,
+            'embedding_status': 'complete',
+            'embedding_generated_at': datetime.now(timezone.utc)
+        })
+        
+        logger.info(f"Successfully generated embedding for video {event.params['videoId']}")
+        
+    except Exception as e:
+        logger.error(f"Error processing embedding for video {event.params['videoId']}: {str(e)}")
+        _update_embedding_status(event.params['videoId'], 'failed', error=str(e))
+
+
+@https_fn.on_request()
+def initiate_embedding_backfill(req: https_fn.Request) -> https_fn.Response:
+    """
+    HTTPS-triggered function to initiate embedding backfill for all videos without embeddings.
+    Secured endpoint that updates videos to trigger the embedding processor.
+    """
+    try:
+        # Simple security check - require a secret parameter
+        # In production, this should use proper authentication
+        secret = req.args.get('secret')
+        if secret != 'zensort-embedding-backfill-2024':
+            return https_fn.Response("Unauthorized", status=401)
+        
+        logger.info("Starting embedding backfill process")
+        
+        db = firestore.client()
+        videos_collection = db.collection('videos')
+        
+        # Query for videos without embedding_status field (meaning they need processing)
+        videos_query = videos_collection.where('embedding_status', '==', None)
+        videos_without_embedding = videos_query.stream()
+        
+        processed_count = 0
+        failed_count = 0
+        
+        # Process videos in batches to avoid overwhelming the system
+        batch = db.batch()
+        batch_size = 0
+        max_batch_size = 500  # Firestore batch limit
+        
+        for video_doc in videos_without_embedding:
+            try:
+                # Set embedding_status to 'pending' to trigger the onWrite function
+                batch.update(video_doc.reference, {
+                    'embedding_status': 'pending',
+                    'backfill_initiated_at': datetime.now(timezone.utc)
+                })
+                batch_size += 1
+                processed_count += 1
+                
+                # Commit batch when it reaches the limit
+                if batch_size >= max_batch_size:
+                    batch.commit()
+                    batch = db.batch()
+                    batch_size = 0
+                    logger.info(f"Committed batch, processed {processed_count} videos so far")
+                    
+                    # Add a small delay to prevent overwhelming the system
+                    time.sleep(1)
+                    
+            except Exception as e:
+                logger.error(f"Failed to update video {video_doc.id}: {str(e)}")
+                failed_count += 1
+        
+        # Commit any remaining updates in the batch
+        if batch_size > 0:
+            batch.commit()
+        
+        result_message = f"Embedding backfill initiated for {processed_count} videos"
+        if failed_count > 0:
+            result_message += f" ({failed_count} failed to update)"
+        
+        logger.info(result_message)
+        
+        return https_fn.Response(
+            json.dumps({
+                'success': True,
+                'message': result_message,
+                'processed_count': processed_count,
+                'failed_count': failed_count
+            }),
+            status=200,
+            headers={'Content-Type': 'application/json'}
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in embedding backfill: {str(e)}")
+        return https_fn.Response(
+            json.dumps({
+                'success': False,
+                'error': str(e)
+            }),
+            status=500,
+            headers={'Content-Type': 'application/json'}
+        )
+
+
+def _is_new_video_creation(event: firestore_fn.Event[firestore_fn.DocumentSnapshot]) -> bool:
+    """Check if this is a new video creation by examining the before/after snapshots."""
+    # If there's no before data, this is a new document creation
+    return event.data_before is None or not event.data_before.exists
+
+
+def _prepare_embedding_text(title: str, description: str, channel_title: str) -> str:
+    """Combine video fields into embedding-optimized text."""
+    # Truncate description to prevent extremely long inputs
+    description = description[:500] if description else ""
+    
+    # Create structured text for better embedding quality
+    parts = []
+    if title:
+        parts.append(f"Title: {title}")
+    if channel_title:
+        parts.append(f"Channel: {channel_title}")
+    if description:
+        parts.append(f"Description: {description}")
+    
+    return " | ".join(parts)
+
+
+def _generate_embedding(text: str) -> list:
+    """Generate embedding vector using Vertex AI Text Embeddings API."""
+    # Initialize Vertex AI (assuming default project and region)
+    aiplatform.init(project="zensort-dev", location="us-central1")
+    
+    # Use the text-embedding-gecko model for stable, high-quality embeddings
+    model = aiplatform.TextEmbeddingModel.from_pretrained("textembedding-gecko@001")
+    
+    # Generate embedding
+    embeddings = model.get_embeddings([text])
+    
+    if not embeddings or not embeddings[0].values:
+        raise ValueError("No embedding generated")
+    
+    return embeddings[0].values
+
+
+def _update_embedding_status(video_id: str, status: str, error: str = None) -> None:
+    """Update the embedding status for a video document."""
+    try:
+        db = firestore.client()
+        video_ref = db.collection('videos').document(video_id)
+        
+        update_data = {
+            'embedding_status': status,
+            'embedding_updated_at': datetime.now(timezone.utc)
+        }
+        
+        if error:
+            update_data['embedding_error'] = error
+        
+        video_ref.update(update_data)
+        
+    except Exception as e:
+        logger.error(f"Failed to update embedding status for video {video_id}: {str(e)}")

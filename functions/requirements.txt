@@ -3,6 +3,8 @@ firebase-admin
 google-auth
 google-auth-oauthlib
 google-api-python-client
+google-cloud-aiplatform
+google-cloud-firestore
 requests
 functions-framework
 Flask
