@@ -1,6 +1,6 @@
 # State Management Architecture
 
-To ensure the application is scalable, maintainable, and testable, you MUST follow a structured state management approach.
+To ensure the application is scalable, maintainable, and testable, you MUST follow a structured state management approach based on clean architecture principles.
 
 ## 1. State Management Progression
 
@@ -14,11 +14,7 @@ To ensure the application is scalable, maintainable, and testable, you MUST foll
 - **Immutability:** State objects managed by a provider MUST be immutable.
 - **Handling Firebase Streams:** To manage real-time data from Firebase, you MUST use a `StreamProvider`. This ensures automatic lifecycle management (subscription and disposal) and provides the state as an `AsyncValue` for cleanly handling loading, data, and error states in the UI.
 
-## 3. State Validity Mandates
-
-- **Authenticated State Integrity:** The `Authenticated` state MUST always contain a valid, non-null `accessToken` for API-dependent features to function correctly. If a user is authenticated but the token is not immediately available (e.g., on app startup), the state management logic (BLoC/Notifier) **MUST** immediately trigger a silent refresh or re-authentication flow. An intermediate `Authenticating` or `RefreshingToken` state should be used during this process. An `Authenticated` state with a null `accessToken` is considered an invalid state and is forbidden.
-
-## 4. **Inter-BLoC Communication (MANDATORY ARCHITECTURE RULE)**
+## 3. **Inter-BLoC Communication (MANDATORY ARCHITECTURE RULE)**
 
 **Direct BLoC-to-BLoC communication is STRICTLY FORBIDDEN.** This includes:
 - Injecting one BLoC into another BLoC's constructor
@@ -26,21 +22,52 @@ To ensure the application is scalable, maintainable, and testable, you MUST foll
 - Calling methods or accessing properties of one BLoC from another BLoC
 
 **REQUIRED PATTERN: Reactive Repository as Single Source of Truth**
-- All cross-cutting concerns (especially authentication) MUST be managed through a reactive repository that exposes its state as a `Stream`
+
+All cross-cutting concerns (especially authentication) MUST be managed through a reactive repository that exposes its state as a `Stream`. This is the only architecturally sound solution.
+
+### 3.1 Repository Pattern Implementation
+
 - Use `rxdart`'s `BehaviorSubject` to create streams that cache the latest value and immediately provide it to new subscribers
+- The repository acts as the single source of truth for shared state
 - Feature BLoCs MUST subscribe directly to these repository streams, NOT to other BLoCs
-- This establishes the repository as the single source of truth and maintains complete decoupling between BLoCs
+- This establishes complete decoupling between BLoCs while maintaining architectural purity
 
 **Example of CORRECT architecture:**
 ```dart
+// ✅ CORRECT: Reactive Repository Pattern
+class AuthenticationRepository {
+  final _controller = BehaviorSubject<AuthenticationStatus>.seeded(
+    AuthenticationStatus.unknown,
+  );
+  
+  Stream<AuthenticationStatus> get status => _controller.stream;
+  
+  Future<void> logIn({required String email, required String password}) async {
+    // Perform login logic
+    _controller.add(AuthenticationStatus.authenticated);
+  }
+}
+
 // ✅ CORRECT: YouTubeBloc depends on AuthRepository, not AuthBloc
 class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
-  final AuthRepository _authRepository;
+  final AuthenticationRepository _authRepository;
+  late final StreamSubscription<AuthenticationStatus> _authSubscription;
   
-  YouTubeBloc(this._authRepository) {
-    _authRepository.currentUser.listen((user) {
-      // React to auth changes
+  YouTubeBloc({required AuthenticationRepository authRepository})
+      : _authRepository = authRepository,
+        super(YoutubeInitial()) {
+    
+    _authSubscription = _authRepository.status.listen((status) {
+      add(_AuthStatusChanged(status));
     });
+    
+    on<_AuthStatusChanged>(_onAuthStatusChanged, transformer: restartable());
+  }
+  
+  @override
+  Future<void> close() {
+    _authSubscription.cancel();
+    return super.close();
   }
 }
 ```
@@ -59,10 +86,174 @@ class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
 }
 ```
 
-## 5. Data Loading and State Coordination
+### 3.2 Avoiding UI-Layer Orchestration
 
-- **Triggering Initial Data Loads:** For a feature's BLoC that depends on an authenticated user (e.g., `YouTubeBloc`), the initial data load **MUST NOT** be triggered by the UI's `initState` or `build` methods. This creates tight coupling with the widget lifecycle and can cause infinite loops.
-- **Correct Pattern:** The feature BLoC (`YouTubeBloc`) **MUST** listen to the repository's reactive stream (`AuthRepository.currentUser`). When a non-null user is emitted, the BLoC should dispatch its own initial data loading event.
-- **Race Condition Prevention:** Use `bloc_concurrency` transformers (especially `restartable()`) on event handlers that perform data fetching to prevent race conditions when authentication state changes rapidly.
+**BlocListener Anti-Pattern:** While BlocListener appears to provide loose coupling, it violates Separation of Concerns by placing business logic orchestration in the presentation layer. This pattern:
+- Fragments business flow across the widget tree
+- Reduces readability and testability
+- Creates scalability issues as more BLoCs need coordination
+- Should only be used for UI-specific side effects like navigation or showing dialogs
+
+## 4. Race Condition Prevention with bloc_concurrency
+
+Asynchronous operations can create race conditions that corrupt application state. You MUST use the `bloc_concurrency` package to manage event handler lifecycles.
+
+### 4.1 Event Transformers
+
+- **`concurrent()`:** Default behavior. All events processed in parallel (can cause race conditions)
+- **`sequential()`:** Processes events one by one in order
+- **`droppable()`:** Ignores new events if one is already being processed (prevents duplicate submissions)
+- **`restartable()`:** Cancels in-flight operations when new events arrive (CRITICAL for data fetching)
+
+### 4.2 Authentication-Driven Race Condition Prevention
+
+For features that depend on authentication state, you MUST use the `restartable()` transformer to prevent stale data from being emitted after logout:
+
+```dart
+class ProductsBloc extends Bloc<ProductsEvent, ProductsState> {
+  ProductsBloc({required AuthenticationRepository authRepository}) {
+    authRepository.status.listen((status) => add(_AuthStatusChanged(status)));
+    
+    // MANDATORY: Use restartable() for auth-dependent data fetching
+    on<_AuthStatusChanged>(
+      _onAuthStatusChanged,
+      transformer: restartable(), // Cancels in-flight requests on auth changes
+    );
+  }
+  
+  Future<void> _onAuthStatusChanged(
+    _AuthStatusChanged event,
+    Emitter<ProductsState> emit,
+  ) async {
+    if (event.status == AuthenticationStatus.authenticated) {
+      emit(ProductsLoadInProgress());
+      try {
+        // If user logs out during this await, the handler is cancelled
+        final products = await _productsRepository.fetchProducts();
+        emit(ProductsLoadSuccess(products)); // This won't execute if cancelled
+      } catch (_) {
+        emit(ProductsLoadFailure());
+      }
+    } else {
+      add(ProductsCleared());
+    }
+  }
+}
+```
+
+### 4.3 Boolean Latch Pattern for Initial Load Prevention
+
+For BLoCs that listen to rapid auth state changes, implement a boolean latch to prevent multiple initial loads:
+
+```dart
+class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
+  bool _isInitialLoadDispatched = false;
+  
+  YouTubeBloc({required AuthenticationRepository authRepository}) {
+    authRepository.status.listen((authState) {
+      if (authState == AuthenticationStatus.authenticated && 
+          authState.accessToken != null && 
+          !_isInitialLoadDispatched) {
+        _isInitialLoadDispatched = true;
+        add(LoadInitialData());
+      } else if (authState == AuthenticationStatus.unauthenticated) {
+        _isInitialLoadDispatched = false; // Reset latch
+        add(ClearData());
+      }
+    });
+  }
+}
+```
+
+## 5. Authentication State Integrity
+
+**MANDATORY:** The `Authenticated` state MUST always contain a valid, non-null `accessToken` for API-dependent features to function correctly.
+
+### 5.1 State Validity Rules
+
+- If a user is authenticated but the token is not immediately available (e.g., on app startup), the state management logic MUST immediately trigger a silent refresh or re-authentication flow
+- Use intermediate states like `Authenticating` or `RefreshingToken` during this process
+- An `Authenticated` state with a null `accessToken` is considered an invalid state and is FORBIDDEN
+
+### 5.2 Google Sign-In Web Implementation
+
+For web platforms, Google Sign-In uses a reactive pattern:
+- The app listens to the `GoogleSignIn.onCurrentUserChanged` stream
+- UI displays the Google-rendered button widget  
+- The listener handles the Firebase credential exchange
+- NEVER call `signIn()` directly from button callbacks on web
+
+## 6. Data Loading and State Coordination
+
+### 6.1 Triggering Initial Data Loads
+
+For feature BLoCs that depend on authenticated user state:
+
+- Initial data load MUST NOT be triggered by UI's `initState` or `build` methods
+- Feature BLoCs MUST listen to the repository's reactive stream (e.g., `AuthRepository.currentUser`)
+- When a non-null user is emitted, the BLoC should dispatch its own initial data loading event
+- This creates proper separation between UI lifecycle and business logic lifecycle
+
+### 6.2 Stream Subscription Management
+
+All `StreamSubscription` objects created within a BLoC MUST be:
+- Stored as instance variables
+- Cancelled in the BLoC's `close()` method to prevent memory leaks
+- Never created in event handlers (creates subscription leaks)
+
+**Example:**
+```dart
+class FeatureBloc extends Bloc<FeatureEvent, FeatureState> {
+  late final StreamSubscription<AuthState> _authSubscription;
+  
+  FeatureBloc() {
+    _authSubscription = authRepository.status.listen((status) {
+      add(AuthStatusChanged(status));
+    });
+  }
+  
+  @override
+  Future<void> close() {
+    _authSubscription.cancel(); // MANDATORY
+    return super.close();
+  }
+}
+```
+
+## 7. UI State Consumption Best Practices
+
+### 7.1 Preventing Infinite Loops
+
+Use `listenWhen` and `buildWhen` for granular control over UI reactions:
+
+```dart
+BlocListener<BlocA, StateA>(
+  listenWhen: (previous, current) {
+    // Only listen for specific transitions to prevent loops
+    return previous is LoadingStateA && current is SuccessStateA;
+  },
+  listener: (context, state) {
+    // Perform UI side effect
+  },
+  child: //...
+)
+```
+
+### 7.2 BlocSelector for Performance
+
+Prefer `BlocSelector` over `BlocBuilder` with `buildWhen` for performance optimization:
+
+```dart
+BlocSelector<ProfileBloc, ProfileState, String>(
+  selector: (state) => state is EditingUserInfo ? state.username : '',
+  builder: (context, username) {
+    return TextField(controller: TextEditingController(text: username));
+  },
+)
+```
+
+This pattern is safer and avoids the `buildWhen` trap where parent widget rebuilds can cause unexpected state access.
+
+For complete implementation details and advanced patterns, refer to `docs/BLoC/Flutter Inter-BLoC Communication Best Practices_.txt`.
 
 
