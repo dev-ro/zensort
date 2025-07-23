@@ -1,0 +1,32 @@
+---
+description: Defines the standard, safe workflow for merging a completed feature branch into the main branch.
+globs: []
+alwaysApply: false
+---
+# Git Workflow: Merging a Feature Branch
+
+When instructed to "merge a feature branch", you MUST follow this exact sequence of commands to ensure a safe and clean merge.
+
+## 1. Prepare the `main` Branch
+
+- **Switch to `main`:**
+  `git checkout main`
+- **Pull Latest Changes:** Ensure `main` is up-to-date with the remote repository.
+  `git pull origin main`
+
+## 2. Merge the Feature Branch
+
+- **Merge with a Merge Commit:** Use the `--no-ff` flag to create a merge commit, which preserves the history of the feature as a distinct unit of work. Replace `<branch-name>` with the actual feature branch name.
+  `git merge --no-ff <branch-name>`
+
+## 3. Push the Changes
+
+- **Push `main`:** Push the newly merged `main` branch to the remote.
+  `git push origin main`
+
+## 4. Clean Up
+
+- **Delete Local Branch:** After a successful merge, delete the local copy of the feature branch.
+  `git branch -d <branch-name>`
+- **Delete Remote Branch:** Delete the remote feature branch to keep the repository tidy.
+  `git push origin --delete <branch-name>`
