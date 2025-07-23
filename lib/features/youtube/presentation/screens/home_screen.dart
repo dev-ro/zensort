@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:zensort/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:zensort/features/youtube/presentation/bloc/youtube_bloc.dart';
 import 'package:zensort/features/youtube/presentation/widgets/video_list_item.dart';
 import 'package:zensort/screens/sync_progress_screen.dart';
 import 'package:zensort/theme.dart';
 import 'package:zensort/widgets/gradient_loader.dart';
-import 'package:zensort/features/auth/domain/repositories/auth_repository.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -40,21 +40,17 @@ class HomeScreen extends StatelessWidget {
                     try {
                       print('Sync button pressed.');
 
-                      // Check authentication status directly from repository
-                      final authRepository = context.read<AuthRepository>();
-                      final currentUser =
-                          await authRepository.currentUser.first;
+                      // Check authentication status from central state authority - AuthBloc
+                      final authState = context.read<AuthBloc>().state;
 
-                      if (currentUser != null) {
+                      if (authState is Authenticated) {
                         print(
                           'User is authenticated. Checking for access token...',
                         );
 
-                        final accessToken = await authRepository
-                            .getAccessToken();
-                        if (accessToken != null) {
+                        if (authState.accessToken != null) {
                           print(
-                            'Access token available. First 20 chars: ${accessToken.substring(0, 20)}...',
+                            'Access token available. First 20 chars: ${authState.accessToken!.substring(0, 20)}...',
                           );
                           print(
                             'Dispatching SyncLikedVideos event to YouTubeBloc...',
@@ -75,7 +71,7 @@ class HomeScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () {
-              context.read<AuthRepository>().signOut();
+              context.read<AuthBloc>().add(SignOutRequested());
             },
           ),
         ],

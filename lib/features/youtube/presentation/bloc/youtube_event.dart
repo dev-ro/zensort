@@ -22,11 +22,13 @@ class _YoutubeSyncProgressUpdated extends YoutubeEvent {
   List<Object> get props => [progress];
 }
 
+/// Internal event carrying AuthState from AuthBloc to YouTubeBloc
+/// Establishes hierarchical flow: Repository -> AuthBloc -> YouTubeBloc
 class _AuthStatusChanged extends YoutubeEvent {
-  final User? user;
+  final AuthState authState;
 
-  const _AuthStatusChanged(this.user);
+  const _AuthStatusChanged(this.authState);
 
   @override
-  List<Object> get props => [user ?? 'null'];
+  List<Object> get props => [authState];
 }

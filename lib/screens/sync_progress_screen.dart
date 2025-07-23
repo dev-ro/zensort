@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:zensort/features/auth/domain/repositories/auth_repository.dart';
+import 'package:zensort/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:zensort/widgets/zen_sort_scaffold.dart';
 import 'package:zensort/widgets/gradient_loader.dart';
 import 'package:zensort/widgets/animated_gradient_app_bar.dart';
@@ -32,16 +31,15 @@ class _SyncProgressScreenState extends State<SyncProgressScreen> {
     });
 
     try {
-      // Check if user is authenticated by getting current user from repository
-      final authRepository = context.read<AuthRepository>();
-      final currentUser = await authRepository.currentUser.first;
+      // Check authentication status from central state authority - AuthBloc
+      final authState = context.read<AuthBloc>().state;
 
-      if (currentUser == null) {
+      if (authState is! Authenticated) {
         throw Exception("User is not authenticated.");
       }
 
-      // Get the YouTube access token from the auth repository
-      final accessToken = await authRepository.getAccessToken();
+      // Get the YouTube access token from the authenticated state
+      final accessToken = authState.accessToken;
 
       if (accessToken == null) {
         throw Exception(

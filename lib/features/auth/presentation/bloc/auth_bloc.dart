@@ -1,16 +1,18 @@
 import 'dart:async';
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zensort/features/auth/domain/repositories/auth_repository.dart';
 
 part 'auth_event.dart';
 part 'auth_state.dart';
 
-/// Pure action handler for user-initiated authentication events
-/// Does NOT manage authentication state - only delegates actions to repository
-/// State comes directly from AuthRepository.currentUser stream consumed by UI/other BLoCs
+/// Central State Authority for Authentication
+/// Subscribes to AuthRepository and provides stable authentication state to entire application
+/// Acts as "reactive translator" - never originates state, only reflects repository truth
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final AuthRepository _authRepository;
+  StreamSubscription<User?>? _authSubscription;
 
   AuthBloc({required AuthRepository authRepository})
     : _authRepository = authRepository,
@@ -18,42 +20,69 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthStarted>(_onAuthStarted);
     on<SignInWithGoogleRequested>(_onSignInWithGoogleRequested);
     on<SignOutRequested>(_onSignOutRequested);
+    on<_AuthenticationUserChanged>(_onAuthenticationUserChanged);
+
+    // Subscribe to repository's user stream (the Single Source of Truth)
+    // This creates the hierarchical flow: Repository -> AuthBloc -> UI/Feature BLoCs
+    _authSubscription = _authRepository.currentUser.listen((user) {
+      add(_AuthenticationUserChanged(user));
+    });
+  }
+
+  @override
+  Future<void> close() {
+    _authSubscription?.cancel();
+    return super.close();
   }
 
   void _onAuthStarted(AuthStarted event, Emitter<AuthState> emit) {
-    // Nothing to do - state comes from repository stream
-    emit(const AuthInitial());
+    // Initial state is handled by the repository stream listener
   }
 
+  /// Core state translation logic - converts repository User changes to stable AuthState
+  /// This is the central authority that determines authentication state for entire app
+  Future<void> _onAuthenticationUserChanged(
+    _AuthenticationUserChanged event,
+    Emitter<AuthState> emit,
+  ) async {
+    final user = event.user;
+
+    if (user != null) {
+      // User is authenticated - get access token and emit stable Authenticated state
+      final accessToken = await _authRepository.getAccessToken();
+      emit(Authenticated(user: user, accessToken: accessToken));
+    } else {
+      // User is null - emit stable Unauthenticated state
+      emit(const AuthUnauthenticated());
+    }
+  }
+
+  /// Delegates sign-in action to repository - does NOT emit states directly
+  /// Repository will update its stream, triggering the reactive loop
   Future<void> _onSignInWithGoogleRequested(
     SignInWithGoogleRequested event,
     Emitter<AuthState> emit,
   ) async {
     emit(const AuthLoading());
     try {
-      final signInResult = await _authRepository.signInWithGoogle();
-      if (signInResult != null) {
-        // Successful sign-in - repository stream will update automatically
-        // Return to initial state as AuthGate will handle navigation
-        emit(const AuthInitial());
-      } else {
-        // User cancelled sign-in
-        emit(const AuthInitial());
-      }
+      await _authRepository.signInWithGoogle();
+      // Do NOT emit success state here - let reactive loop complete
+      // Repository stream will trigger _AuthenticationUserChanged event
     } catch (e) {
       emit(AuthError('Sign-in failed: ${e.toString()}'));
     }
   }
 
+  /// Delegates sign-out action to repository - does NOT emit states directly
+  /// Repository will update its stream, triggering the reactive loop
   Future<void> _onSignOutRequested(
     SignOutRequested event,
     Emitter<AuthState> emit,
   ) async {
-    emit(const AuthLoading());
     try {
       await _authRepository.signOut();
-      // Repository stream will update automatically - return to initial state
-      emit(const AuthInitial());
+      // Do NOT emit unauthenticated state here - let reactive loop complete
+      // Repository stream will trigger _AuthenticationUserChanged event
     } catch (e) {
       emit(AuthError('Sign-out failed: ${e.toString()}'));
     }

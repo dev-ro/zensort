@@ -4,8 +4,7 @@ import 'package:bloc/bloc.dart';
 import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:equatable/equatable.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:zensort/features/auth/domain/repositories/auth_repository.dart';
+import 'package:zensort/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:zensort/features/youtube/domain/entities/liked_video.dart';
 import 'package:zensort/features/youtube/domain/entities/sync_progress.dart';
 import 'package:zensort/features/youtube/domain/repositories/youtube_repository.dart';
@@ -15,11 +14,11 @@ part 'youtube_state.dart';
 
 class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
   final YoutubeRepository _youtubeRepository;
-  final AuthRepository _authRepository;
+  final AuthBloc _authBloc;
   StreamSubscription<SyncProgress>? _syncProgressSubscription;
-  StreamSubscription<User?>? _authStateSubscription;
+  StreamSubscription<AuthState>? _authStateSubscription;
 
-  YouTubeBloc(this._youtubeRepository, this._authRepository)
+  YouTubeBloc(this._youtubeRepository, this._authBloc)
     : super(YoutubeInitial()) {
     on<InitialVideosLoaded>(_onInitialVideosLoaded, transformer: restartable());
     on<MoreVideosLoaded>(_onMoreVideosLoaded);
@@ -27,9 +26,10 @@ class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
     on<_YoutubeSyncProgressUpdated>(_onYoutubeSyncProgressUpdated);
     on<_AuthStatusChanged>(_onAuthStatusChanged, transformer: restartable());
 
-    // Listen to AuthRepository's currentUser stream (the single source of truth)
-    _authStateSubscription = _authRepository.currentUser.listen((user) {
-      add(_AuthStatusChanged(user));
+    // Listen to AuthBloc's stable authentication state (hierarchical flow)
+    // Repository -> AuthBloc -> YouTubeBloc
+    _authStateSubscription = _authBloc.stream.listen((authState) {
+      add(_AuthStatusChanged(authState));
     });
   }
 
@@ -37,17 +37,18 @@ class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
     _AuthStatusChanged event,
     Emitter<YoutubeState> emit,
   ) async {
-    final user = event.user;
+    final authState = event.authState;
 
-    if (user != null) {
+    if (authState is Authenticated) {
       // User is authenticated - load initial videos
       add(InitialVideosLoaded());
-    } else {
+    } else if (authState is AuthUnauthenticated) {
       // User is not authenticated - clear state and cancel subscriptions
       _syncProgressSubscription?.cancel();
       _syncProgressSubscription = null;
       emit(YoutubeInitial());
     }
+    // Ignore AuthLoading, AuthInitial, and AuthError states
   }
 
   void _onInitialVideosLoaded(

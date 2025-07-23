@@ -76,7 +76,7 @@ class ZenSortApp extends StatelessWidget {
           BlocProvider<YouTubeBloc>(
             create: (context) => YouTubeBloc(
               context.read<YoutubeRepository>(),
-              context.read<AuthRepository>(),
+              context.read<AuthBloc>(),
             ),
           ),
         ],
