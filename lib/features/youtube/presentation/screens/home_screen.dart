@@ -14,10 +14,32 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  final ScrollController _scrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
     context.read<YouTubeBloc>().add(LoadLikedVideos());
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_isBottom) {
+      context.read<YouTubeBloc>().add(FetchNextPage());
+    }
+  }
+
+  bool get _isBottom {
+    if (!_scrollController.hasClients) return false;
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final currentScroll = _scrollController.offset;
+    return currentScroll >= (maxScroll * 0.9); // Trigger when 90% scrolled
   }
 
   @override
@@ -119,8 +141,22 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             }
             return ListView.builder(
-              itemCount: state.videos.length,
+              controller: _scrollController,
+              itemCount: state.hasReachedMax 
+                  ? state.videos.length 
+                  : state.videos.length + 1,
               itemBuilder: (context, index) {
+                if (index >= state.videos.length) {
+                  // Show loading indicator at the bottom
+                  return state.isLoadingMore
+                      ? const Padding(
+                          padding: EdgeInsets.all(16.0),
+                          child: Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                        )
+                      : const SizedBox.shrink();
+                }
                 return VideoListItem(video: state.videos[index]);
               },
             );

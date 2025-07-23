@@ -3,6 +3,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zensort/features/auth/domain/repositories/auth_repository.dart';
 import 'package:zensort/features/youtube/domain/entities/liked_video.dart';
+import 'package:zensort/features/youtube/domain/entities/paginated_videos.dart';
 import 'package:zensort/features/youtube/domain/entities/sync_progress.dart';
 import 'package:zensort/features/youtube/domain/repositories/youtube_repository.dart';
 
@@ -122,6 +123,72 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
             return const SyncProgress(status: SyncStatus.none);
           }
         });
+  }
+
+  @override
+  Future<PaginatedVideos> getLikedVideos({
+    DocumentSnapshot? lastVisible,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw Exception('User not authenticated');
+    }
+
+    const pageSize = 20;
+    Query query = _firestore
+        .collection('users')
+        .doc(user.uid)
+        .collection('likedVideos')
+        .orderBy('likedAt', descending: true)
+        .limit(pageSize);
+
+    if (lastVisible != null) {
+      query = query.startAfterDocument(lastVisible);
+    }
+
+    final snapshot = await query.get();
+    final List<Future<LikedVideo?>> futureLikedVideos = [];
+
+    for (var doc in snapshot.docs) {
+      final videoId = doc.id;
+      futureLikedVideos.add(_getVideoFromIdSafely(videoId));
+    }
+
+    final results = await Future.wait(futureLikedVideos);
+    final videos = results
+        .where((video) => video != null)
+        .cast<LikedVideo>()
+        .toList();
+
+    // Determine if there are more pages
+    final hasMore = snapshot.docs.length == pageSize;
+    final lastDoc = snapshot.docs.isNotEmpty ? snapshot.docs.last : null;
+
+    return PaginatedVideos(
+      videos: videos,
+      lastDocument: lastDoc,
+      hasMore: hasMore,
+    );
+  }
+
+  Future<LikedVideo?> _getVideoFromIdSafely(String videoId) async {
+    try {
+      final videoDoc = await _firestore.collection('videos').doc(videoId).get();
+      final data = videoDoc.data();
+      if (data == null) {
+        print('Video $videoId not found in videos collection');
+        return null;
+      }
+      return LikedVideo(
+        id: videoId,
+        title: data['title'] ?? '',
+        channelName: data['channelTitle'] ?? '',
+        thumbnailUrl: data['thumbnailUrl'] ?? '',
+      );
+    } catch (e) {
+      print('Error fetching video $videoId: $e');
+      return null;
+    }
   }
 
   Future<LikedVideo> _getVideoFromId(String videoId) async {

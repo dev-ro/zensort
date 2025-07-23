@@ -25,11 +25,29 @@ class YoutubeSyncSuccess extends YoutubeState {}
 
 class YoutubeLoaded extends YoutubeState {
   final List<LikedVideo> videos;
+  final bool hasReachedMax;
+  final bool isLoadingMore;
 
-  const YoutubeLoaded(this.videos);
+  const YoutubeLoaded({
+    required this.videos,
+    this.hasReachedMax = false,
+    this.isLoadingMore = false,
+  });
+
+  YoutubeLoaded copyWith({
+    List<LikedVideo>? videos,
+    bool? hasReachedMax,
+    bool? isLoadingMore,
+  }) {
+    return YoutubeLoaded(
+      videos: videos ?? this.videos,
+      hasReachedMax: hasReachedMax ?? this.hasReachedMax,
+      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+    );
+  }
 
   @override
-  List<Object> get props => [videos];
+  List<Object> get props => [videos, hasReachedMax, isLoadingMore];
 }
 
 class YoutubeFailure extends YoutubeState {

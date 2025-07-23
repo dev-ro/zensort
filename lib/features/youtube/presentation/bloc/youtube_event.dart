@@ -11,6 +11,8 @@ class LoadLikedVideos extends YoutubeEvent {}
 
 class SyncLikedVideos extends YoutubeEvent {}
 
+class FetchNextPage extends YoutubeEvent {}
+
 class _YoutubeSyncProgressUpdated extends YoutubeEvent {
   final SyncProgress progress;
 
