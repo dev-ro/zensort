@@ -17,11 +17,12 @@ To ensure the application is scalable, maintainable, and testable, you MUST foll
 ## 3. **Inter-BLoC Communication (MANDATORY ARCHITECTURE RULE)**
 
 **Direct BLoC-to-BLoC communication is STRICTLY FORBIDDEN.** This includes:
+
 - Injecting one BLoC into another BLoC's constructor
 - Subscribing to another BLoC's state stream from within a BLoC
 - Calling methods or accessing properties of one BLoC from another BLoC
 
-**REQUIRED PATTERN: Reactive Repository as Single Source of Truth**
+### **REQUIRED PATTERN: Reactive Repository as Single Source of Truth**
 
 All cross-cutting concerns (especially authentication) MUST be managed through a reactive repository that exposes its state as a `Stream`. This is the only architecturally sound solution.
 
@@ -33,6 +34,7 @@ All cross-cutting concerns (especially authentication) MUST be managed through a
 - This establishes complete decoupling between BLoCs while maintaining architectural purity
 
 **Example of CORRECT architecture:**
+
 ```dart
 // ✅ CORRECT: Reactive Repository Pattern
 class AuthenticationRepository {
@@ -73,6 +75,7 @@ class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
 ```
 
 **Example of FORBIDDEN anti-pattern:**
+
 ```dart
 // ❌ FORBIDDEN: Direct BLoC-to-BLoC dependency
 class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
@@ -89,6 +92,7 @@ class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
 ### 3.2 Avoiding UI-Layer Orchestration
 
 **BlocListener Anti-Pattern:** While BlocListener appears to provide loose coupling, it violates Separation of Concerns by placing business logic orchestration in the presentation layer. This pattern:
+
 - Fragments business flow across the widget tree
 - Reduces readability and testability
 - Creates scalability issues as more BLoCs need coordination
@@ -178,6 +182,7 @@ class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
 ### 5.2 Google Sign-In Web Implementation
 
 For web platforms, Google Sign-In uses a reactive pattern:
+
 - The app listens to the `GoogleSignIn.onCurrentUserChanged` stream
 - UI displays the Google-rendered button widget  
 - The listener handles the Firebase credential exchange
@@ -197,11 +202,13 @@ For feature BLoCs that depend on authenticated user state:
 ### 6.2 Stream Subscription Management
 
 All `StreamSubscription` objects created within a BLoC MUST be:
+
 - Stored as instance variables
 - Cancelled in the BLoC's `close()` method to prevent memory leaks
 - Never created in event handlers (creates subscription leaks)
 
 **Example:**
+
 ```dart
 class FeatureBloc extends Bloc<FeatureEvent, FeatureState> {
   late final StreamSubscription<AuthState> _authSubscription;
@@ -255,5 +262,3 @@ BlocSelector<ProfileBloc, ProfileState, String>(
 This pattern is safer and avoids the `buildWhen` trap where parent widget rebuilds can cause unexpected state access.
 
 For complete implementation details and advanced patterns, refer to `docs/BLoC/Flutter Inter-BLoC Communication Best Practices_.txt`.
-
-

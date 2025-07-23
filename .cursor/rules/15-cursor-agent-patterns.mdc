@@ -1,3 +1,7 @@
+---
+alwaysApply: false
+---
+
 # Cursor Agent Communication & Research Patterns
 
 Effective collaboration with AI agents requires structured communication, systematic research approaches, and proper documentation practices.
@@ -8,13 +12,15 @@ Effective collaboration with AI agents requires structured communication, system
 
 When interacting with AI agents, requests MUST be clear, specific, and actionable:
 
-**✅ EFFECTIVE: Specific, actionable requests**
-```
+#### **✅ EFFECTIVE: Specific, actionable requests**
+
+```txt
 "Update the AuthBloc to implement the boolean latch pattern from the BLoC documentation to prevent multiple rapid authentication state changes from triggering redundant initial loads."
 ```
 
-**❌ INEFFECTIVE: Vague, ambiguous requests**
-```
+#### **❌ INEFFECTIVE: Vague, ambiguous requests**
+
+```txt
 "Fix the authentication thing"
 "Make it better"
 "Can you help with BLoC?"
@@ -29,8 +35,9 @@ Always provide sufficient context for the agent to understand:
 - **Constraints:** Any limitations or requirements
 - **Related Components:** Other systems that might be affected
 
-**Example:**
-```
+#### **Example:**
+
+```txt
 Context: We have an AuthBloc that currently triggers multiple API calls when the user's authentication state changes rapidly during app startup.
 
 Goal: Implement a race condition prevention mechanism using the boolean latch pattern.
@@ -56,24 +63,28 @@ Use iterative communication to refine solutions:
 
 When researching complex topics, follow a structured approach:
 
-**Phase 1: Problem Definition**
+#### **Phase 1: Problem Definition**
+
 - Clearly articulate the problem or question
 - Identify the scope and boundaries
 - List known constraints or requirements
 
-**Phase 2: Information Gathering**
+#### **Phase 2: Information Gathering**
+
 - Search existing documentation
 - Review relevant code patterns
 - Identify best practices and anti-patterns
 - Consult authoritative sources
 
-**Phase 3: Analysis and Synthesis**
+#### **Phase 3: Analysis and Synthesis**
+
 - Compare different approaches
 - Evaluate trade-offs and implications
 - Consider integration challenges
 - Assess maintainability and scalability
 
-**Phase 4: Documentation**
+#### **Phase 4: Documentation**
+
 - Document findings in structured format
 - Include implementation examples
 - Note important considerations
@@ -82,7 +93,8 @@ When researching complex topics, follow a structured approach:
 ### 2.2 Domain-Specific Research Patterns
 
 **For Architecture Decisions:**
-```
+
+```txt
 1. Current State Analysis
    - Document existing architecture
    - Identify pain points or limitations
@@ -105,7 +117,8 @@ When researching complex topics, follow a structured approach:
 ```
 
 **For Performance Optimization:**
-```
+
+```txt
 1. Baseline Measurement
    - Profile current performance
    - Identify bottlenecks
@@ -231,21 +244,24 @@ Ensure all documentation meets these standards:
 ### 5.1 Effective Prompting Techniques
 
 **Use Specific Technical Language:**
-```
+
+```txt
 ✅ GOOD: "Implement the reactive repository pattern using rxdart's BehaviorSubject to create a shared authentication stream that both AuthBloc and YouTubeBloc can subscribe to"
 
 ❌ BAD: "Make the authentication work better with the video stuff"
 ```
 
 **Provide Complete Context:**
-```
+
+```txt
 ✅ GOOD: "Based on the Flutter Inter-BLoC Communication Best Practices document, update the YouTubeBloc to use the restartable() transformer from bloc_concurrency to prevent race conditions when auth state changes"
 
 ❌ BAD: "Add some concurrency handling"
 ```
 
 **Request Incremental Changes:**
-```
+
+```txt
 ✅ GOOD: "First, let's add the boolean latch to prevent multiple loads. Then we'll implement the restartable transformer. Finally, we'll add proper subscription cleanup."
 
 ❌ BAD: "Fix all the BLoC issues at once"
@@ -254,16 +270,19 @@ Ensure all documentation meets these standards:
 ### 5.2 Knowledge Building Patterns
 
 **Build on Previous Conversations:**
+
 - Reference earlier solutions and decisions
 - Build incrementally on established patterns
 - Maintain consistency across related changes
 
 **Leverage Documentation:**
+
 - Always reference relevant documentation
 - Quote specific sections when applicable
 - Use documentation to validate approaches
 
 **Cross-Reference Related Systems:**
+
 - Consider impact on related components
 - Ensure consistency with existing patterns
 - Maintain architectural coherence
@@ -273,20 +292,23 @@ Ensure all documentation meets these standards:
 ### 6.1 Communication Anti-Patterns
 
 **❌ Context-Free Requests**
-```
+
+```txt
 "Add error handling"
 "Make it more secure"
 "Optimize performance"
 ```
 
 **❌ Solution Fixation**
-```
+
+```txt
 "Use Provider instead of BLoC" (without understanding the context)
 "Always use this specific pattern" (without considering alternatives)
 ```
 
 **❌ Documentation Neglect**
-```
+
+```txt
 Implementing solutions without updating documentation
 Not referencing source materials
 Missing implementation context
@@ -295,16 +317,19 @@ Missing implementation context
 ### 6.2 Research Anti-Patterns
 
 **❌ Insufficient Investigation**
+
 - Accepting first solution found
 - Not considering alternatives
 - Ignoring trade-offs
 
 **❌ Over-Engineering**
+
 - Implementing complex solutions for simple problems
 - Adding unnecessary abstraction layers
 - Optimizing without measuring
 
 **❌ Inconsistent Application**
+
 - Using different patterns for similar problems
 - Not following established project conventions
 - Ignoring existing documentation
@@ -330,5 +355,363 @@ Maintain a structured approach to knowledge:
 - Archive outdated patterns with migration guides
 
 For detailed prompting techniques and research methodologies, refer to:
+
+- `docs/Cursor/Prompt Engineering for Cursor.md`
+- `docs/Cursor/Cursor Research.md`
+
+# Cursor Agent Communication & Research Patterns
+
+Effective collaboration with AI agents requires structured communication, systematic research approaches, and proper documentation practices.
+
+## 1. Agent Communication Standards
+
+### 1.1 Request Clarity and Specificity
+
+When interacting with AI agents, requests MUST be clear, specific, and actionable:
+
+#### **✅ EFFECTIVE: Specific, actionable requests**
+
+```txt
+"Update the AuthBloc to implement the boolean latch pattern from the BLoC documentation to prevent multiple rapid authentication state changes from triggering redundant initial loads."
+```
+
+**❌ INEFFECTIVE: Vague, ambiguous requests**
+
+```txt
+"Fix the authentication thing"
+"Make it better"
+"Can you help with BLoC?"
+```
+
+### 1.2 Context Provision
+
+Always provide sufficient context for the agent to understand:
+
+- **Current State:** What exists now
+- **Desired Outcome:** What you want to achieve
+- **Constraints:** Any limitations or requirements
+- **Related Components:** Other systems that might be affected
+
+**Example:**
+
+```
+Context: We have an AuthBloc that currently triggers multiple API calls when the user's authentication state changes rapidly during app startup.
+
+Goal: Implement a race condition prevention mechanism using the boolean latch pattern.
+
+Constraints: Must maintain compatibility with existing state management architecture and not break the reactive repository pattern.
+
+Related: This affects the YouTubeBloc which depends on authentication state changes.
+```
+
+### 1.3 Iterative Refinement
+
+Use iterative communication to refine solutions:
+
+1. **Initial Request:** Broad scope with clear objectives
+2. **Clarification:** Address specific questions or edge cases
+3. **Implementation:** Request specific code or documentation
+4. **Validation:** Review and test the solution
+5. **Refinement:** Adjust based on results
+
+## 2. Research Methodology Patterns
+
+### 2.1 Systematic Investigation Approach
+
+When researching complex topics, follow a structured approach:
+
+**Phase 1: Problem Definition**
+
+- Clearly articulate the problem or question
+- Identify the scope and boundaries
+- List known constraints or requirements
+
+**Phase 2: Information Gathering**
+
+- Search existing documentation
+- Review relevant code patterns
+- Identify best practices and anti-patterns
+- Consult authoritative sources
+
+**Phase 3: Analysis and Synthesis**
+
+- Compare different approaches
+- Evaluate trade-offs and implications
+- Consider integration challenges
+- Assess maintainability and scalability
+
+**Phase 4: Documentation**
+
+- Document findings in structured format
+- Include implementation examples
+- Note important considerations
+- Provide references to sources
+
+### 2.2 Domain-Specific Research Patterns
+
+**For Architecture Decisions:**
+
+```txt
+1. Current State Analysis
+   - Document existing architecture
+   - Identify pain points or limitations
+   - Map dependencies and relationships
+
+2. Alternative Evaluation
+   - Research industry best practices
+   - Compare different approaches
+   - Evaluate framework-specific patterns
+
+3. Implementation Planning
+   - Define migration strategy
+   - Identify potential risks
+   - Plan testing approach
+
+4. Documentation
+   - Create architectural decision records
+   - Update relevant rule files
+   - Provide implementation guidelines
+```
+
+**For Performance Optimization:**
+
+```txt
+1. Baseline Measurement
+   - Profile current performance
+   - Identify bottlenecks
+   - Document metrics
+
+2. Solution Research
+   - Research optimization techniques
+   - Study framework-specific solutions
+   - Review case studies
+
+3. Implementation Strategy
+   - Prioritize optimizations by impact
+   - Plan incremental improvements
+   - Design measurement approach
+
+4. Validation
+   - Implement performance monitoring
+   - Compare before/after metrics
+   - Document optimization results
+```
+
+## 3. Documentation Creation Standards
+
+### 3.1 Research Documentation Structure
+
+When creating documentation from research, follow this structure:
+
+```markdown
+# [Topic Title]
+
+## Overview
+[Brief description of the topic and its importance]
+
+## Problem Statement
+[Clear articulation of the problem being addressed]
+
+## Research Findings
+[Key insights and discoveries]
+
+### Approach 1: [Name]
+- **Description:** [What it is]
+- **Pros:** [Advantages]
+- **Cons:** [Disadvantages]  
+- **Use Cases:** [When to use]
+
+### Approach 2: [Name]
+[Same structure as above]
+
+## Recommended Solution
+[Specific recommendation with justification]
+
+## Implementation Guidelines
+[Step-by-step implementation instructions]
+
+## References
+[Sources and additional reading]
+```
+
+### 3.2 Code Documentation Patterns
+
+When documenting code patterns discovered through research:
+
+```dart
+// GOOD: Comprehensive pattern documentation
+/**
+ * Boolean Latch Pattern for Race Condition Prevention
+ * 
+ * Problem: Rapid authentication state changes can trigger multiple 
+ * simultaneous data loading operations, leading to race conditions.
+ * 
+ * Solution: Use a boolean flag to track whether initial loading has
+ * been dispatched, preventing duplicate operations.
+ * 
+ * Reference: docs/BLoC/Flutter Inter-BLoC Communication Best Practices_.txt
+ * 
+ * Usage:
+ * - Set latch to true when initial load starts
+ * - Reset latch to false on logout/unauthenticated state
+ * - Check latch before dispatching load events
+ */
+class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
+  bool _isInitialLoadDispatched = false; // Latch flag
+  
+  // Implementation follows...
+}
+```
+
+## 4. Quality Assurance Patterns
+
+### 4.1 Solution Validation
+
+Before implementing agent-suggested solutions:
+
+1. **Code Review:** Examine the suggested code for:
+   - Adherence to project patterns
+   - Proper error handling
+   - Performance implications
+   - Security considerations
+
+2. **Architecture Review:** Ensure the solution:
+   - Fits within existing architecture
+   - Doesn't introduce tight coupling
+   - Maintains separation of concerns
+   - Follows established patterns
+
+3. **Testing Strategy:** Verify:
+   - Unit test coverage
+   - Integration test scenarios
+   - Edge case handling
+   - Performance impact
+
+### 4.2 Documentation Quality
+
+Ensure all documentation meets these standards:
+
+- **Completeness:** Covers all important aspects
+- **Accuracy:** Information is current and correct
+- **Clarity:** Easy to understand and follow
+- **Maintainability:** Easy to update as systems evolve
+
+## 5. Agent Collaboration Best Practices
+
+### 5.1 Effective Prompting Techniques
+
+**Use Specific Technical Language:**
+
+```txt
+✅ GOOD: "Implement the reactive repository pattern using rxdart's BehaviorSubject to create a shared authentication stream that both AuthBloc and YouTubeBloc can subscribe to"
+
+❌ BAD: "Make the authentication work better with the video stuff"
+```txt
+
+**Provide Complete Context:**
+
+```txt
+✅ GOOD: "Based on the Flutter Inter-BLoC Communication Best Practices document, update the YouTubeBloc to use the restartable() transformer from bloc_concurrency to prevent race conditions when auth state changes"
+
+❌ BAD: "Add some concurrency handling"
+```
+
+**Request Incremental Changes:**
+
+```txt   
+✅ GOOD: "First, let's add the boolean latch to prevent multiple loads. Then we'll implement the restartable transformer. Finally, we'll add proper subscription cleanup."
+
+❌ BAD: "Fix all the BLoC issues at once"
+```
+
+### 5.2 Knowledge Building Patterns
+
+**Build on Previous Conversations:**
+
+- Reference earlier solutions and decisions
+- Build incrementally on established patterns
+- Maintain consistency across related changes
+
+**Leverage Documentation:**
+
+- Always reference relevant documentation
+- Quote specific sections when applicable
+- Use documentation to validate approaches
+
+**Cross-Reference Related Systems:**
+
+- Consider impact on related components
+- Ensure consistency with existing patterns
+- Maintain architectural coherence
+
+## 6. Common Anti-Patterns to Avoid
+
+### 6.1 Communication Anti-Patterns
+
+**❌ Context-Free Requests**
+
+```
+"Add error handling"
+"Make it more secure"
+"Optimize performance"
+```
+
+**❌ Solution Fixation**
+
+```
+"Use Provider instead of BLoC" (without understanding the context)
+"Always use this specific pattern" (without considering alternatives)
+```
+
+**❌ Documentation Neglect**
+
+```
+Implementing solutions without updating documentation
+Not referencing source materials
+Missing implementation context
+```
+
+### 6.2 Research Anti-Patterns
+
+**❌ Insufficient Investigation**
+
+- Accepting first solution found
+- Not considering alternatives
+- Ignoring trade-offs
+
+**❌ Over-Engineering**
+
+- Implementing complex solutions for simple problems
+- Adding unnecessary abstraction layers
+- Optimizing without measuring
+
+**❌ Inconsistent Application**
+
+- Using different patterns for similar problems
+- Not following established project conventions
+- Ignoring existing documentation
+
+## 7. Continuous Improvement
+
+### 7.1 Pattern Evolution
+
+As the project evolves, regularly:
+
+- Review and update communication patterns
+- Refine research methodologies
+- Improve documentation standards
+- Share effective techniques across the team
+
+### 7.2 Knowledge Management
+
+Maintain a structured approach to knowledge:
+
+- Organize documentation by topic and complexity
+- Create cross-references between related concepts
+- Update documentation as understanding deepens
+- Archive outdated patterns with migration guides
+
+For detailed prompting techniques and research methodologies, refer to:
+
 - `docs/Cursor/Prompt Engineering for Cursor.md`
 - `docs/Cursor/Cursor Research.md`

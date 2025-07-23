@@ -1,7 +1,6 @@
 ---
-title: Advanced Firebase Patterns
+alwaysApply: false
 ---
-
 # Advanced Firebase Patterns
 
 All Firebase interactions must be secure, performant, cost-effective, and scalable for advanced features like embeddings and vector search.
@@ -95,7 +94,7 @@ Future<List<Video>> getBadPagination(int page) async {
 
 **The N+1 Problem:** Occurs when you fetch a list of items and then make separate queries for related data for each item.
 
-**Solution Pattern: Denormalization and Batch Reads**
+#### **Solution Pattern: Denormalization and Batch Reads**
 
 ```dart
 // ✅ CORRECT: Denormalized data model prevents N+1 queries
@@ -198,6 +197,7 @@ class VideoEmbedding {
 ### 3.2 Embedding Generation Pipeline
 
 **Cloud Function Implementation:**
+
 ```python
 # functions/generate_embeddings.py
 import openai
@@ -236,6 +236,7 @@ def generate_video_embeddings(video_data):
 ### 3.3 Vector Similarity Search
 
 **Cosine Similarity Implementation:**
+
 ```dart
 class VectorSearchRepository {
   Future<List<String>> findSimilarVideos(
@@ -311,6 +312,7 @@ class SimilarityResult {
 ### 3.4 Embedding Backfill Strategy
 
 **Scalable Backfill Architecture:**
+
 ```python
 # functions/embedding_backfill.py
 def backfill_embeddings_batch(request):
@@ -413,6 +415,7 @@ class Video {
 To improve read performance and reduce costs, you SHOULD strategically denormalize (duplicate) data. For example, store `channelName` directly on a `video` document instead of requiring a separate lookup to the `channels` collection.
 
 **Denormalization Strategy:**
+
 ```dart
 // ✅ CORRECT: Denormalized for performance
 class Video {
@@ -540,6 +543,7 @@ Future<void> updateVideoStats(String videoId, int likeCount, int viewCount) asyn
 ```
 
 For detailed implementation patterns and advanced strategies, refer to:
+
 - `docs/Embeddings and Clustering/Embedding Backfill_ Scalable Architecture_.txt`
 - `docs/Embeddings and Clustering/Firestore Vector Clustering Strategy Research_.txt`
 - `docs/Firestore/N+1 Query Solution_ Flutter Firestore_.txt`

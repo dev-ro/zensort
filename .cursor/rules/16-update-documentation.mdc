@@ -16,6 +16,7 @@ Before merging any branch into main, you MUST create an update document in `docs
 ### 1.2 When Updates Are Required
 
 Updates MUST be created for:
+
 - **Feature additions:** New functionality or capabilities
 - **Architecture improvements:** Significant structural changes
 - **Performance optimizations:** Speed, efficiency, or resource improvements  
@@ -26,6 +27,7 @@ Updates MUST be created for:
 ### 1.3 When Updates Are Optional
 
 Updates may be skipped for:
+
 - Minor typo corrections
 - Internal refactoring with no user-facing impact
 - Dependency updates without functionality changes
@@ -36,17 +38,20 @@ Updates may be skipped for:
 ### 2.1 File Naming Requirements
 
 Updates MUST follow this exact naming pattern:
+
 ```
 docs/Updates/###-{descriptive-update-name}.md
 ```
 
 **Rules:**
+
 - Use three-digit leading zeros (001, 002, 003, etc.)
 - Use kebab-case for the descriptive name
 - Keep names concise but descriptive
 - Increment sequentially for each new update
 
 **Examples:**
+
 ```
 ✅ CORRECT:
 docs/Updates/001-bloc-communication-patterns-implementation.md
@@ -114,6 +119,7 @@ Every update document MUST follow this structure:
 ### 3.1 Writing Standards
 
 **Use Clear, Engaging Language:**
+
 ```markdown
 ✅ GOOD: "Implemented a race condition prevention system that eliminates duplicate API calls during rapid authentication state changes, improving app reliability and reducing server load."
 
@@ -121,6 +127,7 @@ Every update document MUST follow this structure:
 ```
 
 **Provide Context and Value:**
+
 ```markdown
 ✅ GOOD: "Enhanced the Firebase security architecture with comprehensive XSS prevention measures. This protects user data from malicious scripts and ensures authentication tokens remain secure, building trust with our users."
 
@@ -128,6 +135,7 @@ Every update document MUST follow this structure:
 ```
 
 **Include Specific Impact:**
+
 ```markdown
 ✅ GOOD: "Optimized web performance with deferred loading and hydrated_bloc state persistence, reducing initial load time by ~40% and ensuring user preferences survive browser refreshes."
 
@@ -139,16 +147,19 @@ Every update document MUST follow this structure:
 Each update should include content that can be easily adapted for social platforms:
 
 **LinkedIn/Professional Posts:**
+
 - Focus on technical achievements and learning
 - Highlight problem-solving and architecture decisions
 - Emphasize professional growth and best practices
 
 **TikTok/Instagram Stories:**
+
 - Create bite-sized highlights of key features
 - Show before/after comparisons when applicable
 - Use engaging visuals or code snippets
 
 **Twitter/X Threads:**
+
 - Break down complex changes into thread-worthy segments
 - Include relevant hashtags (#FlutterDev #BuildingInPublic #WebDev)
 - Highlight specific technical wins
@@ -158,6 +169,7 @@ Each update should include content that can be easily adapted for social platfor
 ### 4.1 Pre-Merge Checklist
 
 Before merging any branch, verify:
+
 - [ ] Update document created with proper naming convention
 - [ ] All changes in the branch are documented
 - [ ] Context and rationale clearly explained
@@ -169,6 +181,7 @@ Before merging any branch, verify:
 ### 4.2 Merge Process Integration
 
 The proper workflow sequence:
+
 1. **Complete branch development** (features, fixes, documentation)
 2. **Create update document** (following this rule)
 3. **Review update document** (ensure clarity and completeness)
@@ -298,6 +311,7 @@ Web security isn't optional—it's foundational. These measures protect our user
 ### 6.1 Content Quality Checklist
 
 Every update document must meet these standards:
+
 - [ ] **Clarity:** Non-technical readers can understand the value
 - [ ] **Completeness:** All significant changes are documented
 - [ ] **Context:** Explains why changes were needed
@@ -309,6 +323,7 @@ Every update document must meet these standards:
 ### 6.2 Social Media Readiness
 
 Each update should enable easy social media content creation:
+
 - **Headline-worthy:** Title can be used as a social media post
 - **Quote-ready:** Key sentences work as pull quotes
 - **Visual-friendly:** Technical highlights can become infographics
@@ -394,18 +409,21 @@ This rule integrates with `10-git-workflow.mdc` by adding the update documentati
 Transform update documents into social media content:
 
 **LinkedIn Posts:**
+
 - Lead with the problem solved or value created
 - Include 2-3 key technical highlights
 - End with learning or insight gained
 - Use professional hashtags (#SoftwareDevelopment #BuildingInPublic)
 
 **Twitter/X Threads:**
+
 - Break "What Changed" section into individual tweets
 - Quote the most impactful sentences
 - Include relevant dev community hashtags
 - Share code snippets when appropriate
 
 **Instagram/TikTok:**
+
 - Create visual summaries of key features
 - Show before/after comparisons
 - Highlight the user experience improvements
@@ -414,6 +432,7 @@ Transform update documents into social media content:
 ### 8.2 Community Engagement
 
 Use updates to foster community engagement:
+
 - Ask for feedback on implemented features
 - Share challenges faced and lessons learned
 - Invite collaboration on upcoming features
@@ -422,4 +441,5 @@ Use updates to foster community engagement:
 This systematic approach to update documentation ensures every significant change is captured, contextualized, and ready for public sharing, supporting transparent development and community building.
 
 For integration with the overall git workflow, refer to:
+
 - `.cursor/rules/10-git-workflow.mdc`
