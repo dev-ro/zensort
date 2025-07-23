@@ -15,20 +15,6 @@ class AuthLoading extends AuthState {
   const AuthLoading();
 }
 
-class Authenticated extends AuthState {
-  final User user;
-  final String? accessToken; // This is nullable to handle app startups
-
-  const Authenticated({required this.user, this.accessToken});
-
-  @override
-  List<Object?> get props => [user, accessToken];
-}
-
-class AuthUnauthenticated extends AuthState {
-  const AuthUnauthenticated();
-}
-
 class AuthError extends AuthState {
   final String message;
 

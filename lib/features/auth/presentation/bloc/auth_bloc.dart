@@ -1,20 +1,16 @@
 import 'dart:async';
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:zensort/features/auth/domain/entities/sign_in_result.dart';
 import 'package:zensort/features/auth/domain/repositories/auth_repository.dart';
 
 part 'auth_event.dart';
 part 'auth_state.dart';
 
+/// Pure action handler for user-initiated authentication events
+/// Does NOT manage authentication state - only delegates actions to repository
+/// State comes directly from AuthRepository.currentUser stream consumed by UI/other BLoCs
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final AuthRepository _authRepository;
-  StreamSubscription<User?>? _authStateSubscription;
-
-  /// Boolean latch to prevent race conditions from rapid state emissions
-  /// Tracks if initial load has been performed for authenticated users
-  bool _isInitialLoadDispatched = false;
 
   AuthBloc({required AuthRepository authRepository})
     : _authRepository = authRepository,
@@ -22,53 +18,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthStarted>(_onAuthStarted);
     on<SignInWithGoogleRequested>(_onSignInWithGoogleRequested);
     on<SignOutRequested>(_onSignOutRequested);
-    on<_AuthStateChanged>(_onAuthStateChanged);
-
-    _authStateSubscription = _authRepository.authStateChanges.listen((user) {
-      add(_AuthStateChanged(user));
-    });
-  }
-
-  @override
-  Future<void> close() {
-    _authStateSubscription?.cancel();
-    return super.close();
   }
 
   void _onAuthStarted(AuthStarted event, Emitter<AuthState> emit) {
-    // The listener for authStateChanges handles the initial state.
-  }
-
-  Future<void> _onAuthStateChanged(
-    _AuthStateChanged event,
-    Emitter<AuthState> emit,
-  ) async {
-    final user = event.user;
-
-    if (user != null) {
-      // Use boolean latch to prevent multiple rapid authenticated events from triggering redundant loads
-      if (!_isInitialLoadDispatched) {
-        _isInitialLoadDispatched = true;
-
-        // First emit loading state to prevent premature HomeScreen builds
-        emit(const AuthLoading());
-
-        // Attempt to get a fresh access token through silent sign-in
-        final accessToken = await _authRepository.signInSilentlyWithGoogle();
-
-        // Only emit authenticated state if we have a valid access token
-        if (accessToken != null) {
-          emit(Authenticated(user: user, accessToken: accessToken));
-        } else {
-          // If we can't get an access token, treat as unauthenticated
-          emit(const AuthUnauthenticated());
-        }
-      }
-    } else {
-      // Reset the latch on unauthenticated state
-      _isInitialLoadDispatched = false;
-      emit(const AuthUnauthenticated());
-    }
+    // Nothing to do - state comes from repository stream
+    emit(const AuthInitial());
   }
 
   Future<void> _onSignInWithGoogleRequested(
@@ -79,17 +33,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     try {
       final signInResult = await _authRepository.signInWithGoogle();
       if (signInResult != null) {
-        // This handles a user-initiated sign-in.
-        // It provides the crucial accessToken.
-        emit(
-          Authenticated(
-            user: signInResult.user,
-            accessToken: signInResult.accessToken,
-          ),
-        );
+        // Successful sign-in - repository stream will update automatically
+        // Return to initial state as AuthGate will handle navigation
+        emit(const AuthInitial());
       } else {
-        // This handles the case where the user closes the Google pop-up.
-        emit(const AuthUnauthenticated());
+        // User cancelled sign-in
+        emit(const AuthInitial());
       }
     } catch (e) {
       emit(AuthError('Sign-in failed: ${e.toString()}'));
@@ -100,9 +49,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     SignOutRequested event,
     Emitter<AuthState> emit,
   ) async {
+    emit(const AuthLoading());
     try {
       await _authRepository.signOut();
-      // The authStateChanges listener will automatically handle emitting AuthUnauthenticated.
+      // Repository stream will update automatically - return to initial state
+      emit(const AuthInitial());
     } catch (e) {
       emit(AuthError('Sign-out failed: ${e.toString()}'));
     }

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:zensort/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:zensort/features/youtube/presentation/bloc/youtube_bloc.dart';
 import 'package:zensort/features/youtube/presentation/widgets/video_list_item.dart';
+import 'package:zensort/screens/sync_progress_screen.dart';
 import 'package:zensort/theme.dart';
 import 'package:zensort/widgets/gradient_loader.dart';
+import 'package:zensort/features/auth/domain/repositories/auth_repository.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -35,32 +36,35 @@ class HomeScreen extends StatelessWidget {
             icon: const Icon(Icons.sync),
             onPressed: isSyncing
                 ? null
-                : () {
+                : () async {
                     try {
-                      print(
-                        'Sync button pressed. Current Auth State: ${context.read<AuthBloc>().state}',
-                      );
-                      final authState = context.read<AuthBloc>().state;
-                      if (authState is Authenticated) {
+                      print('Sync button pressed.');
+
+                      // Check authentication status directly from repository
+                      final authRepository = context.read<AuthRepository>();
+                      final currentUser =
+                          await authRepository.currentUser.first;
+
+                      if (currentUser != null) {
                         print(
-                          'Auth state is Authenticated. Access token available: ${authState.accessToken != null}',
+                          'User is authenticated. Checking for access token...',
                         );
-                        print(
-                          'Payload being sent to sync: access_token available = ${authState.accessToken != null}',
-                        );
-                        if (authState.accessToken != null) {
+
+                        final accessToken = await authRepository
+                            .getAccessToken();
+                        if (accessToken != null) {
                           print(
-                            'Access token first 20 chars: ${authState.accessToken!.substring(0, 20)}...',
+                            'Access token available. First 20 chars: ${accessToken.substring(0, 20)}...',
                           );
+                          print(
+                            'Dispatching SyncLikedVideos event to YouTubeBloc...',
+                          );
+                          context.read<YouTubeBloc>().add(SyncLikedVideos());
+                        } else {
+                          print('No access token available.');
                         }
-                        print(
-                          'Dispatching SyncLikedVideos event to YouTubeBloc...',
-                        );
-                        context.read<YouTubeBloc>().add(SyncLikedVideos());
                       } else {
-                        print(
-                          'Auth state is NOT Authenticated. Doing nothing.',
-                        );
+                        print('User is not authenticated. Cannot sync.');
                       }
                     } catch (e) {
                       print('Error in sync button onPressed: $e');
@@ -71,7 +75,7 @@ class HomeScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () {
-              context.read<AuthBloc>().add(SignOutRequested());
+              context.read<AuthRepository>().signOut();
             },
           ),
         ],
