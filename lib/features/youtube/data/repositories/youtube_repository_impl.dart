@@ -91,7 +91,7 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
     return _firestore
         .collection('users')
         .doc(user.uid)
-        .collection('likedVideoLinks')
+        .collection('likedVideos')
         .snapshots()
         .asyncMap((snapshot) async {
           final List<Future<LikedVideo>> futureLikedVideos = [];
@@ -133,8 +133,8 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
     return LikedVideo(
       id: videoId,
       title: data['title'] ?? '',
-      channelName: data['channelName'] ?? '',
-      thumbnailUrl: data['maxResThumbnailUrl'] ?? '',
+      channelName: data['channelTitle'] ?? '',
+      thumbnailUrl: data['thumbnailUrl'] ?? '',
     );
   }
 }

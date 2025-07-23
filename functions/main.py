@@ -472,6 +472,21 @@ def fetch_video_details(access_token: str, video_ids: list[str]) -> list[Video]:
         raise
 
 
+def get_video_category(title: str, channel_title: str) -> str | None:
+    """
+    Determine the category of a video based on its title and channel.
+    Returns None for regular public videos.
+    """
+    if title == "Private video":
+        return "Private"
+    elif title == "Deleted video":
+        return "Deleted"
+    elif channel_title == "Music Library Uploads":
+        return "Legacy Music"
+    else:
+        return None
+
+
 def is_private_legacy_video(title: str) -> bool:
     """
     Determine if a video is private/legacy based on its title.
@@ -517,12 +532,15 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
     """
     A scalable callable Cloud Function to sync a user's liked YouTube videos to Firestore.
     Uses the correct two-step API process for complete data integrity and performance.
+    Now includes real-time progress reporting and video categorization.
 
     This function implements the efficient, batched algorithm:
+    - Step 0: Create sync job document for progress tracking
     - Step A: Fetch all liked video items (public + private/legacy) with correct timestamps
     - Step B: Categorize videos and identify new public videos needing metadata
     - Step C: Batch fetch details for new public videos only
-    - Step D: Atomic batch write for all operations
+    - Step D: Atomic batch write for all operations with category fields
+    - Step E: Update sync job completion status
 
     Expects: access_token and user_id in the request data.
     Returns: dict with sync statistics.
@@ -542,21 +560,50 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
             message="The function must be called with a valid 'user_id'.",
         )
 
+    db = firestore.client()
+    sync_job_ref = (
+        db.collection("users")
+        .document(user_id)
+        .collection("syncJobs")
+        .document("youtube_liked_videos")
+    )
+
     try:
         logger.info(f"Starting efficient sync for user {user_id}")
+
+        # Step 0: Create Sync Job Document for Progress Tracking
+        logger.info("Step 0: Creating sync job document for progress tracking")
+        sync_start_time = datetime.now(timezone.utc)
+
+        # We'll update the total count once we know it
+        initial_sync_job_data = {
+            "status": "in_progress",
+            "totalCount": 0,  # Will be updated after fetching video items
+            "syncedCount": 0,
+            "startedAt": sync_start_time,
+        }
+        sync_job_ref.set(initial_sync_job_data)
+        logger.info("Sync job document created with initial state")
 
         # Step A: Fetch All Items - Get complete list with correct likedAt timestamps
         logger.info("Step A: Fetching all liked video items from playlist")
         all_video_items = fetch_liked_video_items(access_token)
         logger.info(f"Found {len(all_video_items)} total liked videos")
 
+        # Update sync job with total count
+        sync_job_ref.update({"totalCount": len(all_video_items)})
+        logger.info(f"Updated sync job with total count: {len(all_video_items)}")
+
         if not all_video_items:
+            # Complete sync job for empty result
+            sync_job_ref.update(
+                {"status": "completed", "completedAt": datetime.now(timezone.utc)}
+            )
             return {"synced": 0, "public_videos": 0, "private_legacy_videos": 0}
 
         # Step B: Categorize and Identify New Public Videos
         logger.info("Step B: Categorizing videos and checking existing public videos")
 
-        # First, we need to get titles for categorization - but only for videos we don't have yet
         # Extract all video IDs
         all_video_ids = [item["videoId"] for item in all_video_items]
 
@@ -581,6 +628,10 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
                 f"Successfully fetched details for {len(new_videos)} new videos"
             )
 
+            # Update progress after fetching video details
+            sync_job_ref.update({"syncedCount": len(new_videos)})
+            logger.info(f"Updated sync progress: {len(new_videos)} videos processed")
+
         # Categorize new videos into public and private/legacy
         public_videos = []
         private_legacy_video_ids = set()
@@ -598,29 +649,33 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
             f"Categorization complete: {len(public_videos)} public, {len(private_legacy_video_ids)} private/legacy new videos"
         )
 
-        # Step D: Atomic Batch Write
-        logger.info("Step D: Executing atomic batch write")
-        db = firestore.client()
+        # Step D: Atomic Batch Write with Category Fields
+        logger.info("Step D: Executing atomic batch write with categorization")
         batch = db.batch()
 
         sync_timestamp = datetime.now(timezone.utc)
 
-        # Add new public videos to the root /videos collection
+        # Add new public videos to the root /videos collection with category field
         for video in public_videos:
             video_doc_ref = db.collection("videos").document(video.videoId)
-            batch.set(
-                video_doc_ref,
-                {
-                    "platform": video.platform,
-                    "videoId": video.videoId,
-                    "title": video.title,
-                    "description": video.description,
-                    "channelTitle": video.channelTitle,
-                    "thumbnailUrl": video.thumbnailUrl,
-                    "publishedAt": video.publishedAt,
-                    "addedToZensortAt": video.addedToZensortAt,
-                },
-            )
+            category = get_video_category(video.title, video.channelTitle)
+
+            video_data = {
+                "platform": video.platform,
+                "videoId": video.videoId,
+                "title": video.title,
+                "description": video.description,
+                "channelTitle": video.channelTitle,
+                "thumbnailUrl": video.thumbnailUrl,
+                "publishedAt": video.publishedAt,
+                "addedToZensortAt": video.addedToZensortAt,
+            }
+
+            # Only add category field if it's not None (to avoid unnecessary null fields)
+            if category is not None:
+                video_data["category"] = category
+
+            batch.set(video_doc_ref, video_data)
 
         # Add ALL videos (public + private/legacy) to user's liked videos subcollection
         # Using the correct likedAt timestamps from Step A
@@ -651,6 +706,16 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
         )
         batch.commit()
 
+        # Step E: Update Sync Job Completion Status
+        logger.info("Step E: Updating sync job completion status")
+        sync_job_ref.update(
+            {
+                "status": "completed",
+                "syncedCount": len(all_video_items),
+                "completedAt": datetime.now(timezone.utc),
+            }
+        )
+
         logger.info(f"Sync completed successfully for user {user_id}")
 
         return {
@@ -666,6 +731,19 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
         logger.error(
             f"Error during video sync for user {user_id}: {type(e).__name__}: {str(e)}"
         )
+
+        # Update sync job with error status
+        try:
+            sync_job_ref.update(
+                {
+                    "status": "failed",
+                    "completedAt": datetime.now(timezone.utc),
+                    "error": str(e),
+                }
+            )
+        except Exception as sync_error:
+            logger.error(f"Failed to update sync job error status: {sync_error}")
+
         raise https_fn.HttpsError(
             code=https_fn.FunctionsErrorCode.INTERNAL,
             message="An unexpected error occurred while syncing videos.",
