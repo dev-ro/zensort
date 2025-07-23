@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:bloc/bloc.dart';
 import 'package:bloc_concurrency/bloc_concurrency.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:equatable/equatable.dart';
 import 'package:zensort/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:zensort/features/youtube/domain/entities/liked_video.dart';
@@ -17,11 +16,10 @@ class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
   final AuthBloc _authBloc;
   StreamSubscription<SyncProgress>? _syncProgressSubscription;
   StreamSubscription<AuthState>? _authStateSubscription;
+  StreamSubscription<List<LikedVideo>>? _likedVideosSubscription;
 
   YouTubeBloc(this._youtubeRepository, this._authBloc)
     : super(YoutubeInitial()) {
-    on<InitialVideosLoaded>(_onInitialVideosLoaded, transformer: restartable());
-    on<MoreVideosLoaded>(_onMoreVideosLoaded);
     on<SyncLikedVideos>(_onSyncLikedVideos);
     on<_YoutubeSyncProgressUpdated>(_onYoutubeSyncProgressUpdated);
     on<_AuthStatusChanged>(_onAuthStatusChanged, transformer: restartable());
@@ -40,27 +38,14 @@ class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
     final authState = event.authState;
 
     if (authState is Authenticated) {
-      // User is authenticated - load initial videos
-      add(InitialVideosLoaded());
-    } else if (authState is AuthUnauthenticated) {
-      // User is not authenticated - clear state and cancel subscriptions
-      _syncProgressSubscription?.cancel();
-      _syncProgressSubscription = null;
-      emit(YoutubeInitial());
-    }
-    // Ignore AuthLoading, AuthInitial, and AuthError states
-  }
-
-  void _onInitialVideosLoaded(
-    InitialVideosLoaded event,
-    Emitter<YoutubeState> emit,
-  ) async {
-    try {
-      print('=== YouTubeBloc._onInitialVideosLoaded() called ===');
+      print('=== YouTubeBloc: User authenticated, setting up reactive streams ===');
       emit(YoutubeLoading());
 
-      // Set up sync progress monitoring
+      // Cancel existing subscriptions
       _syncProgressSubscription?.cancel();
+      _likedVideosSubscription?.cancel();
+
+      // Set up sync progress monitoring
       _syncProgressSubscription = _youtubeRepository
           .getSyncProgressStream()
           .listen(
@@ -68,68 +53,28 @@ class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
             onError: (error) => emit(YoutubeFailure(error.toString())),
           );
 
-      // Load initial page of videos
-      final result = await _youtubeRepository.getLikedVideos();
-      print(
-        'Initial load completed: ${result.videos.length} videos, hasMore: ${result.hasMore}',
-      );
-
-      emit(
-        YoutubeLoaded(
-          videos: result.videos,
-          hasReachedMax: !result.hasMore,
-          lastDocument: result.lastDocument,
-        ),
-      );
-    } catch (error) {
-      print('Error in _onInitialVideosLoaded: $error');
-      emit(YoutubeFailure(error.toString()));
+      // Set up reactive liked videos stream
+      _likedVideosSubscription = _youtubeRepository
+          .watchLikedVideos()
+          .listen(
+            (videos) {
+              print('Received ${videos.length} videos from reactive stream');
+              emit(YoutubeLoaded(videos: videos));
+            },
+            onError: (error) {
+              print('Error in liked videos stream: $error');
+              emit(YoutubeFailure(error.toString()));
+            },
+          );
+    } else if (authState is AuthUnauthenticated) {
+      // User is not authenticated - clear state and cancel subscriptions
+      _syncProgressSubscription?.cancel();
+      _likedVideosSubscription?.cancel();
+      _syncProgressSubscription = null;
+      _likedVideosSubscription = null;
+      emit(YoutubeInitial());
     }
-  }
-
-  Future<void> _onMoreVideosLoaded(
-    MoreVideosLoaded event,
-    Emitter<YoutubeState> emit,
-  ) async {
-    final currentState = state;
-    if (currentState is! YoutubeLoaded ||
-        currentState.hasReachedMax ||
-        currentState.isLoadingMore) {
-      print('Skipping more videos load - invalid state or already loading');
-      return;
-    }
-
-    try {
-      print('=== YouTubeBloc._onMoreVideosLoaded() called ===');
-      print(
-        'Loading more videos after document: ${currentState.lastDocument?.id}',
-      );
-
-      emit(currentState.copyWith(isLoadingMore: true));
-
-      final result = await _youtubeRepository.getLikedVideos(
-        lastVisible: currentState.lastDocument,
-      );
-
-      print(
-        'More videos loaded: ${result.videos.length} videos, hasMore: ${result.hasMore}',
-      );
-
-      final allVideos = [...currentState.videos, ...result.videos];
-
-      emit(
-        YoutubeLoaded(
-          videos: allVideos,
-          hasReachedMax: !result.hasMore,
-          isLoadingMore: false,
-          lastDocument: result.lastDocument,
-        ),
-      );
-    } catch (error) {
-      print('Error in _onMoreVideosLoaded: $error');
-      emit(currentState.copyWith(isLoadingMore: false));
-      emit(YoutubeFailure(error.toString()));
-    }
+    // Ignore AuthLoading, AuthInitial, and AuthError states
   }
 
   Future<void> _onSyncLikedVideos(
@@ -167,6 +112,7 @@ class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
   Future<void> close() {
     _syncProgressSubscription?.cancel();
     _authStateSubscription?.cancel();
+    _likedVideosSubscription?.cancel();
     return super.close();
   }
 }

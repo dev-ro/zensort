@@ -7,10 +7,6 @@ abstract class YoutubeEvent extends Equatable {
   List<Object> get props => [];
 }
 
-class InitialVideosLoaded extends YoutubeEvent {}
-
-class MoreVideosLoaded extends YoutubeEvent {}
-
 class SyncLikedVideos extends YoutubeEvent {}
 
 class _YoutubeSyncProgressUpdated extends YoutubeEvent {
