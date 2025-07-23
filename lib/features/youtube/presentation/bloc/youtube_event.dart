@@ -28,3 +28,25 @@ class _AuthStatusChanged extends YoutubeEvent {
   @override
   List<Object> get props => [authState];
 }
+
+/// Internal event carrying liked videos from repository stream to YouTubeBloc
+/// Follows reactive repository pattern - stream listener adds events instead of calling emit
+class _LikedVideosUpdated extends YoutubeEvent {
+  final List<LikedVideo> videos;
+
+  const _LikedVideosUpdated(this.videos);
+
+  @override
+  List<Object> get props => [videos];
+}
+
+/// Internal event carrying stream errors from repository to YouTubeBloc
+/// Enables safe error handling through the event system
+class _LikedVideosError extends YoutubeEvent {
+  final String message;
+
+  const _LikedVideosError(this.message);
+
+  @override
+  List<Object> get props => [message];
+}

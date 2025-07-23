@@ -1,8 +1,8 @@
 import 'dart:async';
 
-import 'package:bloc/bloc.dart';
 import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:equatable/equatable.dart';
+import 'package:hydrated_bloc/hydrated_bloc.dart';
 import 'package:zensort/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:zensort/features/youtube/domain/entities/liked_video.dart';
 import 'package:zensort/features/youtube/domain/entities/sync_progress.dart';
@@ -11,7 +11,7 @@ import 'package:zensort/features/youtube/domain/repositories/youtube_repository.
 part 'youtube_event.dart';
 part 'youtube_state.dart';
 
-class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
+class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
   final YoutubeRepository _youtubeRepository;
   final AuthBloc _authBloc;
   StreamSubscription<SyncProgress>? _syncProgressSubscription;
@@ -23,6 +23,8 @@ class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
     on<SyncLikedVideos>(_onSyncLikedVideos);
     on<_YoutubeSyncProgressUpdated>(_onYoutubeSyncProgressUpdated);
     on<_AuthStatusChanged>(_onAuthStatusChanged, transformer: restartable());
+    on<_LikedVideosUpdated>(_onLikedVideosUpdated);
+    on<_LikedVideosError>(_onLikedVideosError);
 
     // Listen to AuthBloc's stable authentication state (hierarchical flow)
     // Repository -> AuthBloc -> YouTubeBloc
@@ -38,7 +40,7 @@ class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
     final authState = event.authState;
 
     if (authState is Authenticated) {
-      print('=== YouTubeBloc: User authenticated, setting up reactive streams ===');
+
       emit(YoutubeLoading());
 
       // Cancel existing subscriptions
@@ -54,18 +56,14 @@ class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
           );
 
       // Set up reactive liked videos stream
-      _likedVideosSubscription = _youtubeRepository
-          .watchLikedVideos()
-          .listen(
-            (videos) {
-              print('Received ${videos.length} videos from reactive stream');
-              emit(YoutubeLoaded(videos: videos));
-            },
-            onError: (error) {
-              print('Error in liked videos stream: $error');
-              emit(YoutubeFailure(error.toString()));
-            },
-          );
+      _likedVideosSubscription = _youtubeRepository.watchLikedVideos().listen(
+        (videos) {
+          add(_LikedVideosUpdated(videos));
+        },
+        onError: (error) {
+          add(_LikedVideosError(error.toString()));
+        },
+      );
     } else if (authState is AuthUnauthenticated) {
       // User is not authenticated - clear state and cancel subscriptions
       _syncProgressSubscription?.cancel();
@@ -108,11 +106,57 @@ class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
     }
   }
 
+  /// Handles liked videos data from repository stream
+  /// SAFE: emit() called within event handler context - follows reactive repository pattern
+  void _onLikedVideosUpdated(
+    _LikedVideosUpdated event,
+    Emitter<YoutubeState> emit,
+  ) {
+    emit(YoutubeLoaded(videos: event.videos));
+  }
+
+  /// Handles stream errors from repository
+  /// SAFE: emit() called within event handler context
+  void _onLikedVideosError(
+    _LikedVideosError event,
+    Emitter<YoutubeState> emit,
+  ) {
+    emit(YoutubeFailure(event.message));
+  }
+
   @override
   Future<void> close() {
     _syncProgressSubscription?.cancel();
     _authStateSubscription?.cancel();
     _likedVideosSubscription?.cancel();
     return super.close();
+  }
+
+  // HydratedBloc serialization methods
+  @override
+  YoutubeState? fromJson(Map<String, dynamic> json) {
+    try {
+      final stateType = json['stateType'] as String?;
+      if (stateType == 'YoutubeLoaded') {
+        return YoutubeLoaded.fromJson(json);
+      }
+      // For other states, return null to use default initial state
+      return null;
+    } catch (_) {
+      // If deserialization fails, return null to use default initial state
+      return null;
+    }
+  }
+
+  @override
+  Map<String, dynamic>? toJson(YoutubeState state) {
+    if (state is YoutubeLoaded) {
+      return {
+        'stateType': 'YoutubeLoaded',
+        ...state.toJson(),
+      };
+    }
+    // Only persist YoutubeLoaded states, ignore others
+    return null;
   }
 }

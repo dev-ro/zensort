@@ -28,6 +28,19 @@ class YoutubeLoaded extends YoutubeState {
 
   const YoutubeLoaded({required this.videos});
 
+  // Serialization methods for hydrated_bloc
+  factory YoutubeLoaded.fromJson(Map<String, dynamic> json) {
+    return YoutubeLoaded(
+      videos: (json['videos'] as List<dynamic>)
+          .map((item) => LikedVideo.fromJson(item as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {'videos': videos.map((video) => video.toJson()).toList()};
+  }
+
   @override
   List<Object?> get props => [videos];
 }
