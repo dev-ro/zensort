@@ -83,28 +83,6 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
   }
 
   @override
-  Stream<List<LikedVideo>> getLikedVideosStream() {
-    final user = _auth.currentUser;
-    if (user == null) {
-      throw Exception('User not authenticated');
-    }
-
-    return _firestore
-        .collection('users')
-        .doc(user.uid)
-        .collection('likedVideos')
-        .snapshots()
-        .asyncMap((snapshot) async {
-          final List<Future<LikedVideo>> futureLikedVideos = [];
-          for (var doc in snapshot.docs) {
-            final videoId = doc.id;
-            futureLikedVideos.add(_getVideoFromId(videoId));
-          }
-          return await Future.wait(futureLikedVideos);
-        });
-  }
-
-  @override
   Stream<SyncProgress> getSyncProgressStream() {
     final user = _auth.currentUser;
     if (user == null) {
@@ -134,6 +112,10 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
       throw Exception('User not authenticated');
     }
 
+    print('=== getLikedVideos called ===');
+    print('User: ${user.uid}');
+    print('LastVisible: ${lastVisible?.id}');
+
     const pageSize = 20;
     Query query = _firestore
         .collection('users')
@@ -147,6 +129,8 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
     }
 
     final snapshot = await query.get();
+    print('Found ${snapshot.docs.length} liked video documents');
+
     final List<Future<LikedVideo?>> futureLikedVideos = [];
 
     for (var doc in snapshot.docs) {
@@ -159,6 +143,8 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
         .where((video) => video != null)
         .cast<LikedVideo>()
         .toList();
+
+    print('Successfully fetched ${videos.length} videos');
 
     // Determine if there are more pages
     final hasMore = snapshot.docs.length == pageSize;
@@ -189,19 +175,5 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
       print('Error fetching video $videoId: $e');
       return null;
     }
-  }
-
-  Future<LikedVideo> _getVideoFromId(String videoId) async {
-    final videoDoc = await _firestore.collection('videos').doc(videoId).get();
-    final data = videoDoc.data();
-    if (data == null) {
-      throw Exception('Video not found in cache');
-    }
-    return LikedVideo(
-      id: videoId,
-      title: data['title'] ?? '',
-      channelName: data['channelTitle'] ?? '',
-      thumbnailUrl: data['thumbnailUrl'] ?? '',
-    );
   }
 }

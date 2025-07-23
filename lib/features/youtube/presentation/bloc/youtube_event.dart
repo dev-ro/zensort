@@ -7,11 +7,11 @@ abstract class YoutubeEvent extends Equatable {
   List<Object> get props => [];
 }
 
-class LoadLikedVideos extends YoutubeEvent {}
+class InitialVideosLoaded extends YoutubeEvent {}
+
+class MoreVideosLoaded extends YoutubeEvent {}
 
 class SyncLikedVideos extends YoutubeEvent {}
-
-class FetchNextPage extends YoutubeEvent {}
 
 class _YoutubeSyncProgressUpdated extends YoutubeEvent {
   final SyncProgress progress;
@@ -20,13 +20,4 @@ class _YoutubeSyncProgressUpdated extends YoutubeEvent {
 
   @override
   List<Object> get props => [progress];
-}
-
-class _LikedVideosUpdated extends YoutubeEvent {
-  final List<LikedVideo> videos;
-
-  const _LikedVideosUpdated(this.videos);
-
-  @override
-  List<Object> get props => [videos];
 }

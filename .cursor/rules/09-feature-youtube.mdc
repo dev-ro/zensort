@@ -50,3 +50,9 @@ The data model is split into two collections to avoid data duplication and allow
   - **Document Fields:**
     - `likedAt` (Timestamp): This timestamp comes from the `publishedAt` field of the `PlaylistItem` resource from the YouTube API, which represents when the user liked the video.
     - `syncedAt` (Timestamp): A `FieldValue.serverTimestamp()` set when the record is written to Firestore by the application.
+
+## 5. Google Sign-in for Web
+
+- **Mandatory Web Client ID:** The `google_sign_in` package requires an explicit OAuth `clientId` to function correctly on the web platform. When instantiating the `GoogleSignIn` class in the `AuthRepositoryImpl`, you **MUST** provide the `clientId` parameter.
+- **Source of Truth:** The correct Web Client ID is stored in a `<meta>` tag within `@web/index.html`. This value must be copied exactly.
+- **Forbidden Pattern:** An implementation that instantiates `GoogleSignIn` for a web target without the `clientId` is considered a critical bug.

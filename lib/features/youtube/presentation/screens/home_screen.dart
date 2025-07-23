@@ -19,7 +19,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    context.read<YouTubeBloc>().add(LoadLikedVideos());
+    // Dispatch the initial videos load event
+    context.read<YouTubeBloc>().add(InitialVideosLoaded());
     _scrollController.addListener(_onScroll);
   }
 
@@ -31,7 +32,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onScroll() {
     if (_isBottom) {
-      context.read<YouTubeBloc>().add(FetchNextPage());
+      // Dispatch more videos load event for infinite scroll
+      context.read<YouTubeBloc>().add(MoreVideosLoaded());
     }
   }
 
@@ -101,6 +103,8 @@ class _HomeScreenState extends State<HomeScreen> {
             ScaffoldMessenger.of(
               context,
             ).showSnackBar(const SnackBar(content: Text('Sync successful!')));
+            // After successful sync, reload the initial videos
+            context.read<YouTubeBloc>().add(InitialVideosLoaded());
           }
           if (state is YoutubeFailure) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -142,18 +146,14 @@ class _HomeScreenState extends State<HomeScreen> {
             }
             return ListView.builder(
               controller: _scrollController,
-              itemCount: state.hasReachedMax 
-                  ? state.videos.length 
-                  : state.videos.length + 1,
+              itemCount: state.videos.length + (state.hasReachedMax ? 0 : 1),
               itemBuilder: (context, index) {
                 if (index >= state.videos.length) {
-                  // Show loading indicator at the bottom
+                  // Show loading indicator at the end when more videos are being fetched
                   return state.isLoadingMore
                       ? const Padding(
                           padding: EdgeInsets.all(16.0),
-                          child: Center(
-                            child: CircularProgressIndicator(),
-                          ),
+                          child: Center(child: GradientLoader()),
                         )
                       : const SizedBox.shrink();
                 }

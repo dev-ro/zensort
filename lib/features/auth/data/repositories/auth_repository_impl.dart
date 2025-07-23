@@ -9,6 +9,8 @@ class AuthRepositoryImpl implements AuthRepository {
   final FirebaseAuth _firebaseAuth;
   final FirebaseFirestore _firestore;
   final GoogleSignIn _googleSignIn = GoogleSignIn(
+    clientId:
+        '630957314497-52e7nhm73i52je3j0uqdfb2lsq5956q9.apps.googleusercontent.com',
     scopes: ['email', 'https://www.googleapis.com/auth/youtube.readonly'],
   );
 

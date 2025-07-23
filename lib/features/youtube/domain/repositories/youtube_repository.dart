@@ -5,7 +5,6 @@ import 'package:zensort/features/youtube/domain/entities/sync_progress.dart';
 
 abstract class YoutubeRepository {
   Future<void> syncLikedVideos();
-  Stream<List<LikedVideo>> getLikedVideosStream();
   Stream<SyncProgress> getSyncProgressStream();
   Future<PaginatedVideos> getLikedVideos({DocumentSnapshot? lastVisible});
 }

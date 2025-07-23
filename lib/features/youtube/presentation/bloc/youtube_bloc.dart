@@ -13,25 +13,23 @@ part 'youtube_state.dart';
 class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
   final YoutubeRepository _youtubeRepository;
   StreamSubscription<SyncProgress>? _syncProgressSubscription;
-  StreamSubscription<List<LikedVideo>>? _likedVideosSubscription;
-  DocumentSnapshot? _lastDocument;
 
   YouTubeBloc(this._youtubeRepository) : super(YoutubeInitial()) {
-    on<LoadLikedVideos>(_onLoadLikedVideos);
+    on<InitialVideosLoaded>(_onInitialVideosLoaded);
+    on<MoreVideosLoaded>(_onMoreVideosLoaded);
     on<SyncLikedVideos>(_onSyncLikedVideos);
-    on<FetchNextPage>(_onFetchNextPage);
     on<_YoutubeSyncProgressUpdated>(_onYoutubeSyncProgressUpdated);
-    on<_LikedVideosUpdated>(_onLikedVideosUpdated);
   }
 
-  void _onLoadLikedVideos(
-    LoadLikedVideos event,
+  void _onInitialVideosLoaded(
+    InitialVideosLoaded event,
     Emitter<YoutubeState> emit,
   ) async {
     try {
+      print('=== YouTubeBloc._onInitialVideosLoaded() called ===');
       emit(YoutubeLoading());
-      _lastDocument = null; // Reset pagination
 
+      // Set up sync progress monitoring
       _syncProgressSubscription?.cancel();
       _syncProgressSubscription = _youtubeRepository
           .getSyncProgressStream()
@@ -40,14 +38,66 @@ class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
             onError: (error) => emit(YoutubeFailure(error.toString())),
           );
 
-            final result = await _youtubeRepository.getLikedVideos();
-      _lastDocument = result.lastDocument;
-      
-      emit(YoutubeLoaded(
-        videos: result.videos,
-        hasReachedMax: !result.hasMore,
-      ));
+      // Load initial page of videos
+      final result = await _youtubeRepository.getLikedVideos();
+      print(
+        'Initial load completed: ${result.videos.length} videos, hasMore: ${result.hasMore}',
+      );
+
+      emit(
+        YoutubeLoaded(
+          videos: result.videos,
+          hasReachedMax: !result.hasMore,
+          lastDocument: result.lastDocument,
+        ),
+      );
     } catch (error) {
+      print('Error in _onInitialVideosLoaded: $error');
+      emit(YoutubeFailure(error.toString()));
+    }
+  }
+
+  Future<void> _onMoreVideosLoaded(
+    MoreVideosLoaded event,
+    Emitter<YoutubeState> emit,
+  ) async {
+    final currentState = state;
+    if (currentState is! YoutubeLoaded ||
+        currentState.hasReachedMax ||
+        currentState.isLoadingMore) {
+      print('Skipping more videos load - invalid state or already loading');
+      return;
+    }
+
+    try {
+      print('=== YouTubeBloc._onMoreVideosLoaded() called ===');
+      print(
+        'Loading more videos after document: ${currentState.lastDocument?.id}',
+      );
+
+      emit(currentState.copyWith(isLoadingMore: true));
+
+      final result = await _youtubeRepository.getLikedVideos(
+        lastVisible: currentState.lastDocument,
+      );
+
+      print(
+        'More videos loaded: ${result.videos.length} videos, hasMore: ${result.hasMore}',
+      );
+
+      final allVideos = [...currentState.videos, ...result.videos];
+
+      emit(
+        YoutubeLoaded(
+          videos: allVideos,
+          hasReachedMax: !result.hasMore,
+          isLoadingMore: false,
+          lastDocument: result.lastDocument,
+        ),
+      );
+    } catch (error) {
+      print('Error in _onMoreVideosLoaded: $error');
+      emit(currentState.copyWith(isLoadingMore: false));
       emit(YoutubeFailure(error.toString()));
     }
   }
@@ -83,51 +133,9 @@ class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
     }
   }
 
-  Future<void> _onFetchNextPage(
-    FetchNextPage event,
-    Emitter<YoutubeState> emit,
-  ) async {
-    final currentState = state;
-    if (currentState is! YoutubeLoaded ||
-        currentState.hasReachedMax ||
-        currentState.isLoadingMore) {
-      return;
-    }
-
-    try {
-      emit(currentState.copyWith(isLoadingMore: true));
-
-      final result = await _youtubeRepository.getLikedVideos(
-        lastVisible: _lastDocument,
-      );
-      _lastDocument = result.lastDocument;
-
-      final allVideos = [...currentState.videos, ...result.videos];
-
-      emit(
-        YoutubeLoaded(
-          videos: allVideos,
-          hasReachedMax: !result.hasMore,
-          isLoadingMore: false,
-        ),
-      );
-    } catch (error) {
-      emit(currentState.copyWith(isLoadingMore: false));
-      emit(YoutubeFailure(error.toString()));
-    }
-  }
-
-  void _onLikedVideosUpdated(
-    _LikedVideosUpdated event,
-    Emitter<YoutubeState> emit,
-  ) {
-    emit(YoutubeLoaded(videos: event.videos));
-  }
-
   @override
   Future<void> close() {
     _syncProgressSubscription?.cancel();
-    _likedVideosSubscription?.cancel();
     return super.close();
   }
 }
