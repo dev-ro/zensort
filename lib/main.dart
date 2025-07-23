@@ -1,10 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
-
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'package:zensort/features/auth/data/repositories/auth_repository_impl.dart';
 import 'package:zensort/features/auth/domain/repositories/auth_repository.dart';
@@ -38,9 +39,11 @@ Future<void> main() async {
   await Firebase.initializeApp(options: firebaseOptions);
 
   // Initialize HydratedStorage for state persistence
-  // TODO: Fix storage initialization API
-  // final storage = await HydratedStorage.build();
-  // HydratedBloc.storage = storage;
+  HydratedBloc.storage = await HydratedStorage.build(
+    storageDirectory: kIsWeb
+        ? HydratedStorageDirectory.web
+        : HydratedStorageDirectory((await getTemporaryDirectory()).path),
+  );
 
   // if (useEmulator && kIsWeb) { // Disabled as per user request
   //   try {

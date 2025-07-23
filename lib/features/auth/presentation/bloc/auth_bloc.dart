@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:hydrated_bloc/hydrated_bloc.dart';
 import 'package:zensort/features/auth/domain/repositories/auth_repository.dart';
 
 part 'auth_event.dart';
@@ -81,6 +82,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     try {
       await _authRepository.signOut();
+      // Clear all persisted state on sign-out for security
+      await HydratedBloc.storage.clear();
       // Do NOT emit unauthenticated state here - let reactive loop complete
       // Repository stream will trigger _AuthenticationUserChanged event
     } catch (e) {
