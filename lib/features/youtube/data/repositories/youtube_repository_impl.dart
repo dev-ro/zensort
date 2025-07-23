@@ -47,8 +47,14 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
 
   Future<void> _syncWithToken(String accessToken) async {
     print('=== _syncWithToken() called ===');
+
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw Exception("User is not authenticated.");
+    }
+
     print(
-      'Payload being sent: {access_token: ${accessToken.substring(0, 20)}...}',
+      'Payload being sent: {access_token: ${accessToken.substring(0, 20)}..., user_id: ${user.uid}}',
     );
 
     // First get total count
@@ -67,7 +73,10 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
     final syncCallable = FirebaseFunctions.instance.httpsCallable(
       'sync_youtube_liked_videos',
     );
-    final syncResult = await syncCallable.call({'access_token': accessToken});
+    final syncResult = await syncCallable.call({
+      'access_token': accessToken,
+      'user_id': user.uid,
+    });
     final syncedVideos = syncResult.data['synced'];
     print('Videos synced: $syncedVideos');
   }

@@ -19,3 +19,7 @@ To ensure the application is scalable, maintainable, and testable, you MUST foll
 - **Provider Types:** When using Riverpod, prefer modern providers like `NotifierProvider` and `AsyncNotifierProvider` for managing state.
 - **Immutability:** State objects managed by a provider MUST be immutable.
 - **Handling Firebase Streams:** To manage real-time data from Firebase, you MUST use a `StreamProvider`. This ensures automatic lifecycle management (subscription and disposal) and provides the state as an `AsyncValue` for cleanly handling loading, data, and error states in the UI.
+
+## 3. State Validity Mandates
+
+- **Authenticated State Integrity:** The `Authenticated` state MUST always contain a valid, non-null `accessToken` for API-dependent features to function correctly. If a user is authenticated but the token is not immediately available (e.g., on app startup), the state management logic (BLoC/Notifier) **MUST** immediately trigger a silent refresh or re-authentication flow. An intermediate `Authenticating` or `RefreshingToken` state should be used during this process. An `Authenticated` state with a null `accessToken` is considered an invalid state and is forbidden.
