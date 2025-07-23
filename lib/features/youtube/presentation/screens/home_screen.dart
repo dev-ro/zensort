@@ -10,20 +10,6 @@ import 'package:zensort/widgets/gradient_loader.dart';
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
-  bool _onScrollNotification(
-    ScrollNotification notification,
-    BuildContext context,
-  ) {
-    if (notification is ScrollUpdateNotification && notification.depth == 0) {
-      final metrics = notification.metrics;
-      if (metrics.pixels >= (metrics.maxScrollExtent * 0.9)) {
-        // Trigger when 90% scrolled
-        context.read<YouTubeBloc>().add(MoreVideosLoaded());
-      }
-    }
-    return false;
-  }
-
   @override
   Widget build(BuildContext context) {
     bool isSyncing = context.watch<YouTubeBloc>().state is YoutubeSyncProgress;
@@ -82,8 +68,7 @@ class HomeScreen extends StatelessWidget {
             ScaffoldMessenger.of(
               context,
             ).showSnackBar(const SnackBar(content: Text('Sync successful!')));
-            // After successful sync, reload the initial videos
-            context.read<YouTubeBloc>().add(InitialVideosLoaded());
+            // The reactive stream will automatically update with new videos
           }
           if (state is YoutubeFailure) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -123,24 +108,11 @@ class HomeScreen extends StatelessWidget {
                 child: Text('No liked videos found. Try syncing!'),
               );
             }
-            return NotificationListener<ScrollNotification>(
-              onNotification: (notification) =>
-                  _onScrollNotification(notification, context),
-              child: ListView.builder(
-                itemCount: state.videos.length + (state.hasReachedMax ? 0 : 1),
-                itemBuilder: (context, index) {
-                  if (index >= state.videos.length) {
-                    // Show loading indicator at the end when more videos are being fetched
-                    return state.isLoadingMore
-                        ? const Padding(
-                            padding: EdgeInsets.all(16.0),
-                            child: Center(child: GradientLoader()),
-                          )
-                        : const SizedBox.shrink();
-                  }
-                  return VideoListItem(video: state.videos[index]);
-                },
-              ),
+            return ListView.builder(
+              itemCount: state.videos.length,
+              itemBuilder: (context, index) {
+                return VideoListItem(video: state.videos[index]);
+              },
             );
           }
           return const Center(child: Text('Welcome! Please sync your videos.'));
