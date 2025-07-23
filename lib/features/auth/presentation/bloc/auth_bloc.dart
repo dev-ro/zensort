@@ -12,6 +12,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final AuthRepository _authRepository;
   StreamSubscription<User?>? _authStateSubscription;
 
+  /// Boolean latch to prevent race conditions from rapid state emissions
+  /// Tracks if initial load has been performed for authenticated users
+  bool _isInitialLoadDispatched = false;
+
   AuthBloc({required AuthRepository authRepository})
     : _authRepository = authRepository,
       super(const AuthInitial()) {
@@ -40,21 +44,29 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     Emitter<AuthState> emit,
   ) async {
     final user = event.user;
+
     if (user != null) {
-      // First emit loading state to prevent premature HomeScreen builds
-      emit(const AuthLoading());
+      // Use boolean latch to prevent multiple rapid authenticated events from triggering redundant loads
+      if (!_isInitialLoadDispatched) {
+        _isInitialLoadDispatched = true;
 
-      // Attempt to get a fresh access token through silent sign-in
-      final accessToken = await _authRepository.signInSilentlyWithGoogle();
+        // First emit loading state to prevent premature HomeScreen builds
+        emit(const AuthLoading());
 
-      // Only emit authenticated state if we have a valid access token
-      if (accessToken != null) {
-        emit(Authenticated(user: user, accessToken: accessToken));
-      } else {
-        // If we can't get an access token, treat as unauthenticated
-        emit(const AuthUnauthenticated());
+        // Attempt to get a fresh access token through silent sign-in
+        final accessToken = await _authRepository.signInSilentlyWithGoogle();
+
+        // Only emit authenticated state if we have a valid access token
+        if (accessToken != null) {
+          emit(Authenticated(user: user, accessToken: accessToken));
+        } else {
+          // If we can't get an access token, treat as unauthenticated
+          emit(const AuthUnauthenticated());
+        }
       }
     } else {
+      // Reset the latch on unauthenticated state
+      _isInitialLoadDispatched = false;
       emit(const AuthUnauthenticated());
     }
   }

@@ -19,11 +19,10 @@ class AuthRepositoryImpl implements AuthRepository {
   /// This is the single source of truth for authentication status
   final _userSubject = BehaviorSubject<User?>.seeded(null);
 
+  /// CRITICAL: Single source of truth - only Firebase authStateChanges updates the subject
+  /// This establishes a pure, unidirectional data flow that prevents race conditions
   AuthRepositoryImpl(this._firebaseAuth, this._firestore) {
-    // Listen to Firebase auth changes and update our single source of truth
-    _firebaseAuth.authStateChanges().listen((user) {
-      _userSubject.add(user);
-    });
+    _firebaseAuth.authStateChanges().listen(_userSubject.add);
   }
 
   @override
@@ -32,6 +31,8 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Stream<User?> get currentUser => _userSubject.stream;
 
+  /// Performs Google Sign-In action only - does NOT manually update state
+  /// State updates happen automatically via Firebase authStateChanges listener
   @override
   Future<SignInResult?> signInWithGoogle() async {
     try {
@@ -61,15 +62,14 @@ class AuthRepositoryImpl implements AuthRepository {
             idToken: googleAuth.idToken,
           );
 
-          // 4. Sign in to Firebase
+          // 4. Sign in to Firebase - this triggers authStateChanges automatically
           final UserCredential userCredential = await _firebaseAuth
               .signInWithCredential(credential);
           final User user = userCredential.user!;
 
           await _createUserDocument(user);
 
-          // 5. The Firebase authStateChanges listener will automatically update _userSubject
-          // 6. Return the result with the user AND the accessToken
+          // 5. Return the result - NO manual state updates needed
           return SignInResult(user: user, accessToken: accessToken);
         } catch (e) {
           // Handle errors
@@ -104,11 +104,13 @@ class AuthRepositoryImpl implements AuthRepository {
     }
   }
 
+  /// Performs sign-out action only - does NOT manually update state
+  /// State updates happen automatically via Firebase authStateChanges listener
   @override
   Future<void> signOut() async {
     await _googleSignIn.signOut();
     await _firebaseAuth.signOut();
-    // The Firebase authStateChanges listener will automatically update _userSubject to null
+    // Firebase authStateChanges will automatically emit null
   }
 
   @override
@@ -123,6 +125,8 @@ class AuthRepositoryImpl implements AuthRepository {
     return null;
   }
 
+  /// Performs silent sign-in only - does NOT manually update state
+  /// Any resulting auth state changes are handled by Firebase authStateChanges listener
   @override
   Future<String?> signInSilentlyWithGoogle() async {
     try {

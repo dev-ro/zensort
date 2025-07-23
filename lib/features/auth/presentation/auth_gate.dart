@@ -11,6 +11,8 @@ class AuthGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Direct connection to the single source of truth - AuthRepository.currentUser stream
+    // This stream is powered by Firebase authStateChanges and cached via BehaviorSubject
     return StreamBuilder<User?>(
       stream: context.read<AuthRepository>().currentUser,
       builder: (context, snapshot) {
