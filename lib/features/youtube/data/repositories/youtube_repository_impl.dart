@@ -1,9 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:rxdart/rxdart.dart';
 import 'package:zensort/features/auth/domain/repositories/auth_repository.dart';
 import 'package:zensort/features/youtube/domain/entities/liked_video.dart';
-import 'package:zensort/features/youtube/domain/entities/paginated_videos.dart';
 import 'package:zensort/features/youtube/domain/entities/sync_progress.dart';
 import 'package:zensort/features/youtube/domain/repositories/youtube_repository.dart';
 
@@ -103,77 +103,82 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
         });
   }
 
+  /// A utility function that splits a list into chunks of a specified size.
+  List<List<T>> _partition<T>(List<T> list, int size) {
+    if (size <= 0) {
+      throw ArgumentError('Size must be positive');
+    }
+    final parts = <List<T>>[];
+    final listLength = list.length;
+    for (var i = 0; i < listLength; i += size) {
+      final end = (i + size < listLength) ? i + size : listLength;
+      parts.add(list.sublist(i, end));
+    }
+    return parts;
+  }
+
   @override
-  Future<PaginatedVideos> getLikedVideos({
-    DocumentSnapshot? lastVisible,
-  }) async {
+  Stream<List<LikedVideo>> watchLikedVideos() {
     final user = _auth.currentUser;
     if (user == null) {
-      throw Exception('User not authenticated');
+      return Stream.value([]);
     }
 
-    print('=== getLikedVideos called ===');
-    print('User: ${user.uid}');
-    print('LastVisible: ${lastVisible?.id}');
-
-    const pageSize = 20;
-    Query query = _firestore
+    // Create stream of liked video IDs from user's likedVideos subcollection
+    final likedVideoIdsStream = _firestore
         .collection('users')
         .doc(user.uid)
         .collection('likedVideos')
         .orderBy('likedAt', descending: true)
-        .limit(pageSize);
+        .snapshots()
+        .map((snapshot) => snapshot.docs.map((doc) => doc.id).toList());
 
-    if (lastVisible != null) {
-      query = query.startAfterDocument(lastVisible);
-    }
-
-    final snapshot = await query.get();
-    print('Found ${snapshot.docs.length} liked video documents');
-
-    final List<Future<LikedVideo?>> futureLikedVideos = [];
-
-    for (var doc in snapshot.docs) {
-      final videoId = doc.id;
-      futureLikedVideos.add(_getVideoFromIdSafely(videoId));
-    }
-
-    final results = await Future.wait(futureLikedVideos);
-    final videos = results
-        .where((video) => video != null)
-        .cast<LikedVideo>()
-        .toList();
-
-    print('Successfully fetched ${videos.length} videos');
-
-    // Determine if there are more pages
-    final hasMore = snapshot.docs.length == pageSize;
-    final lastDoc = snapshot.docs.isNotEmpty ? snapshot.docs.last : null;
-
-    return PaginatedVideos(
-      videos: videos,
-      lastDocument: lastDoc,
-      hasMore: hasMore,
-    );
-  }
-
-  Future<LikedVideo?> _getVideoFromIdSafely(String videoId) async {
-    try {
-      final videoDoc = await _firestore.collection('videos').doc(videoId).get();
-      final data = videoDoc.data();
-      if (data == null) {
-        print('Video $videoId not found in videos collection');
-        return null;
+    // Use switchMap to handle the incoming stream of ID lists
+    return likedVideoIdsStream.switchMap((videoIds) {
+      // Handle the edge case of an empty list of IDs
+      if (videoIds.isEmpty) {
+        return Stream.value(<LikedVideo>[]);
       }
-      return LikedVideo(
-        id: videoId,
-        title: data['title'] ?? '',
-        channelName: data['channelTitle'] ?? '',
-        thumbnailUrl: data['thumbnailUrl'] ?? '',
-      );
-    } catch (e) {
-      print('Error fetching video $videoId: $e');
-      return null;
-    }
+
+      // Partition the incoming list of IDs into chunks of 10
+      final idChunks = _partition(videoIds, 10);
+
+      // For each chunk, create a Future that fetches the corresponding documents
+      final futures = idChunks.map((chunk) {
+        return _firestore
+            .collection('videos')
+            .where(FieldPath.documentId, whereIn: chunk)
+            .get()
+            .then((snapshot) => snapshot.docs);
+      }).toList();
+
+      // Use Future.wait to execute all fetch operations in parallel
+      return Stream.fromFuture(Future.wait(futures)).map((listOfListOfDocs) {
+        // Flatten the nested list
+        final flatList = listOfListOfDocs.expand((docList) => docList).toList();
+
+        // Map the raw DocumentSnapshots to our strongly-typed LikedVideo model objects
+        final videos = flatList.map((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          return LikedVideo(
+            id: doc.id,
+            title: data['title'] ?? '',
+            channelName: data['channelTitle'] ?? '',
+            thumbnailUrl: data['thumbnailUrl'] ?? '',
+          );
+        }).toList();
+
+        // Re-order the results to match the original order
+        final videosById = {for (var video in videos) video.id: video};
+        final orderedVideos = videoIds
+            .map((id) => videosById[id])
+            .whereType<
+              LikedVideo
+            >() // Filter out nulls in case a video was deleted
+            .toList();
+
+        return orderedVideos;
+      });
+    });
   }
 }
