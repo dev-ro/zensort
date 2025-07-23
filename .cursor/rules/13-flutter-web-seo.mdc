@@ -1,0 +1,590 @@
+# Flutter Web SEO: Search Engine Optimization
+
+ZenSort's web presence requires comprehensive SEO implementation to ensure discoverability and proper indexing by search engines.
+
+## 1. Foundational SEO Architecture
+
+### 1.1 HTML Renderer Requirement (MANDATORY)
+
+Flutter Web MUST use the HTML renderer for all production builds where SEO is required. The CanvasKit renderer is invisible to search crawlers.
+
+**Build Configuration:**
+```bash
+# MANDATORY: Use HTML renderer for production
+flutter build web --web-renderer html --release
+
+# FORBIDDEN: CanvasKit renderer for SEO builds
+flutter build web --web-renderer canvaskit  # Only for app-like experiences
+```
+
+**Environment Detection:**
+```dart
+// main.dart - Renderer selection logic
+void main() {
+  if (kIsWeb) {
+    // Ensure HTML renderer is used in production
+    runApp(const ZenSortApp());
+  } else {
+    runApp(const ZenSortApp());
+  }
+}
+```
+
+### 1.2 Core Web Vitals Impact
+
+SEO rankings are directly affected by Core Web Vitals. The HTML renderer choice impacts:
+- **Largest Contentful Paint (LCP):** Must be < 2.5 seconds
+- **First Input Delay (FID):** Must be < 100 milliseconds
+- **Cumulative Layout Shift (CLS):** Must be < 0.1
+
+## 2. URL Structure and Routing
+
+### 2.1 Clean URL Architecture
+
+You MUST use `go_router` to implement clean, path-based URLs that are search-engine friendly.
+
+```dart
+// router.dart - SEO-friendly routing
+final GoRouter router = GoRouter(
+  routes: [
+    GoRoute(
+      path: '/',
+      name: 'home',
+      builder: (context, state) => const HomePage(),
+    ),
+    GoRoute(
+      path: '/videos',
+      name: 'videos',
+      builder: (context, state) => const VideosPage(),
+    ),
+    GoRoute(
+      path: '/videos/:videoId',
+      name: 'video-detail',
+      builder: (context, state) {
+        final videoId = state.pathParameters['videoId']!;
+        return VideoDetailPage(videoId: videoId);
+      },
+    ),
+    GoRoute(
+      path: '/about',
+      name: 'about',
+      builder: (context, state) => const AboutPage(),
+    ),
+  ],
+);
+```
+
+### 2.2 URL Best Practices
+
+**✅ CORRECT: SEO-friendly URLs**
+- `https://zensort.app/videos`
+- `https://zensort.app/videos/abc123`
+- `https://zensort.app/about`
+
+**❌ FORBIDDEN: Hash-based URLs**
+- `https://zensort.app/#/videos`
+- `https://zensort.app/#/videos/abc123`
+
+## 3. Dynamic Metadata Management
+
+### 3.1 Page-Specific Metadata
+
+Every route MUST have unique, descriptive metadata that updates dynamically based on content.
+
+```dart
+// seo_metadata.dart
+class SEOMetadata {
+  final String title;
+  final String description;
+  final String? imageUrl;
+  final String? canonicalUrl;
+  final Map<String, String> openGraph;
+  final Map<String, String> twitter;
+
+  const SEOMetadata({
+    required this.title,
+    required this.description,
+    this.imageUrl,
+    this.canonicalUrl,
+    this.openGraph = const {},
+    this.twitter = const {},
+  });
+
+  static SEOMetadata forVideoDetail(Video video) {
+    return SEOMetadata(
+      title: '${video.title} - ZenSort',
+      description: 'Organize and discover: ${video.description.length > 150 
+          ? video.description.substring(0, 147) + '...' 
+          : video.description}',
+      imageUrl: video.maxResThumbnailUrl,
+      canonicalUrl: 'https://zensort.app/videos/${video.id}',
+      openGraph: {
+        'og:title': video.title,
+        'og:description': video.description,
+        'og:image': video.maxResThumbnailUrl,
+        'og:type': 'video.other',
+        'og:url': 'https://zensort.app/videos/${video.id}',
+      },
+      twitter: {
+        'twitter:card': 'summary_large_image',
+        'twitter:title': video.title,
+        'twitter:description': video.description,
+        'twitter:image': video.maxResThumbnailUrl,
+      },
+    );
+  }
+}
+```
+
+### 3.2 Client-Side Metadata Updates
+
+For client-side metadata updates, use the `flutter_web_plugins` approach:
+
+```dart
+// seo_service.dart
+import 'dart:html' as html;
+
+class SEOService {
+  static void updateMetadata(SEOMetadata metadata) {
+    // Update page title
+    html.document.title = metadata.title;
+    
+    // Update meta description
+    _updateMetaTag('name', 'description', metadata.description);
+    
+    // Update canonical URL
+    if (metadata.canonicalUrl != null) {
+      _updateLinkTag('rel', 'canonical', metadata.canonicalUrl!);
+    }
+    
+    // Update Open Graph tags
+    metadata.openGraph.forEach((property, content) {
+      _updateMetaTag('property', property, content);
+    });
+    
+    // Update Twitter Card tags
+    metadata.twitter.forEach((name, content) {
+      _updateMetaTag('name', name, content);
+    });
+  }
+  
+  static void _updateMetaTag(String attribute, String value, String content) {
+    html.MetaElement? existing = html.document.querySelector(
+      'meta[$attribute="$value"]'
+    ) as html.MetaElement?;
+    
+    if (existing != null) {
+      existing.content = content;
+    } else {
+      final meta = html.MetaElement()
+        ..setAttribute(attribute, value)
+        ..content = content;
+      html.document.head!.append(meta);
+    }
+  }
+  
+  static void _updateLinkTag(String attribute, String value, String href) {
+    html.LinkElement? existing = html.document.querySelector(
+      'link[$attribute="$value"]'
+    ) as html.LinkElement?;
+    
+    if (existing != null) {
+      existing.href = href;
+    } else {
+      final link = html.LinkElement()
+        ..setAttribute(attribute, value)
+        ..href = href;
+      html.document.head!.append(link);
+    }
+  }
+}
+```
+
+### 3.3 Route-Based Metadata Integration
+
+```dart
+// Integrate SEO metadata with routing
+class VideoDetailPage extends StatefulWidget {
+  final String videoId;
+  
+  const VideoDetailPage({super.key, required this.videoId});
+  
+  @override
+  State<VideoDetailPage> createState() => _VideoDetailPageState();
+}
+
+class _VideoDetailPageState extends State<VideoDetailPage> {
+  Video? _video;
+  
+  @override
+  void initState() {
+    super.initState();
+    _loadVideo();
+  }
+  
+  Future<void> _loadVideo() async {
+    final video = await VideoRepository.getVideo(widget.videoId);
+    if (video != null && mounted) {
+      setState(() {
+        _video = video;
+      });
+      
+      // Update SEO metadata when video loads
+      final metadata = SEOMetadata.forVideoDetail(video);
+      SEOService.updateMetadata(metadata);
+    }
+  }
+  
+  @override
+  Widget build(BuildContext context) {
+    if (_video == null) {
+      return const Scaffold(
+        body: Center(child: ZenSortLoader()),
+      );
+    }
+    
+    return Scaffold(
+      appBar: AppBar(title: Text(_video!.title)),
+      body: VideoDetailContent(video: _video!),
+    );
+  }
+}
+```
+
+## 4. Structured Data Implementation
+
+### 4.1 JSON-LD Schema Markup
+
+Implement structured data using JSON-LD format for rich search results.
+
+```dart
+// structured_data.dart
+class StructuredDataService {
+  static Map<String, dynamic> createVideoSchema(Video video) {
+    return {
+      '@context': 'https://schema.org',
+      '@type': 'VideoObject',
+      'name': video.title,
+      'description': video.description,
+      'thumbnailUrl': video.maxResThumbnailUrl,
+      'uploadDate': video.publishedAt.toIso8601String(),
+      'duration': 'PT${video.durationSeconds}S', // ISO 8601 duration
+      'embedUrl': 'https://zensort.app/videos/${video.id}',
+      'creator': {
+        '@type': 'Person',
+        'name': video.channelName,
+      },
+      'publisher': {
+        '@type': 'Organization',
+        'name': 'ZenSort',
+        'logo': {
+          '@type': 'ImageObject',
+          'url': 'https://zensort.app/assets/images/zensort_logo.png'
+        }
+      }
+    };
+  }
+  
+  static Map<String, dynamic> createOrganizationSchema() {
+    return {
+      '@context': 'https://schema.org',
+      '@type': 'Organization',
+      'name': 'ZenSort',
+      'description': 'Digital organization tool with a minimalist, clean, and calming design',
+      'url': 'https://zensort.app',
+      'logo': 'https://zensort.app/assets/images/zensort_logo.png',
+      'sameAs': [
+        // Add social media profiles when available
+      ]
+    };
+  }
+  
+  static void injectStructuredData(Map<String, dynamic> schema) {
+    final script = html.ScriptElement()
+      ..type = 'application/ld+json'
+      ..text = jsonEncode(schema);
+    
+    html.document.head!.append(script);
+  }
+}
+```
+
+### 4.2 Rich Snippets for Videos
+
+```dart
+// Use structured data for enhanced search results
+void setupVideoPageStructuredData(Video video) {
+  final videoSchema = StructuredDataService.createVideoSchema(video);
+  StructuredDataService.injectStructuredData(videoSchema);
+  
+  // Add breadcrumb navigation
+  final breadcrumbSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    'itemListElement': [
+      {
+        '@type': 'ListItem',
+        'position': 1,
+        'name': 'Home',
+        'item': 'https://zensort.app'
+      },
+      {
+        '@type': 'ListItem',
+        'position': 2,
+        'name': 'Videos',
+        'item': 'https://zensort.app/videos'
+      },
+      {
+        '@type': 'ListItem',
+        'position': 3,
+        'name': video.title,
+        'item': 'https://zensort.app/videos/${video.id}'
+      }
+    ]
+  };
+  
+  StructuredDataService.injectStructuredData(breadcrumbSchema);
+}
+```
+
+## 5. Performance Optimization for SEO
+
+### 5.1 Code Splitting for Faster Loading
+
+```dart
+// Implement deferred loading for better LCP
+import 'package:zensort/features/analytics/analytics.dart' deferred as analytics;
+import 'package:zensort/features/admin/admin.dart' deferred as admin;
+
+class AppRouter {
+  static final GoRouter router = GoRouter(
+    routes: [
+      GoRoute(
+        path: '/analytics',
+        builder: (context, state) => FutureBuilder(
+          future: analytics.loadLibrary(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.done) {
+              return analytics.AnalyticsPage();
+            }
+            return const ZenSortLoader();
+          },
+        ),
+      ),
+    ],
+  );
+}
+```
+
+### 5.2 Image Optimization
+
+```dart
+// Implement responsive images for better performance
+class ResponsiveImage extends StatelessWidget {
+  final String imageUrl;
+  final String alt;
+  final double? width;
+  final double? height;
+  
+  const ResponsiveImage({
+    super.key,
+    required this.imageUrl,
+    required this.alt,
+    this.width,
+    this.height,
+  });
+  
+  @override
+  Widget build(BuildContext context) {
+    return Image.network(
+      imageUrl,
+      width: width,
+      height: height,
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return SizedBox(
+          width: width,
+          height: height,
+          child: const ZenSortLoader(),
+        );
+      },
+      errorBuilder: (context, error, stackTrace) {
+        return Container(
+          width: width,
+          height: height,
+          color: Colors.grey[300],
+          child: const Icon(Icons.broken_image),
+        );
+      },
+    );
+  }
+}
+```
+
+## 6. Server-Side Rendering Alternative
+
+### 6.1 Prerendering Strategy
+
+Since Flutter Web doesn't support true SSR, implement prerendering for critical pages:
+
+```python
+# Cloud Function for prerendering
+def prerender_page(request):
+    """Prerender pages for search engine crawlers."""
+    
+    user_agent = request.headers.get('User-Agent', '').lower()
+    
+    # Detect search engine crawlers
+    crawlers = ['googlebot', 'bingbot', 'slurp', 'duckduckbot', 'facebookexternalhit']
+    is_crawler = any(crawler in user_agent for crawler in crawlers)
+    
+    if is_crawler:
+        # Return prerendered HTML with metadata
+        return render_static_html(request.path)
+    else:
+        # Redirect to main Flutter app
+        return redirect('https://zensort.app')
+
+def render_static_html(path):
+    """Generate static HTML with proper metadata."""
+    
+    if path.startswith('/videos/'):
+        video_id = path.split('/')[-1]
+        video_data = get_video_data(video_id)
+        
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>{video_data['title']} - ZenSort</title>
+            <meta name="description" content="{video_data['description'][:160]}">
+            <meta property="og:title" content="{video_data['title']}">
+            <meta property="og:description" content="{video_data['description'][:160]}">
+            <meta property="og:image" content="{video_data['thumbnail']}">
+            <meta property="og:url" content="https://zensort.app{path}">
+            <script type="application/ld+json">
+            {generate_video_schema(video_data)}
+            </script>
+        </head>
+        <body>
+            <h1>{video_data['title']}</h1>
+            <p>{video_data['description']}</p>
+            <img src="{video_data['thumbnail']}" alt="{video_data['title']}">
+        </body>
+        </html>
+        """
+    
+    return render_default_page()
+```
+
+## 7. SEO Monitoring and Analytics
+
+### 7.1 Core Web Vitals Tracking
+
+```dart
+// web_vitals_tracker.dart
+class WebVitalsTracker {
+  static void trackCoreWebVitals() {
+    if (kIsWeb) {
+      _trackLCP();
+      _trackFID();
+      _trackCLS();
+    }
+  }
+  
+  static void _trackLCP() {
+    // Track Largest Contentful Paint
+    js.context.callMethod('eval', ['''
+      new PerformanceObserver((entryList) => {
+        for (const entry of entryList.getEntries()) {
+          if (entry.element) {
+            console.log('LCP:', entry.startTime);
+            // Send to analytics
+          }
+        }
+      }).observe({entryTypes: ['largest-contentful-paint']});
+    ''']);
+  }
+  
+  static void _trackFID() {
+    // Track First Input Delay
+    js.context.callMethod('eval', ['''
+      new PerformanceObserver((entryList) => {
+        for (const entry of entryList.getEntries()) {
+          console.log('FID:', entry.processingStart - entry.startTime);
+          // Send to analytics
+        }
+      }).observe({entryTypes: ['first-input']});
+    ''']);
+  }
+  
+  static void _trackCLS() {
+    // Track Cumulative Layout Shift
+    js.context.callMethod('eval', ['''
+      let clsValue = 0;
+      new PerformanceObserver((entryList) => {
+        for (const entry of entryList.getEntries()) {
+          if (!entry.hadRecentInput) {
+            clsValue += entry.value;
+            console.log('CLS:', clsValue);
+            // Send to analytics
+          }
+        }
+      }).observe({entryTypes: ['layout-shift']});
+    ''']);
+  }
+}
+```
+
+## 8. SEO Checklist
+
+Before deploying any public-facing page:
+
+- [ ] HTML renderer configured for build
+- [ ] Clean, descriptive URLs implemented
+- [ ] Unique page titles and meta descriptions
+- [ ] Open Graph and Twitter Card tags
+- [ ] Structured data (JSON-LD) implemented
+- [ ] Images have proper alt text
+- [ ] Core Web Vitals optimized (LCP < 2.5s, FID < 100ms, CLS < 0.1)
+- [ ] Mobile responsiveness verified
+- [ ] Internal linking structure implemented
+- [ ] XML sitemap generated (if applicable)
+- [ ] robots.txt configured properly
+
+## 9. Common SEO Anti-Patterns to Avoid
+
+### 9.1 Technical Anti-Patterns
+
+```dart
+// ❌ FORBIDDEN: Using CanvasKit for public pages
+flutter build web --web-renderer canvaskit  // Invisible to crawlers
+
+// ❌ FORBIDDEN: Hash-based routing
+GoRouter(
+  routerDelegate: GoRouterDelegate(
+    routes: [
+      GoRoute(path: '/#/videos'), // Search engines can't crawl this
+    ],
+  ),
+);
+
+// ❌ FORBIDDEN: Generic metadata for all pages
+class BadSEOService {
+  static void setGenericMetadata() {
+    html.document.title = 'ZenSort'; // Same title everywhere
+    _updateMetaTag('description', 'An app'); // Generic description
+  }
+}
+```
+
+### 9.2 Content Anti-Patterns
+
+- Don't stuff keywords unnaturally in content
+- Avoid duplicate content across multiple URLs
+- Don't hide text or use invisible text
+- Avoid excessive internal linking without context
+- Don't neglect mobile optimization
+
+For comprehensive SEO implementation details, refer to:
+- `docs/Agent Guide - SEO for Flutter Web Apps.md`
