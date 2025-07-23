@@ -135,6 +135,11 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
 
     // Use switchMap to handle the incoming stream of ID lists
     return likedVideoIdsStream.switchMap((videoIds) {
+      // At the start of switchMap callback
+      print(
+        '=== REPO: switchMap received ${videoIds.length} video IDs: $videoIds',
+      );
+
       // Handle the edge case of an empty list of IDs
       if (videoIds.isEmpty) {
         return Stream.value(<LikedVideo>[]);
@@ -142,6 +147,8 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
 
       // Partition the incoming list of IDs into chunks of 10
       final idChunks = _partition(videoIds, 10);
+      // After partitioning
+      print('=== REPO: Partitioned into ${idChunks.length} chunks: $idChunks');
 
       // For each chunk, create a Future that fetches the corresponding documents
       final futures = idChunks.map((chunk) {
@@ -152,10 +159,16 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
             .then((snapshot) => snapshot.docs);
       }).toList();
 
+      // Before Future.wait
+      print('=== REPO: Executing ${futures.length} parallel queries');
+
       // Use Future.wait to execute all fetch operations in parallel
       return Stream.fromFuture(Future.wait(futures)).map((listOfListOfDocs) {
         // Flatten the nested list
         final flatList = listOfListOfDocs.expand((docList) => docList).toList();
+
+        // In the final map transformation
+        print('=== REPO: Firestore returned ${flatList.length} raw documents');
 
         // Map the raw DocumentSnapshots to our strongly-typed LikedVideo model objects
         final videos = flatList.map((doc) {
@@ -168,6 +181,8 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
           );
         }).toList();
 
+        print('=== REPO: Mapped to ${videos.length} LikedVideo objects');
+
         // Re-order the results to match the original order
         final videosById = {for (var video in videos) video.id: video};
         final orderedVideos = videoIds
@@ -176,6 +191,11 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
               LikedVideo
             >() // Filter out nulls in case a video was deleted
             .toList();
+
+        print('=== REPO: Final ordered result: ${orderedVideos.length} videos');
+        print(
+          '=== REPO: Video titles: ${orderedVideos.map((v) => v.title).take(3).toList()}...',
+        );
 
         return orderedVideos;
       });

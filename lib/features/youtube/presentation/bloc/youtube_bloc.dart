@@ -38,7 +38,8 @@ class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
     final authState = event.authState;
 
     if (authState is Authenticated) {
-      print('=== YouTubeBloc: User authenticated, setting up reactive streams ===');
+      print('=== BLOC: User authenticated, current state before setup: $state');
+      print('=== BLOC: User authenticated, setting up reactive streams ===');
       emit(YoutubeLoading());
 
       // Cancel existing subscriptions
@@ -54,25 +55,33 @@ class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
           );
 
       // Set up reactive liked videos stream
-      _likedVideosSubscription = _youtubeRepository
-          .watchLikedVideos()
-          .listen(
-            (videos) {
-              print('Received ${videos.length} videos from reactive stream');
-              emit(YoutubeLoaded(videos: videos));
-            },
-            onError: (error) {
-              print('Error in liked videos stream: $error');
-              emit(YoutubeFailure(error.toString()));
-            },
+      _likedVideosSubscription = _youtubeRepository.watchLikedVideos().listen(
+        (videos) {
+          print(
+            '=== BLOC: Received ${videos.length} videos from repository stream',
           );
+          print(
+            '=== BLOC: Sample video data: ${videos.take(2).map((v) => v.title).toList()}',
+          );
+          print('=== BLOC: About to emit YoutubeLoaded state');
+          emit(YoutubeLoaded(videos: videos));
+          print('=== BLOC: YoutubeLoaded state emitted successfully');
+        },
+        onError: (error) {
+          print('=== BLOC ERROR: Error in liked videos stream: $error');
+          emit(YoutubeFailure(error.toString()));
+        },
+      );
+      print('=== BLOC: Reactive streams setup complete');
     } else if (authState is AuthUnauthenticated) {
       // User is not authenticated - clear state and cancel subscriptions
+      print('=== BLOC: User unauthenticated, clearing state from: $state');
       _syncProgressSubscription?.cancel();
       _likedVideosSubscription?.cancel();
       _syncProgressSubscription = null;
       _likedVideosSubscription = null;
       emit(YoutubeInitial());
+      print('=== BLOC: State cleared to YoutubeInitial');
     }
     // Ignore AuthLoading, AuthInitial, and AuthError states
   }

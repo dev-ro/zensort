@@ -77,6 +77,16 @@ class HomeScreen extends StatelessWidget {
           }
         },
         builder: (context, state) {
+          print('=== UI: BlocBuilder received state: ${state.runtimeType}');
+          if (state is YoutubeLoaded) {
+            print(
+              '=== UI: YoutubeLoaded contains ${state.videos.length} videos',
+            );
+            print(
+              '=== UI: First 2 video titles: ${state.videos.take(2).map((v) => v.title).toList()}',
+            );
+          }
+
           if (state is YoutubeLoading || state is YoutubeInitial) {
             return const Center(child: GradientLoader());
           }
