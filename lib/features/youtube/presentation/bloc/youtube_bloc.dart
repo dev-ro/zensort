@@ -24,6 +24,8 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     on<SyncLikedVideos>(_onSyncLikedVideos);
     on<_YoutubeSyncProgressUpdated>(_onYoutubeSyncProgressUpdated);
     on<_AuthStatusChanged>(_onAuthStatusChanged, transformer: restartable());
+    on<_LikedVideosUpdated>(_onLikedVideosUpdated);
+    on<_LikedVideosError>(_onLikedVideosError);
 
     // Listen to AuthBloc's stable authentication state (hierarchical flow)
     // Repository -> AuthBloc -> YouTubeBloc
@@ -57,10 +59,10 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
       // Set up reactive liked videos stream
       _likedVideosSubscription = _youtubeRepository.watchLikedVideos().listen(
         (videos) {
-          emit(YoutubeLoaded(videos: videos));
+          add(_LikedVideosUpdated(videos));
         },
         onError: (error) {
-          emit(YoutubeFailure(error.toString()));
+          add(_LikedVideosError(error.toString()));
         },
       );
     } else if (authState is AuthUnauthenticated) {
@@ -103,6 +105,24 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     } else if (progress.status == SyncStatus.failed) {
       emit(const YoutubeFailure('Video sync failed.'));
     }
+  }
+
+  /// Handles liked videos data from repository stream
+  /// SAFE: emit() called within event handler context - follows reactive repository pattern
+  void _onLikedVideosUpdated(
+    _LikedVideosUpdated event,
+    Emitter<YoutubeState> emit,
+  ) {
+    emit(YoutubeLoaded(videos: event.videos));
+  }
+
+  /// Handles stream errors from repository
+  /// SAFE: emit() called within event handler context
+  void _onLikedVideosError(
+    _LikedVideosError event,
+    Emitter<YoutubeState> emit,
+  ) {
+    emit(YoutubeFailure(event.message));
   }
 
   @override
