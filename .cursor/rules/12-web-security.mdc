@@ -1,0 +1,387 @@
+---
+title: Web Security: Authentication & Browser Storage
+---
+
+# Web Security: Authentication & Browser Storage
+
+ZenSort's web-first architecture requires strict security practices to protect user data and prevent common web vulnerabilities.
+
+## 1. Cross-Site Scripting (XSS) Prevention
+
+### 1.1 The Primary Threat
+
+XSS attacks occur when malicious JavaScript code executes within the context of a trusted website. This can happen through:
+- Application input handling vulnerabilities
+- Compromised third-party scripts or libraries
+- Malicious browser extensions
+
+**Critical Principle:** Any data stored in browser storage (localStorage, IndexedDB) is accessible to any JavaScript code running on the same origin.
+
+### 1.2 Browser Storage Security Rules
+
+### 1.2.1 NEVER Store Sensitive Data
+
+The following data types are STRICTLY FORBIDDEN from browser storage:
+
+**Authentication & Authorization:**
+- JSON Web Tokens (JWTs)
+- API keys or access tokens
+- Session identifiers
+- OAuth refresh tokens
+
+**Personal & Financial:**
+- Personally Identifiable Information (PII)
+- Email addresses, phone numbers, physical addresses
+- Credit card numbers or payment information
+- Social Security Numbers or government IDs
+
+**Business Critical:**
+- Private health records
+- Trade secrets or proprietary information
+- Encryption keys or passwords
+
+### 1.2.2 Safe-to-Store Data
+
+Browser storage should ONLY contain non-sensitive UI state:
+
+```dart
+// ✅ SAFE: UI preferences and non-sensitive state
+class SafeBrowserState {
+  final String selectedTheme; // 'light' or 'dark'
+  final String preferredLanguage; // 'en', 'es', etc.
+  final int lastSelectedTabIndex;
+  final bool hasSeenOnboarding;
+  final List<String> collapsedSectionIds;
+}
+
+// ❌ DANGEROUS: Never store sensitive data
+class DangerousState {
+  final String jwtToken; // FORBIDDEN
+  final String userEmail; // FORBIDDEN
+  final String apiKey; // FORBIDDEN
+}
+```
+
+## 2. Secure Authentication Architecture
+
+### 2.1 HttpOnly Cookie Pattern (MANDATORY)
+
+All authentication tokens MUST use server-set HttpOnly cookies to prevent XSS token theft.
+
+**Server Implementation (Python Cloud Functions):**
+```python
+from flask import make_response
+import datetime
+
+def login_endpoint():
+    # After successful authentication
+    response = make_response({'status': 'authenticated'})
+    
+    # MANDATORY: Set secure authentication cookie
+    response.set_cookie(
+        'session_token', 
+        jwt_token,
+        httponly=True,      # Prevents JavaScript access (XSS protection)
+        secure=True,        # HTTPS only
+        samesite='Strict',  # CSRF protection
+        max_age=3600       # 1 hour expiration
+    )
+    
+    return response
+```
+
+**Client Implementation:**
+```dart
+// ✅ CORRECT: Derive auth state from API calls, not stored tokens
+class AuthRepository {
+  Future<AuthState> checkAuthStatus() async {
+    try {
+      // Cookie is automatically sent with this request
+      final response = await http.get('/api/protected-endpoint');
+      
+      if (response.statusCode == 200) {
+        return AuthState.authenticated(userFromResponse(response));
+      } else {
+        return AuthState.unauthenticated();
+      }
+    } catch (e) {
+      return AuthState.unauthenticated();
+    }
+  }
+}
+
+// ❌ FORBIDDEN: Never access or store tokens in Flutter
+class BadAuthRepository {
+  String? _storedToken; // NEVER DO THIS
+  
+  Future<void> login() async {
+    final token = await getTokenFromApi();
+    _storedToken = token; // VULNERABLE TO XSS
+    localStorage.setItem('token', token); // EXTREMELY DANGEROUS
+  }
+}
+```
+
+### 2.2 Authentication State Management
+
+```dart
+class AuthenticationRepository {
+  final _statusController = BehaviorSubject<AuthStatus>.seeded(
+    AuthStatus.unknown
+  );
+  
+  Stream<AuthStatus> get status => _statusController.stream;
+  
+  Future<void> checkInitialStatus() async {
+    // Verify authentication by calling a protected endpoint
+    try {
+      final response = await _apiClient.get('/api/user/profile');
+      if (response.statusCode == 200) {
+        _statusController.add(AuthStatus.authenticated);
+      } else {
+        _statusController.add(AuthStatus.unauthenticated);
+      }
+    } catch (_) {
+      _statusController.add(AuthStatus.unauthenticated);
+    }
+  }
+}
+```
+
+## 3. Input Validation & Sanitization
+
+### 3.1 Client-Side Validation
+
+All user inputs MUST be validated on the client side for UX, but never trust client-side validation for security.
+
+```dart
+class SecureInputValidator {
+  static String? validateEmail(String? email) {
+    if (email == null || email.isEmpty) {
+      return 'Email is required';
+    }
+    
+    final emailRegex = RegExp(r'^[^@]+@[^@]+\.[^@]+$');
+    if (!emailRegex.hasMatch(email)) {
+      return 'Please enter a valid email';
+    }
+    
+    return null;
+  }
+  
+  static String? validatePassword(String? password) {
+    if (password == null || password.isEmpty) {
+      return 'Password is required';
+    }
+    
+    if (password.length < 8) {
+      return 'Password must be at least 8 characters';
+    }
+    
+    return null;
+  }
+}
+```
+
+### 3.2 Server-Side Validation (MANDATORY)
+
+All inputs MUST be validated and sanitized on the server side:
+
+```python
+import re
+from html import escape
+
+def validate_and_sanitize_input(user_input: str) -> str:
+    """Validate and sanitize user input to prevent XSS and injection attacks."""
+    
+    # Remove potential script tags and dangerous HTML
+    cleaned = re.sub(r'<script.*?</script>', '', user_input, flags=re.IGNORECASE)
+    cleaned = re.sub(r'javascript:', '', cleaned, flags=re.IGNORECASE)
+    
+    # HTML escape to prevent XSS
+    sanitized = escape(cleaned)
+    
+    return sanitized.strip()
+```
+
+## 4. API Security
+
+### 4.1 CORS Configuration
+
+Cloud Functions MUST properly handle CORS for web clients:
+
+```python
+def cloud_function_handler(request):
+    # Handle preflight OPTIONS request
+    if request.method == 'OPTIONS':
+        headers = {
+            'Access-Control-Allow-Origin': get_allowed_origin(),
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Max-Age': '3600'
+        }
+        return ('', 204, headers)
+    
+    # Process main request
+    response_data = process_request(request)
+    
+    headers = {
+        'Access-Control-Allow-Origin': get_allowed_origin(),
+        'Content-Type': 'application/json'
+    }
+    
+    return (response_data, 200, headers)
+
+def get_allowed_origin():
+    """Return appropriate origin based on environment."""
+    import os
+    env = os.getenv('ENVIRONMENT', 'dev')
+    
+    if env == 'prod':
+        return 'https://zensort.app'
+    else:
+        return 'http://localhost:7357'  # Dev environment
+```
+
+### 4.2 Request Validation
+
+```python
+def validate_api_request(request):
+    """Validate incoming API requests."""
+    
+    # Check content type
+    if request.content_type != 'application/json':
+        raise ValueError('Invalid content type')
+    
+    # Validate required headers
+    if 'User-Agent' not in request.headers:
+        raise ValueError('Missing User-Agent header')
+    
+    # Rate limiting (implement with Firebase Functions quotas)
+    # Authentication verification (check cookie automatically sent)
+    
+    return True
+```
+
+## 5. Dependency Security
+
+### 5.1 Package Auditing
+
+Regularly audit Flutter and Python dependencies for security vulnerabilities:
+
+```bash
+# Flutter dependency audit
+flutter pub deps --json | flutter pub audit
+
+# Python dependency audit (in functions directory)
+pip-audit
+```
+
+### 5.2 Trusted Package Sources
+
+- Only use packages from pub.dev with high popularity scores
+- Review package source code for sensitive operations
+- Prefer packages with active maintenance and security updates
+- Avoid packages with excessive permissions or unclear purposes
+
+## 6. Environment-Specific Security
+
+### 6.1 Development Environment
+
+```dart
+// Secure development configuration
+class DevSecurityConfig {
+  static const String allowedOrigin = 'http://localhost:7357';
+  static const bool enableDebugLogging = true;
+  static const bool requireHttps = false; // Only for local dev
+}
+```
+
+### 6.2 Production Environment
+
+```dart
+// Production security configuration
+class ProdSecurityConfig {
+  static const String allowedOrigin = 'https://zensort.app';
+  static const bool enableDebugLogging = false;
+  static const bool requireHttps = true;
+  static const bool enableSecurityHeaders = true;
+}
+```
+
+## 7. Security Monitoring
+
+### 7.1 Error Handling
+
+Never expose sensitive information in error messages:
+
+```dart
+// ✅ SECURE: Generic error messages for users
+class SecureErrorHandler {
+  static String getPublicErrorMessage(Exception error) {
+    // Log detailed error privately
+    developer.log('Detailed error: $error');
+    
+    // Return generic message to user
+    return 'An error occurred. Please try again.';
+  }
+}
+
+// ❌ INSECURE: Exposing internal details
+class InsecureErrorHandler {
+  static String getErrorMessage(Exception error) {
+    return error.toString(); // May expose sensitive details
+  }
+}
+```
+
+### 7.2 Logging Security
+
+```dart
+import 'dart:developer' as developer;
+
+class SecureLogger {
+  static void logError(String message, {Object? error}) {
+    // Only log in debug mode or to secure logging service
+    if (kDebugMode) {
+      developer.log(message, error: error);
+    }
+    
+    // In production, send to secure logging service
+    // Never log sensitive user data
+  }
+  
+  static void logUserAction(String action) {
+    // Log user actions without sensitive data
+    developer.log('User action: $action');
+  }
+}
+```
+
+## 8. Security Checklist
+
+Before deploying any feature:
+
+- [ ] No JWT tokens or API keys stored in browser
+- [ ] All authentication uses HttpOnly cookies
+- [ ] User inputs validated on both client and server
+- [ ] CORS properly configured for environment
+- [ ] Error messages don't expose sensitive data
+- [ ] Dependencies audited for vulnerabilities
+- [ ] All HTTP requests use HTTPS in production
+- [ ] Security headers properly configured
+
+## 9. Incident Response
+
+If a security vulnerability is discovered:
+
+1. **Immediate:** Disable affected functionality if critical
+2. **Assessment:** Determine scope and impact
+3. **Fix:** Implement and test security patch
+4. **Deploy:** Use emergency deployment process if needed
+5. **Monitor:** Watch for continued exploitation attempts
+6. **Document:** Record incident and lessons learned
+
+For detailed security patterns and implementation guidance, refer to:
+- `docs/BLoC/Flutter Web BLoC State Persistence_.txt` (Security sections)
+- `docs/Agent Guide - Writing Legal Docs.md` (Privacy requirements)
