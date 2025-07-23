@@ -10,15 +10,28 @@ class AuthGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Connect to the central state authority - AuthBloc provides stable authentication state
+    // This establishes the hierarchical flow: Repository -> AuthBloc -> UI
     return BlocBuilder<AuthBloc, AuthState>(
       builder: (context, state) {
+        // Show loading during initial state or loading
+        if (state is AuthInitial || state is AuthLoading) {
+          return const Scaffold(body: Center(child: GradientLoader(size: 40)));
+        }
+
+        // If user is authenticated, show the main app
         if (state is Authenticated) {
           return const HomeScreen();
         }
-        if (state is AuthUnauthenticated) {
-          return const SignInScreen();
+
+        // Show error state temporarily, then fall back to sign-in
+        if (state is AuthError) {
+          // In production, you might want to show an error dialog
+          // For now, fall through to sign-in screen
         }
-        return const Scaffold(body: Center(child: GradientLoader(size: 40)));
+
+        // Default to sign-in screen for unauthenticated or error states
+        return const SignInScreen();
       },
     );
   }

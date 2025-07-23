@@ -7,7 +7,9 @@ abstract class YoutubeEvent extends Equatable {
   List<Object> get props => [];
 }
 
-class LoadLikedVideos extends YoutubeEvent {}
+class InitialVideosLoaded extends YoutubeEvent {}
+
+class MoreVideosLoaded extends YoutubeEvent {}
 
 class SyncLikedVideos extends YoutubeEvent {}
 
@@ -20,11 +22,13 @@ class _YoutubeSyncProgressUpdated extends YoutubeEvent {
   List<Object> get props => [progress];
 }
 
-class _LikedVideosUpdated extends YoutubeEvent {
-  final List<LikedVideo> videos;
+/// Internal event carrying AuthState from AuthBloc to YouTubeBloc
+/// Establishes hierarchical flow: Repository -> AuthBloc -> YouTubeBloc
+class _AuthStatusChanged extends YoutubeEvent {
+  final AuthState authState;
 
-  const _LikedVideosUpdated(this.videos);
+  const _AuthStatusChanged(this.authState);
 
   @override
-  List<Object> get props => [videos];
+  List<Object> get props => [authState];
 }

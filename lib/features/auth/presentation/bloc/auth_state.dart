@@ -15,9 +15,10 @@ class AuthLoading extends AuthState {
   const AuthLoading();
 }
 
+/// Essential state for authenticated users - contains User object for UI consumption
 class Authenticated extends AuthState {
   final User user;
-  final String? accessToken; // This is nullable to handle app startups
+  final String? accessToken;
 
   const Authenticated({required this.user, this.accessToken});
 

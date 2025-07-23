@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:rxdart/rxdart.dart';
 import 'package:zensort/features/auth/domain/repositories/auth_repository.dart';
 import 'package:zensort/features/auth/domain/entities/sign_in_result.dart';
 
@@ -9,14 +10,29 @@ class AuthRepositoryImpl implements AuthRepository {
   final FirebaseAuth _firebaseAuth;
   final FirebaseFirestore _firestore;
   final GoogleSignIn _googleSignIn = GoogleSignIn(
+    clientId:
+        '630957314497-52e7nhm73i52je3j0uqdfb2lsq5956q9.apps.googleusercontent.com',
     scopes: ['email', 'https://www.googleapis.com/auth/youtube.readonly'],
   );
 
-  AuthRepositoryImpl(this._firebaseAuth, this._firestore);
+  /// BehaviorSubject caches the latest user state and immediately emits it to new subscribers
+  /// This is the single source of truth for authentication status
+  final _userSubject = BehaviorSubject<User?>.seeded(null);
+
+  /// CRITICAL: Single source of truth - only Firebase authStateChanges updates the subject
+  /// This establishes a pure, unidirectional data flow that prevents race conditions
+  AuthRepositoryImpl(this._firebaseAuth, this._firestore) {
+    _firebaseAuth.authStateChanges().listen(_userSubject.add);
+  }
 
   @override
   Stream<User?> get authStateChanges => _firebaseAuth.authStateChanges();
 
+  @override
+  Stream<User?> get currentUser => _userSubject.stream;
+
+  /// Performs Google Sign-In action only - does NOT manually update state
+  /// State updates happen automatically via Firebase authStateChanges listener
   @override
   Future<SignInResult?> signInWithGoogle() async {
     try {
@@ -46,14 +62,14 @@ class AuthRepositoryImpl implements AuthRepository {
             idToken: googleAuth.idToken,
           );
 
-          // 4. Sign in to Firebase
+          // 4. Sign in to Firebase - this triggers authStateChanges automatically
           final UserCredential userCredential = await _firebaseAuth
               .signInWithCredential(credential);
           final User user = userCredential.user!;
 
           await _createUserDocument(user);
 
-          // 5. Return the result with the user AND the accessToken
+          // 5. Return the result - NO manual state updates needed
           return SignInResult(user: user, accessToken: accessToken);
         } catch (e) {
           // Handle errors
@@ -88,10 +104,13 @@ class AuthRepositoryImpl implements AuthRepository {
     }
   }
 
+  /// Performs sign-out action only - does NOT manually update state
+  /// State updates happen automatically via Firebase authStateChanges listener
   @override
   Future<void> signOut() async {
     await _googleSignIn.signOut();
     await _firebaseAuth.signOut();
+    // Firebase authStateChanges will automatically emit null
   }
 
   @override
@@ -106,6 +125,8 @@ class AuthRepositoryImpl implements AuthRepository {
     return null;
   }
 
+  /// Performs silent sign-in only - does NOT manually update state
+  /// Any resulting auth state changes are handled by Firebase authStateChanges listener
   @override
   Future<String?> signInSilentlyWithGoogle() async {
     try {
@@ -125,5 +146,10 @@ class AuthRepositoryImpl implements AuthRepository {
       print('Silent sign-in failed: $e');
       return null;
     }
+  }
+
+  /// Dispose method to close the BehaviorSubject and prevent memory leaks
+  void dispose() {
+    _userSubject.close();
   }
 }

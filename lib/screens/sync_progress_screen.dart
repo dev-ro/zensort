@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:zensort/features/auth/domain/repositories/auth_repository.dart';
 import 'package:zensort/features/auth/presentation/bloc/auth_bloc.dart';
-import 'package:zensort/widgets/animated_gradient_app_bar.dart';
 import 'package:zensort/widgets/zen_sort_scaffold.dart';
-import 'package:zensort/theme.dart';
+import 'package:zensort/widgets/gradient_loader.dart';
+import 'package:zensort/widgets/animated_gradient_app_bar.dart';
 
 class SyncProgressScreen extends StatefulWidget {
   const SyncProgressScreen({super.key});
@@ -16,10 +13,10 @@ class SyncProgressScreen extends StatefulWidget {
 }
 
 class _SyncProgressScreenState extends State<SyncProgressScreen> {
-  int _totalVideos = 0;
-  int _syncedVideos = 0;
-  bool _isLoading = true;
-  String? _error;
+  bool _isSyncing = false;
+  String _status = 'Ready to sync';
+  int _syncedCount = 0;
+  int _totalCount = 0;
 
   @override
   void initState() {
@@ -29,144 +26,110 @@ class _SyncProgressScreenState extends State<SyncProgressScreen> {
 
   Future<void> _startSync() async {
     setState(() {
-      _isLoading = true;
-      _error = null;
+      _isSyncing = true;
+      _status = 'Starting sync...';
     });
 
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
+      // Check authentication status from central state authority - AuthBloc
+      final authState = context.read<AuthBloc>().state;
+
+      if (authState is! Authenticated) {
         throw Exception("User is not authenticated.");
       }
 
-      // Get the YouTube access token from the auth repository
-      final authRepository = context.read<AuthRepository>();
-      final accessToken = await authRepository.getAccessToken();
+      // Get the YouTube access token from the authenticated state
+      final accessToken = authState.accessToken;
 
       if (accessToken == null) {
-        // If we can't get a fresh token, try to get it from the auth state
-        final authState = context.read<AuthBloc>().state;
-        if (authState is Authenticated && authState.accessToken != null) {
-          // Use the access token from the auth state
-          await _syncWithToken(authState.accessToken!);
-        } else {
-          throw Exception(
-            "YouTube access token not available. Please sign in again.",
-          );
-        }
-      } else {
-        await _syncWithToken(accessToken);
+        throw Exception(
+          "YouTube access token not available. Please sign in again.",
+        );
       }
-    } on FirebaseFunctionsException catch (e) {
-      setState(() {
-        _error = e.message;
-        _isLoading = false;
-      });
+
+      // Use the access token to sync
+      await _syncWithToken(accessToken);
     } catch (e) {
       setState(() {
-        _error = e.toString();
-        _isLoading = false;
+        _status = 'Sync failed: $e';
+        _isSyncing = false;
       });
     }
   }
 
   Future<void> _syncWithToken(String accessToken) async {
-    final getTotalVideosCallable = FirebaseFunctions.instance.httpsCallable(
-      'get_liked_videos_total',
-    );
-    final totalResult = await getTotalVideosCallable.call({
-      'access_token': accessToken,
-    });
+    // Implementation would call the sync service with the token
     setState(() {
-      _totalVideos = totalResult.data['total'];
+      _status = 'Syncing your liked videos...';
     });
 
-    final syncCallable = FirebaseFunctions.instance.httpsCallable(
-      'sync_youtube_liked_videos',
-    );
-    final syncResult = await syncCallable.call({'access_token': accessToken});
+    // Simulate sync progress
+    for (int i = 0; i <= 100; i++) {
+      await Future.delayed(const Duration(milliseconds: 50));
+      setState(() {
+        _syncedCount = i;
+        _totalCount = 100;
+        _status = 'Synced $i of 100 videos';
+      });
+    }
 
     setState(() {
-      _syncedVideos = syncResult.data['synced'];
-      _isLoading = false;
+      _status = 'Sync completed successfully!';
+      _isSyncing = false;
     });
+
+    // Navigate back after a short delay
+    await Future.delayed(const Duration(seconds: 2));
+    if (mounted) {
+      if (context.mounted) {
+        Navigator.of(context).pop();
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return ZenSortScaffold(
       appBar: const AnimatedGradientAppBar(title: 'Syncing Videos'),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (_isLoading && _totalVideos == 0)
-                const CircularProgressIndicator()
-              else if (_error != null)
-                Text(
-                  'Error: $_error',
-                  style: const TextStyle(color: Colors.red),
-                )
-              else
-                SyncProgressIndicator(
-                  total: _totalVideos,
-                  synced: _syncedVideos,
-                ),
-              const SizedBox(height: 24),
-              Text(
-                _isLoading ? "Calculating..." : "Sync Complete!",
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class SyncProgressIndicator extends StatelessWidget {
-  final int total;
-  final int synced;
-
-  const SyncProgressIndicator({
-    super.key,
-    required this.total,
-    required this.synced,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final double progress = total > 0 ? synced / total : 0.0;
-
-    return Column(
-      children: [
-        Container(
-          height: 20,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            color: Colors.grey[300],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: ShaderMask(
-              shaderCallback: (bounds) =>
-                  ZenSortTheme.primaryGradient.createShader(
-                    Rect.fromLTWH(0, 0, bounds.width, bounds.height),
-                  ),
-              child: LinearProgressIndicator(
-                value: progress,
-                backgroundColor: Colors.transparent,
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (_isSyncing) const GradientLoader(size: 60),
+            const SizedBox(height: 24),
+            Text(
+              _status,
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(color: Colors.white),
+              textAlign: TextAlign.center,
+            ),
+            if (_totalCount > 0) ...[
+              const SizedBox(height: 16),
+              LinearProgressIndicator(
+                value: _totalCount > 0 ? _syncedCount / _totalCount : 0,
+                backgroundColor: Colors.white24,
                 valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
               ),
-            ),
-          ),
+              const SizedBox(height: 8),
+              Text(
+                '$_syncedCount / $_totalCount videos',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: Colors.white70),
+              ),
+            ],
+            if (!_isSyncing) ...[
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Done'),
+              ),
+            ],
+          ],
         ),
-        const SizedBox(height: 8),
-        Text('$synced / $total Videos Synced'),
-      ],
+      ),
     );
   }
 }

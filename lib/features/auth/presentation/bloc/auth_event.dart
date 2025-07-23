@@ -9,13 +9,15 @@ abstract class AuthEvent extends Equatable {
 
 class AuthStarted extends AuthEvent {}
 
-class _AuthStateChanged extends AuthEvent {
+/// Private event triggered by repository stream changes
+/// Carries User data from repository to AuthBloc for state translation
+class _AuthenticationUserChanged extends AuthEvent {
   final User? user;
 
-  const _AuthStateChanged(this.user);
+  const _AuthenticationUserChanged(this.user);
 
   @override
-  List<Object> get props => [user ?? ''];
+  List<Object> get props => [user ?? 'null'];
 }
 
 class SignInWithGoogleRequested extends AuthEvent {}

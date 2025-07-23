@@ -3,21 +3,25 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:zensort/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:zensort/features/youtube/presentation/bloc/youtube_bloc.dart';
 import 'package:zensort/features/youtube/presentation/widgets/video_list_item.dart';
+import 'package:zensort/screens/sync_progress_screen.dart';
 import 'package:zensort/theme.dart';
 import 'package:zensort/widgets/gradient_loader.dart';
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
-  @override
-  State<HomeScreen> createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends State<HomeScreen> {
-  @override
-  void initState() {
-    super.initState();
-    context.read<YouTubeBloc>().add(LoadLikedVideos());
+  bool _onScrollNotification(
+    ScrollNotification notification,
+    BuildContext context,
+  ) {
+    if (notification is ScrollUpdateNotification && notification.depth == 0) {
+      final metrics = notification.metrics;
+      if (metrics.pixels >= (metrics.maxScrollExtent * 0.9)) {
+        // Trigger when 90% scrolled
+        context.read<YouTubeBloc>().add(MoreVideosLoaded());
+      }
+    }
+    return false;
   }
 
   @override
@@ -32,32 +36,31 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: const Icon(Icons.sync),
             onPressed: isSyncing
                 ? null
-                : () {
+                : () async {
                     try {
-                      print(
-                        'Sync button pressed. Current Auth State: ${context.read<AuthBloc>().state}',
-                      );
+                      print('Sync button pressed.');
+
+                      // Check authentication status from central state authority - AuthBloc
                       final authState = context.read<AuthBloc>().state;
+
                       if (authState is Authenticated) {
                         print(
-                          'Auth state is Authenticated. Access token available: ${authState.accessToken != null}',
+                          'User is authenticated. Checking for access token...',
                         );
-                        print(
-                          'Payload being sent to sync: access_token available = ${authState.accessToken != null}',
-                        );
+
                         if (authState.accessToken != null) {
                           print(
-                            'Access token first 20 chars: ${authState.accessToken!.substring(0, 20)}...',
+                            'Access token available. First 20 chars: ${authState.accessToken!.substring(0, 20)}...',
                           );
+                          print(
+                            'Dispatching SyncLikedVideos event to YouTubeBloc...',
+                          );
+                          context.read<YouTubeBloc>().add(SyncLikedVideos());
+                        } else {
+                          print('No access token available.');
                         }
-                        print(
-                          'Dispatching SyncLikedVideos event to YouTubeBloc...',
-                        );
-                        context.read<YouTubeBloc>().add(SyncLikedVideos());
                       } else {
-                        print(
-                          'Auth state is NOT Authenticated. Doing nothing.',
-                        );
+                        print('User is not authenticated. Cannot sync.');
                       }
                     } catch (e) {
                       print('Error in sync button onPressed: $e');
@@ -79,6 +82,8 @@ class _HomeScreenState extends State<HomeScreen> {
             ScaffoldMessenger.of(
               context,
             ).showSnackBar(const SnackBar(content: Text('Sync successful!')));
+            // After successful sync, reload the initial videos
+            context.read<YouTubeBloc>().add(InitialVideosLoaded());
           }
           if (state is YoutubeFailure) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -118,11 +123,24 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Text('No liked videos found. Try syncing!'),
               );
             }
-            return ListView.builder(
-              itemCount: state.videos.length,
-              itemBuilder: (context, index) {
-                return VideoListItem(video: state.videos[index]);
-              },
+            return NotificationListener<ScrollNotification>(
+              onNotification: (notification) =>
+                  _onScrollNotification(notification, context),
+              child: ListView.builder(
+                itemCount: state.videos.length + (state.hasReachedMax ? 0 : 1),
+                itemBuilder: (context, index) {
+                  if (index >= state.videos.length) {
+                    // Show loading indicator at the end when more videos are being fetched
+                    return state.isLoadingMore
+                        ? const Padding(
+                            padding: EdgeInsets.all(16.0),
+                            child: Center(child: GradientLoader()),
+                          )
+                        : const SizedBox.shrink();
+                  }
+                  return VideoListItem(video: state.videos[index]);
+                },
+              ),
             );
           }
           return const Center(child: Text('Welcome! Please sync your videos.'));

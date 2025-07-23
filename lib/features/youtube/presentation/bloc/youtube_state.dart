@@ -4,7 +4,7 @@ abstract class YoutubeState extends Equatable {
   const YoutubeState();
 
   @override
-  List<Object> get props => [];
+  List<Object?> get props => [];
 }
 
 class YoutubeInitial extends YoutubeState {}
@@ -25,11 +25,38 @@ class YoutubeSyncSuccess extends YoutubeState {}
 
 class YoutubeLoaded extends YoutubeState {
   final List<LikedVideo> videos;
+  final bool hasReachedMax;
+  final bool isLoadingMore;
+  final DocumentSnapshot? lastDocument;
 
-  const YoutubeLoaded(this.videos);
+  const YoutubeLoaded({
+    required this.videos,
+    this.hasReachedMax = false,
+    this.isLoadingMore = false,
+    this.lastDocument,
+  });
+
+  YoutubeLoaded copyWith({
+    List<LikedVideo>? videos,
+    bool? hasReachedMax,
+    bool? isLoadingMore,
+    DocumentSnapshot? lastDocument,
+  }) {
+    return YoutubeLoaded(
+      videos: videos ?? this.videos,
+      hasReachedMax: hasReachedMax ?? this.hasReachedMax,
+      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+      lastDocument: lastDocument ?? this.lastDocument,
+    );
+  }
 
   @override
-  List<Object> get props => [videos];
+  List<Object?> get props => [
+    videos,
+    hasReachedMax,
+    isLoadingMore,
+    lastDocument,
+  ];
 }
 
 class YoutubeFailure extends YoutubeState {

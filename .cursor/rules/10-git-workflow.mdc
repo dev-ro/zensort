@@ -1,11 +1,78 @@
 ---
-description: Defines the standard, safe workflow for merging a completed feature branch into the main branch.
+description: Defines git best practices for commits and merging feature branches safely into main.
 globs: []
-alwaysApply: false
+alwaysApply: true
 ---
-# Git Workflow: Merging a Feature Branch
+# Git Workflow: Commit Standards and Branch Management
 
-When instructed to "merge a feature branch", you MUST follow this exact sequence of commands to ensure a safe and clean merge.
+## Commit Standards
+
+### MANDATORY: Commit After Every Tested Change
+
+- **ALWAYS commit immediately after every tested and successful update**
+- Never accumulate multiple changes in a single commit
+- Each commit should represent one logical, complete, and tested change
+
+### Commit Message Format
+
+Follow conventional commit standards with this exact format:
+
+```txt
+<type>(<scope>): <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+### Required Types
+
+- **feat**: New feature or functionality
+- **fix**: Bug fixes
+- **docs**: Documentation changes
+- **style**: Code style changes (formatting, missing semi-colons, etc)
+- **refactor**: Code changes that neither fix bugs nor add features
+- **perf**: Performance improvements
+- **test**: Adding or updating tests
+- **chore**: Build process, dependency updates, tooling changes
+- **ci**: Continuous integration changes
+
+### Commit Message Rules
+
+- **NO emojis** in commit messages
+- Use imperative mood: "add feature" not "added feature"
+- Keep subject line under 72 characters
+- Capitalize first letter of description
+- No period at end of subject line
+- Use body to explain what and why, not how
+
+### Examples of Good Commits
+
+```txt
+feat(auth): Add Google OAuth integration
+
+refactor(youtube): Extract video categorization logic into separate function
+
+fix(sync): Correct field mapping between frontend and backend schemas
+
+docs(readme): Update installation instructions for Firebase setup
+
+test(youtube): Add unit tests for sync progress tracking
+```
+
+### Examples of Bad Commits
+
+```txt
+❌ 🚀 Added cool new feature!
+❌ fixes stuff
+❌ WIP
+❌ Updated files
+❌ feat: added some changes and also fixed a bug and updated docs
+```
+
+## Branch Workflow: Merging a Feature Branch
+
+When instructed to "merge a branch", you MUST follow this exact sequence of commands to ensure a safe and clean merge.
 
 ## 1. Prepare the `main` Branch
 

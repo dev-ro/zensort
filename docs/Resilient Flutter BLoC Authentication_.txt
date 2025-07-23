@@ -1,0 +1,1050 @@
+﻿Architecting a Resilient Flutter Authentication Flow with BLoC and the Reactive Repository Pattern
+
+
+
+
+Introduction
+
+
+In the development of modern, feature-rich mobile applications, managing a user's authentication state is a foundational yet deceptively complex challenge. The state of a user's session is not a localized concern; it is a global truth that must be consistently reflected across disparate features, from user profile pages to shopping carts and administrative dashboards. A naive approach to state management can quickly lead to a tightly coupled, brittle architecture plagued by inconsistent UI, race conditions, and an inability to scale. Features become difficult to test in isolation, and the introduction of complex authentication mechanisms like multi-factor authentication (MFA) can shatter an already fragile system.
+This report presents an architectural blueprint for a resilient, scalable, and eminently testable authentication system in Flutter. It posits that a robust solution emerges from the synergistic combination of two powerful patterns: the BLoC (Business Logic Component) pattern for predictable, event-driven state management, and the Reactive Repository pattern to serve as a centralized, broadcastable Single Source of Truth (SSOT) for the user's authentication status.
+By establishing the repository as the single, authoritative arbiter of authentication state and exposing this state as a reactive stream, the architecture achieves profound decoupling. The primary AuthenticationBloc becomes a simple translator of this truth for global UI concerns like navigation, while individual feature BLoCs can subscribe to the same source of truth independently, reacting to logins, logouts, or session expirations without any direct knowledge of one another. This document will provide an exhaustive guide to architecting this system, addressing the prevention of race conditions during user interactions and the management of complex, multi-stage sign-in flows, thereby delivering a production-grade solution for one of mobile development's most critical components.
+
+
+Section 1: The Reactive Repository: A Foundation for a Single Source of Truth
+
+
+The foundation of a resilient authentication architecture lies not in the business logic or presentation layers, but in the data layer. By engineering a data layer that is both authoritative and reactive, the complexity of the layers above it is dramatically reduced. They are freed from the responsibility of managing or owning state and can instead focus on their core purpose: reacting to a single, stable, and broadcasted stream of truth.
+
+
+1.1 The Principle of a Single Source of Truth (SSOT) in Application Architecture
+
+
+In information systems theory, a Single Source of Truth (SSOT) is the practice of structuring information models and data schemas such that every data element is stored and mastered in only one place.1 For an enterprise, this means aggregating datasets from various systems into a primary, canonical location to ensure that all business units are operating based on standardized, relevant data.1 This practice is critical for breaking down data silos, where isolated departments possess fragmented and often conflicting information, thereby enabling holistic, data-driven decision-making.3
+In the context of a Flutter application, this principle is directly applicable to managing global state, particularly authentication. Without a designated SSOT for the user's session, different parts of the application can fall out of sync. For example, a ProfileBloc might believe the user is logged in, while a SettingsBloc might have missed the logout event, leading to inconsistent UI and potential data corruption. The SSOT model dictates that there must be one and only one component responsible for authoritatively declaring the user's authentication status. In this architecture, that component is the AuthenticationRepository. By designating the data layer's repository as the SSOT, the application ensures that BLoCs and UI widgets are consumers of truth, not originators of it.4
+
+
+1.2 The Repository Pattern as a Decoupling Mechanism
+
+
+The Repository Pattern is a cornerstone of modern application architecture, including the Model-View-ViewModel (MVVM) and Clean Architecture paradigms recommended for Flutter development.5 It serves as an abstraction layer that mediates between the domain (business logic) and data mapping layers of an application.7 The primary function of a repository is to isolate the rest of the application—including BLoCs and UI widgets—from the implementation details of the data sources.7
+An AuthenticationRepository defines a contract, an interface with methods like signIn(), signOut(), and a way to observe the current user status. The rest of the app interacts solely with this contract. It does not know, nor should it care, whether the authentication is being handled by a backend REST API, a Firebase service, a local SQLite database, or any other data source.7 This abstraction provides immense benefits:
+* Modularity and Maintainability: If the backend authentication provider needs to be changed (e.g., migrating from a custom API to Firebase Authentication), the only code that needs to be modified is the concrete implementation of the AuthenticationRepository. The BLoCs and UI that depend on it remain completely untouched.7
+* Testability: During unit testing, the concrete repository implementation can be easily replaced with a mock version, allowing BLoCs to be tested in complete isolation from network or database dependencies.
+
+
+1.3 Engineering the Reactive AuthenticationRepository
+
+
+To function as a true SSOT, the repository must evolve beyond the standard model of returning one-time Future objects. It must become reactive, exposing the authentication status as a continuous stream of data that various parts of the app can subscribe to.
+
+
+1.3.1 Choosing the Right Stream Controller
+
+
+Dart's dart:async library provides the StreamController as the fundamental tool for creating and managing streams.11 A stream is a sequence of asynchronous events, and a controller provides a
+sink to add events and a stream to listen to them.12
+However, a standard StreamController creates a "single-subscription" stream by default. This type of stream can only ever have one listener, which is unsuitable for our architecture where multiple BLoCs (e.g., AuthenticationBloc, UserProfileBloc, ShoppingCartBloc) will all need to listen to the authentication status simultaneously.13
+The solution is to use a broadcast stream, which allows for any number of listeners.11 This can be created with
+StreamController.broadcast(). While this solves the problem of multiple listeners, it still has a critical deficiency for serving as a stable SSOT in a dynamic UI environment. A broadcast stream only delivers events to listeners that are subscribed at the moment the event is emitted. If a feature BLoC is created and subscribes after the initial authentication event has already been fired, it will receive no information and may default to an incorrect state (e.g., assuming the user is logged out).
+
+
+1.3.2 Leveraging BehaviorSubject from RxDart for a Stable SSOT
+
+
+The optimal tool for this architecture is the BehaviorSubject from the rxdart package.15 A
+BehaviorSubject is a special type of broadcast stream controller that addresses the aforementioned deficiency by caching the most recently emitted item.11 This feature is the lynchpin of the entire SSOT strategy.
+When a new listener subscribes to a stream derived from a BehaviorSubject, it immediately receives the last value that was added to the controller. This behavior is precisely what is needed for a stable source of truth in a mobile app. Consider the following scenario:
+1. The user opens the app and logs in. The AuthenticationRepository's BehaviorSubject emits an authenticated status.
+2. The AuthenticationBloc, which subscribed at app startup, receives this status and orchestrates navigation to the home page.
+3. Later, the user navigates to the "My Cart" screen. The ShoppingCartBloc for this screen is created for the first time.
+4. The ShoppingCartBloc subscribes to the AuthenticationRepository's status stream.
+5. Because the stream is powered by a BehaviorSubject, the ShoppingCartBloc immediately receives the cached authenticated status. It can then confidently proceed to fetch the cart data for the logged-in user.
+Without the caching behavior, the ShoppingCartBloc would have received no initial value and would have to wait for another authentication event to occur, leading to a broken or unpredictable user experience.
+
+
+1.3.3 Implementation of the Reactive Repository
+
+
+The implementation involves an abstract class defining the contract and a concrete class providing the implementation.
+1. Authentication Status Model:
+First, we define a simple enum to represent the possible authentication states.
+
+
+Dart
+
+
+
+
+enum AuthenticationStatus { unknown, authenticated, unauthenticated }
+
+2. Repository Interface (The Contract):
+
+
+Dart
+
+
+
+
+import 'dart:async';
+import 'package:my_app/models/user_model.dart';
+
+abstract class AuthenticationRepository {
+ Stream<AuthenticationStatus> get status;
+ Stream<UserModel> get user;
+ Future<void> signIn({required String email, required String password});
+ Future<void> signOut();
+ void dispose();
+}
+
+3. Concrete Repository Implementation:
+This class uses a BehaviorSubject to manage and broadcast the AuthenticationStatus.
+
+
+Dart
+
+
+
+
+import 'dart:async';
+import 'package:rxdart/rxdart.dart';
+import 'package:my_app/models/user_model.dart';
+import 'package:my_app/services/auth_api_service.dart'; // Example data source
+
+class AuthenticationRepositoryImpl implements AuthenticationRepository {
+ final AuthApiService _authApiService;
+
+ // Use BehaviorSubject to cache and broadcast the latest status.
+ final _statusController = BehaviorSubject<AuthenticationStatus>.seeded(AuthenticationStatus.unknown);
+ final _userController = BehaviorSubject<UserModel>();
+
+ AuthenticationRepositoryImpl({required AuthApiService authApiService})
+     : _authApiService = authApiService;
+
+ @override
+ Stream<AuthenticationStatus> get status => _statusController.stream;
+
+ @override
+ Stream<UserModel> get user => _userController.stream;
+
+ @override
+ Future<void> signIn({required String email, required String password}) async {
+   try {
+     final user = await _authApiService.signInWithEmail(email: email, password: password);
+     _userController.add(user);
+     _statusController.add(AuthenticationStatus.authenticated);
+   } catch (e) {
+     // On failure, ensure the status reflects being unauthenticated.
+     _statusController.add(AuthenticationStatus.unauthenticated);
+     // Re-throw the exception so the UI/LoginBloc can handle it (e.g., show an error message).
+     throw e;
+   }
+ }
+
+ @override
+ Future<void> signOut() async {
+   // In a real app, you would call a service to invalidate the token.
+   await _authApiService.signOut();
+   _statusController.add(AuthenticationStatus.unauthenticated);
+ }
+
+ @override
+ void dispose() {
+   _statusController.close();
+   _userController.close();
+ }
+}
+
+In this implementation, methods like signIn() and signOut() perform their asynchronous work and then add the new, authoritative status to the _statusController. Any part of the application listening to the status stream will be immediately notified of this change, creating a robust, reactive foundation for the entire authentication flow.
+
+
+Section 2: The AuthenticationBloc: Orchestrating the Global User Session
+
+
+With a reactive repository established as the Single Source of Truth, the role of the primary AuthenticationBloc becomes elegantly simple. Its purpose is not to be the source of truth, but rather to subscribe to it, translating the raw AuthenticationStatus from the repository into a richer AuthState that is optimized for driving global UI concerns, most notably application-level navigation.
+
+
+2.1 Modeling Authentication Events and States
+
+
+To maintain clarity and predictability, the events and states for the global AuthenticationBloc should be minimal and highly focused. This BLoC is concerned only with the overall session status, not with the transient states of the login or sign-up process itself (which will be handled by dedicated feature BLoCs).
+Authentication Events:
+The events are inputs that trigger logic within the BLoC. For the global AuthenticationBloc, we need very few:
+
+
+Dart
+
+
+
+
+part of 'authentication_bloc.dart';
+
+abstract class AuthenticationEvent extends Equatable {
+ const AuthenticationEvent();
+
+ @override
+ List<Object?> get props =>;
+}
+
+// Private event triggered internally when the repository's status stream emits a new value.
+class _AuthenticationStatusChanged extends AuthenticationEvent {
+ const _AuthenticationStatusChanged(this.status);
+ final AuthenticationStatus status;
+}
+
+// Public event triggered by the UI to request a sign-out.
+class AuthenticationSignOutRequested extends AuthenticationEvent {}
+
+This design is deliberate. The BLoC primarily reacts to changes from the repository via the private _AuthenticationStatusChanged event, reinforcing the unidirectional data flow.17
+Authentication State:
+The state represents the output of the BLoC. Following best practices for immutability and clarity, we define a single, immutable state class that contains all necessary information.19
+
+
+Dart
+
+
+
+
+part of 'authentication_bloc.dart';
+
+class AuthenticationState extends Equatable {
+ const AuthenticationState._({
+   this.status = AuthenticationStatus.unknown,
+   this.user,
+ });
+
+ // Initial state when the app starts.
+ const AuthenticationState.unknown() : this._();
+
+ // State when a user is successfully authenticated.
+ const AuthenticationState.authenticated(UserModel user)
+     : this._(status: AuthenticationStatus.authenticated, user: user);
+
+ // State when no user is authenticated.
+ const AuthenticationState.unauthenticated()
+     : this._(status: AuthenticationStatus.unauthenticated);
+
+ final AuthenticationStatus status;
+ final UserModel? user;
+
+ @override
+ List<Object?> get props => [status, user];
+}
+
+This approach, using named constructors for different logical states, provides excellent readability and type safety. The UI can easily switch on the status enum to determine how to render, and when status is authenticated, it can safely access the non-null user object.17
+
+
+2.2 Subscribing to the Reactive Repository: The Core Connection
+
+
+The most critical function of the AuthenticationBloc is to bridge the data layer (the repository) with the business logic layer. This connection is forged by subscribing to the repository's reactive status stream.
+In the AuthenticationBloc's constructor, it is injected with an instance of the AuthenticationRepository. It then immediately creates a StreamSubscription to the repository's status stream. This subscription will live for the entire duration of the BLoC's lifecycle.
+To prevent memory leaks, it is imperative that the BLoC overrides its close() method to cancel this StreamSubscription when the BLoC is disposed of.21
+
+
+Dart
+
+
+
+
+import 'dart:async';
+import 'package:bloc/bloc.dart';
+import 'package:equatable/equatable.dart';
+import 'package:my_app/models/user_model.dart';
+import 'package:my_app/repositories/authentication_repository.dart';
+
+part 'authentication_event.dart';
+part 'authentication_state.dart';
+
+class AuthenticationBloc extends Bloc<AuthenticationEvent, AuthenticationState> {
+ final AuthenticationRepository _authenticationRepository;
+ late StreamSubscription<AuthenticationStatus> _authStatusSubscription;
+ late StreamSubscription<UserModel> _userSubscription;
+
+ AuthenticationBloc({required AuthenticationRepository authenticationRepository})
+     : _authenticationRepository = authenticationRepository,
+       super(const AuthenticationState.unknown()) {
+   
+   // Register event handlers
+   on<_AuthenticationStatusChanged>(_onAuthenticationStatusChanged);
+   on<AuthenticationSignOutRequested>(_onSignOutRequested);
+
+   // Subscribe to the repository's status stream
+   _authStatusSubscription = _authenticationRepository.status.listen(
+     (status) => add(_AuthenticationStatusChanged(status)),
+   );
+   _userSubscription = _authenticationRepository.user.listen(
+     (user) => /* handle user updates if necessary */
+   );
+ }
+
+ @override
+ Future<void> close() {
+   _authStatusSubscription.cancel();
+   _userSubscription.cancel();
+   return super.close();
+ }
+
+ Future<void> _onAuthenticationStatusChanged(
+   _AuthenticationStatusChanged event,
+   Emitter<AuthenticationState> emit,
+ ) async {
+   switch (event.status) {
+     case AuthenticationStatus.unauthenticated:
+       return emit(const AuthenticationState.unauthenticated());
+     case AuthenticationStatus.authenticated:
+       // In a real app, you'd fetch the user from the repository or a user stream
+       final user = await _tryGetUser(); 
+       return emit(user!= null
+          ? AuthenticationState.authenticated(user)
+           : const AuthenticationState.unauthenticated());
+     case AuthenticationStatus.unknown:
+       return emit(const AuthenticationState.unknown());
+   }
+ }
+
+ void _onSignOutRequested(
+   AuthenticationSignOutRequested event,
+   Emitter<AuthenticationState> emit,
+ ) {
+   _authenticationRepository.signOut();
+ }
+
+ // Helper to get user data, could also be a stream from the repo
+ Future<UserModel?> _tryGetUser() async {
+   try {
+     // This could be a one-time fetch or you could listen to a user stream from the repo
+     final user = await _authenticationRepository.user.first;
+     return user;
+   } catch (_) {
+     return null;
+   }
+ }
+}
+
+This implementation establishes a clear, reactive pipeline. The BLoC does not proactively check for authentication; it passively listens for the SSOT (the repository) to announce a change and then translates that announcement into a new state for the UI to consume.14
+
+
+2.3 Handling User Actions and Delegating to the Repository
+
+
+When the AuthenticationBloc receives a public event from the UI, such as AuthenticationSignOutRequested, its role is not to manage the state change itself, but to delegate the action to the repository. The _onSignOutRequested handler simply calls _authenticationRepository.signOut().
+Crucially, it does not immediately emit an AuthenticationState.unauthenticated(). This is a common architectural mistake that creates a second, temporary source of truth and breaks the unidirectional data flow. By optimistically emitting a new state, the BLoC makes an assumption that the sign-out operation will succeed. If the underlying API call in the repository were to fail, the BLoC would have already told the UI the user is logged out, while the repository (the true SSOT) would still hold an authenticated status, leading to a desynchronized state.
+The correct, resilient pattern is to let the reactive loop complete:
+1. UI Event: User taps "Logout," triggering AuthenticationSignOutRequested.
+2. BLoC Delegation: AuthenticationBloc receives the event and calls _authenticationRepository.signOut().
+3. Repository Action & State Change: The repository communicates with the backend, and upon success, adds AuthenticationStatus.unauthenticated to its internal BehaviorSubject.
+4. Repository Stream Emission: The BehaviorSubject broadcasts the new unauthenticated status to all its listeners.
+5. BLoC Stream Listener: The _authStatusSubscription inside AuthenticationBloc receives the new status.
+6. BLoC Event Mapping: The listener adds the internal _AuthenticationStatusChanged event to the BLoC.
+7. BLoC State Emission: The _onAuthenticationStatusChanged handler processes the event and emits the final, authoritative AuthenticationState.unauthenticated().
+8. UI Update: The UI, listening to the AuthenticationBloc, rebuilds to reflect the unauthenticated state (e.g., navigates to the login screen).
+This strict adherence to the reactive loop ensures that the AuthenticationBloc is purely a reactive translator. It never originates state but only reflects the confirmed truth from the repository, making the entire system predictable and resilient to failures in the delegation step.23
+
+
+Section 3: Driving the UI: Global State and Navigation
+
+
+With the core authentication architecture defined in the data and business logic layers, the next step is to connect it to the presentation layer. This involves correctly providing the necessary components to the widget tree through dependency injection and using the global AuthenticationBloc to orchestrate top-level application flow, such as navigation between public and protected routes.
+
+
+3.1 Dependency Injection: Scoping the Architecture Correctly
+
+
+Effective dependency injection (DI) is not merely a convenience but a critical practice for building scalable, maintainable, and testable applications. It allows for the inversion of control, where components receive their dependencies from an external source rather than creating them internally. For this architecture, the flutter_bloc package itself provides the necessary DI widgets.24
+
+
+3.1.1 RepositoryProvider: The Source of Truth's Conduit
+
+
+The AuthenticationRepository is the application's Single Source of Truth for authentication. As such, there should only be one instance of it throughout the app's entire lifecycle. To achieve this, the AuthenticationRepository instance is provided at the very top of the widget tree, typically within the main() function, using RepositoryProvider.26
+
+
+Dart
+
+
+
+
+void main() {
+ // In a real app, you would set up your services here.
+ final authApiService = AuthApiService();
+
+ runApp(
+   RepositoryProvider<AuthenticationRepository>(
+     create: (context) => AuthenticationRepositoryImpl(
+       authApiService: authApiService,
+     ),
+     child: MyApp(),
+   ),
+ );
+}
+
+By placing RepositoryProvider at the root, the single instance of our AuthenticationRepository becomes available to any widget or BLoC deeper in the tree that requires it.
+
+
+3.1.2 BlocProvider: Injecting Business Logic
+
+
+Directly below the RepositoryProvider, the AuthenticationBloc is made available to the widget tree using BlocProvider.18 The
+create factory of the BlocProvider can access the repository from the BuildContext using context.read<AuthenticationRepository>(), cleanly injecting the dependency.28
+The combined setup in MyApp would look like this:
+
+
+Dart
+
+
+
+
+class MyApp extends StatelessWidget {
+ @override
+ Widget build(BuildContext context) {
+   return BlocProvider<AuthenticationBloc>(
+     create: (context) => AuthenticationBloc(
+       // Read the repository provided higher up the tree.
+       authenticationRepository: context.read<AuthenticationRepository>(),
+     ),
+     child: MaterialApp(
+       //... app configuration
+       home: //... root widget
+     ),
+   );
+ }
+}
+
+This nested provider structure—RepositoryProvider wrapping BlocProvider—is a physical manifestation of Clean Architecture principles within the widget tree.6 It enforces the rule that the business logic layer (
+AuthenticationBloc) depends on the data layer (AuthenticationRepository), but the data layer has no knowledge of the BLoCs that consume it. This strict separation is fundamental to the architecture's maintainability.
+
+
+3.1.3 The Role of get_it and Other Service Locators
+
+
+A common question is whether to use a service locator package like get_it for dependency injection. While get_it is a powerful tool, particularly for managing non-widget-related dependencies like services, repositories, and data sources, its use for providing BLoC instances to BlocProvider is discouraged.29
+The creator of the flutter_bloc package has advised against this practice, as BlocProvider is already a sophisticated DI widget specifically designed for the lifecycle of a BLoC.31 Using
+get_it to create a BLoC instance that is then immediately passed to BlocProvider(create: (_) => getIt<MyBloc>()) is redundant and can introduce complexities, especially around the BLoC's lifecycle and its relationship with the BuildContext.31
+The recommended best practice is to use the right tool for the job:
+* RepositoryProvider / MultiRepositoryProvider: For providing non-BLoC dependencies like repositories and services.
+* BlocProvider / MultiBlocProvider: For providing BLoC and Cubit instances.
+* get_it: Can be used to manage the dependencies that are injected into the repositories themselves, but should generally not be mixed with BlocProvider for the BLoCs.
+
+
+3.2 The Root-Level BlocListener: The Navigation Gateway
+
+
+The most direct and powerful application of the global AuthenticationBloc is to manage the primary navigation flow of the application. The goal is to automatically route the user to the appropriate screen—either a login/onboarding flow or the main authenticated application—based on their session status.
+Rather than scattering conditional navigation logic throughout the widget tree, the most robust and centralized approach is to use a BlocListener at the root of the application.24 This listener is placed high in the widget tree, often wrapping the
+MaterialApp's builder property or its home widget, ensuring it can control navigation from anywhere.
+
+
+Dart
+
+
+
+
+class AppView extends StatelessWidget {
+ @override
+ Widget build(BuildContext context) {
+   return MaterialApp(
+     // Use a builder to wrap the navigator with the BlocListener
+     builder: (context, child) {
+       return BlocListener<AuthenticationBloc, AuthenticationState>(
+         listener: (context, state) {
+           switch (state.status) {
+             case AuthenticationStatus.authenticated:
+               // Navigate to the home screen, removing all previous routes.
+               Navigator.of(context).pushAndRemoveUntil<void>(
+                 HomePage.route(),
+                 (route) => false,
+               );
+               break;
+             case AuthenticationStatus.unauthenticated:
+               // Navigate to the login screen, removing all previous routes.
+               Navigator.of(context).pushAndRemoveUntil<void>(
+                 LoginPage.route(),
+                 (route) => false,
+               );
+               break;
+             case AuthenticationStatus.unknown:
+               // Typically, a splash screen is shown while status is unknown.
+               break;
+           }
+         },
+         child: child?? const SplashScreen(), // Ensure child is not null
+       );
+     },
+     // The initial route can be a simple splash screen.
+     onGenerateRoute: (_) => SplashScreen.route(),
+   );
+ }
+}
+
+The listener function is executed exactly once per state change (but not for the initial state).24 It inspects the new
+AuthenticationState and triggers the appropriate Navigator action. This approach cleanly separates the concern of navigation from the UI widgets themselves. The HomePage and LoginPage do not need to contain any logic to handle these global redirects; they are managed entirely by this central listener.10
+For fine-grained control, an optional listenWhen condition can be provided to the BlocListener. This is a best practice that prevents the listener from executing on every single state emission, such as intermediate loading states. The navigation should only trigger on a meaningful change in authentication status.
+
+
+Dart
+
+
+
+
+return BlocListener<AuthenticationBloc, AuthenticationState>(
+ listenWhen: (previous, current) => previous.status!= current.status,
+ listener: (context, state) {
+   //... navigation logic
+ },
+ child: child,
+);
+
+By using listenWhen, the navigation logic is invoked only when the status field actually transitions from one value to another (e.g., from unauthenticated to authenticated), making the navigation control both efficient and predictable.24
+
+
+Section 4: Decoupled Reactivity: Empowering Feature BLoCs
+
+
+The true power and scalability of the reactive repository architecture are realized when building out the individual features of an application. This section demonstrates how feature-specific BLoCs can remain entirely self-contained and decoupled from one another, yet stay perfectly synchronized with the global authentication state by subscribing to the same Single Source of Truth.
+
+
+4.1 The Anti-Pattern: Direct BLoC-to-BLoC Communication
+
+
+Before detailing the correct pattern, it is essential to identify and unequivocally discourage the most common anti-pattern: direct BLoC-to-BLoC communication. This occurs when one BLoC holds a direct reference to another BLoC or subscribes to its state stream.21
+
+
+Dart
+
+
+
+
+// ANTI-PATTERN: DO NOT DO THIS
+class FeatureBloc extends Bloc<FeatureEvent, FeatureState> {
+ final AuthenticationBloc _authenticationBloc;
+ late final StreamSubscription _authSubscription;
+
+ FeatureBloc({required AuthenticationBloc authenticationBloc}) 
+     : _authenticationBloc = authenticationBloc,
+       super(FeatureInitial()) {
+   _authSubscription = _authenticationBloc.stream.listen((authState) {
+     if (authState.status == AuthenticationStatus.unauthenticated) {
+       add(ClearFeatureData());
+     }
+   });
+ }
+
+ @override
+ Future<void> close() {
+   _authSubscription.cancel();
+   return super.close();
+ }
+ //...
+}
+
+This approach is fundamentally flawed and violates core architectural principles for several reasons 33:
+* Tight Coupling: FeatureBloc is now tightly coupled to AuthenticationBloc. It cannot exist or be tested without a concrete instance of AuthenticationBloc. This makes unit testing significantly more complex, as you now have to manage the state of two BLoCs in a single test.
+* Violation of Architectural Layers: As stated in the official BLoC documentation, sibling dependencies between two entities in the same architectural layer should be avoided at all costs.34 Since both BLoCs reside in the business logic layer, this direct dependency creates a "spaghetti code" architecture that is difficult to reason about and maintain as the application grows.
+* Scalability Issues: As more features are added, a complex web of BLoC dependencies can form, leading to circular dependencies and unpredictable state transition chains.
+
+
+4.2 The Recommended Pattern: Feature BLoCs Depend on the Repository
+
+
+The elegant and correct solution is for feature BLoCs to follow the same pattern as the AuthenticationBloc: they should depend on the AuthenticationRepository, not on other BLoCs.14 If two or more BLoCs need access to the same piece of global data (the authentication status), they should both get it from the single, authoritative source: the repository.
+
+
+Dart
+
+
+
+
+// RECOMMENDED PATTERN
+class UserProfileBloc extends Bloc<UserProfileEvent, UserProfileState> {
+ final AuthenticationRepository _authenticationRepository;
+ final UserProfileRepository _userProfileRepository;
+ late final StreamSubscription _authStatusSubscription;
+
+ UserProfileBloc({
+   required AuthenticationRepository authenticationRepository,
+   required UserProfileRepository userProfileRepository,
+ }) : _authenticationRepository = authenticationRepository,
+      _userProfileRepository = userProfileRepository,
+      super(UserProfileInitial()) {
+   
+   on<FetchUserProfile>(_onFetchUserProfile);
+   on<_ClearUserProfile>(_onClearUserProfile);
+
+   _authStatusSubscription = _authenticationRepository.status.listen((status) {
+     if (status == AuthenticationStatus.authenticated) {
+       add(FetchUserProfile());
+     } else {
+       add(_ClearUserProfile());
+     }
+   });
+ }
+ //... event handlers and close() method
+}
+
+In this improved design, UserProfileBloc has no knowledge of AuthenticationBloc. It is completely decoupled. It depends only on the repositories it needs to perform its function, adhering to the principles of clean architecture and dependency injection.
+
+
+4.3 Reacting to Authentication Changes within a Feature BLoC
+
+
+By subscribing directly to the repository's status stream, the feature BLoC becomes autonomously reactive to changes in the global authentication state.16 This allows for powerful, self-contained feature logic:
+* On User Login: When the _authenticationRepository.status stream emits AuthenticationStatus.authenticated, the UserProfileBloc's listener is triggered. It adds an internal FetchUserProfile event to itself. The handler for this event then calls the _userProfileRepository to fetch the detailed profile data for the newly authenticated user.
+* On User Logout: When the stream emits AuthenticationStatus.unauthenticated (which could be triggered by a user action, a token expiration, or any other reason), the listener adds a _ClearUserProfile event. The handler for this event then transitions the UserProfileBloc to an initial or empty state, ensuring no stale user data is displayed after logout.
+This pattern is incredibly powerful. The UserProfileBloc does not need to be "told" by any other component to fetch or clear its data. It simply observes the single source of truth and reacts accordingly. This makes the feature module robust, reusable, and easy to reason about in isolation. The same pattern can be applied to a ShoppingCartBloc (which clears the cart on logout), a NotificationsBloc (which subscribes to or unsubscribes from push notification topics), and any other feature that depends on the user's session.
+
+
+Table 1: BLoC-to-BLoC Communication Patterns
+
+
+To provide a clear, actionable summary, the following table compares the different approaches to inter-BLoC communication.
+
+
+Approach
+	Description
+	Pros
+	Cons
+	Use Case Suitability
+	Direct Dependency (Anti-Pattern)
+	BlocA is constructed with an instance of BlocB: BlocA(blocB: context.read<BlocB>()).
+	- Seems simple for trivial cases.
+	- Creates tight coupling.21
+	
+
+- Violates architectural layers.34
+	- Extremely difficult to test and maintain. - Prone to complex dependency chains.
+	Not Recommended. Should be avoided in all but the most trivial, non-scalable applications.
+	UI-Layer Listener
+	A BlocListener<BlocA, StateA> in the widget tree listens for state changes in BlocA and adds an event to BlocB via context.read<BlocB>().add(EventB()).
+	- Decouples the BLoCs themselves; they don't know about each other.21
+	- Follows the unidirectional data flow principle.
+	- Can lead to verbose widget trees with nested listeners. - Logic is pushed into the presentation layer, which may not be ideal. - Can be cumbersome if the same reaction is needed in multiple parts of the UI.
+	Acceptable. Best suited for one-off reactions and triggering side effects (like navigation or showing a SnackBar) in one BLoC based on the state of another.
+	Reactive Repository (Recommended)
+	Both BlocA and BlocB are constructed with a shared Repository and subscribe to a Stream of data exposed by it.
+	- Complete decoupling of BLoCs.34
+	- Centralizes shared state logic in the data/domain layer. - Highly testable; BLoCs can be tested by mocking the repository stream. - Most scalable and maintainable solution.
+	- Requires setting up a reactive repository, which adds some initial complexity.
+	Highly Recommended. The ideal pattern for when multiple BLoCs need to react to the same underlying piece of shared state, such as authentication status, user preferences, or real-time data from a WebSocket.
+	This comparison makes it evident that for building a resilient and scalable system around a shared state like authentication, the Reactive Repository pattern is the superior architectural choice. It provides the strongest decoupling and aligns best with the principles of clean, testable code.
+
+
+Section 5: Advanced Implementation: Managing Multi-Stage Sign-In Flows
+
+
+A robust authentication architecture must be able to handle more than a simple binary state of authenticated or unauthenticated. Real-world applications often involve complex, multi-stage processes like multi-factor authentication (MFA), where the user exists in various intermediate states. This section stress-tests the proposed architecture by applying it to an MFA flow, demonstrating its resilience and flexibility.
+
+
+5.1 Modeling Complex, Intermediate Authentication States
+
+
+A simple enum is no longer sufficient for an MFA flow. The user can be in states like awaitingFirstFactor, mfaRequired (after the first factor is successful), mfaCodeSent, or mfaVerificationFailed. There are two primary approaches to modeling these complex states within the BLoC pattern.
+Approach 1: Multiple Concrete State Classes
+In this approach, each logical state is represented by its own distinct class, typically extending a sealed AuthState class.19
+
+
+Dart
+
+
+
+
+// Approach 1: Multiple State Classes
+sealed class AuthState extends Equatable { /*... */ }
+class AuthInitial extends AuthState { /*... */ }
+class AuthAuthenticated extends AuthState { final UserModel user; /*... */ }
+class AuthMfaRequired extends AuthState { final MultiFactorResolver resolver; /*... */ }
+class AuthFailure extends AuthState { final String error; /*... */ }
+
+This pattern is very clear and leverages Dart's type system effectively. However, it has a significant drawback in multi-stage flows: data preservation. When transitioning from AuthAuthenticated (after the first factor) to AuthMfaRequired, it can be difficult to carry over the user object or other contextual data without adding it to every subsequent state class, leading to redundant code.
+Approach 2: Single State Class with Status Enum (Recommended)
+A more flexible and scalable approach for multi-stage flows is to use a single, immutable state class with a copyWith method, combined with a detailed status enum.36
+
+
+Dart
+
+
+
+
+// Approach 2: Single State Class with Status Enum
+enum AuthFlowStatus { initial, loading, success, failure, mfaRequired, mfaCodeSent }
+
+class AuthState extends Equatable {
+ const AuthState({
+   this.status = AuthFlowStatus.initial,
+   this.user,
+   this.resolver,
+   this.errorMessage,
+ });
+
+ final AuthFlowStatus status;
+ final UserModel? user;
+ final MultiFactorResolver? resolver; // From Firebase Auth
+ final String? errorMessage;
+
+ AuthState copyWith({
+   AuthFlowStatus? status,
+   UserModel? user,
+   MultiFactorResolver? resolver,
+   String? errorMessage,
+ }) {
+   return AuthState(
+     status: status?? this.status,
+     user: user?? this.user,
+     resolver: resolver?? this.resolver,
+     errorMessage: errorMessage?? this.errorMessage,
+   );
+ }
+
+ @override
+ List<Object?> get props => [status, user, resolver, errorMessage];
+}
+
+This pattern is superior for multi-stage flows because it elegantly preserves data across state transitions. When the flow moves from a successful first-factor authentication to requiring MFA, the state can be updated using state.copyWith(status: AuthFlowStatus.mfaRequired, resolver: e.resolver), keeping the already-retrieved user object intact. This avoids data loss and simplifies the logic in both the BLoC and the UI.
+
+
+Table 2: State Modeling for Complex Flows
+
+
+Feature
+	Multiple Concrete State Classes
+	Single State Class with Status Enum
+	Example Code
+	sealed class AuthState {} class AuthSuccess extends AuthState {} class AuthMfaRequired extends AuthState {}
+	enum AuthStatus { success, mfaRequired } class AuthState { final AuthStatus status;... }
+	Data Preservation
+	Poor. Data from a previous state (e.g., a partially authenticated user) is lost on transition unless explicitly copied to the new state class, leading to boilerplate.
+	Excellent. The copyWith method allows for seamless preservation of existing state data while updating only the necessary fields (like status or a new resolver).
+	Type Safety
+	Excellent. The compiler can enforce exhaustive checks in switch statements using sealed classes, ensuring all states are handled.
+	Good. While not compiler-enforced like sealed classes, using an enum for the status provides strong type safety for the flow's state.
+	Boilerplate
+	High. Requires a new class definition for every possible state in the flow.
+	Low. A single state class can represent the entire flow. New intermediate states only require adding a value to the enum.
+	UI Handling
+	Can be complex. The UI might need to rebuild entirely when transitioning between state types, potentially losing widget state.
+	Simpler. The UI can selectively rebuild based on the status enum while keeping other parts of the UI stable, as the AuthState object itself persists.
+	For a resilient MFA flow, the Single State Class with Status Enum approach is the recommended best practice due to its superior data preservation and lower boilerplate, which are critical in managing the context of a multi-step user journey.
+
+
+5.2 Handling Platform-Specific Exceptions and Intermediate Data
+
+
+The architecture's resilience is tested when interacting with platform-specific APIs like Firebase Authentication, which uses exceptions to signal the need for a second factor. The AuthenticationRepository is responsible for catching these signals and translating them into the reactive stream.
+The signIn method in the repository is modified to handle the FirebaseAuthMultiFactorException.37
+
+
+Dart
+
+
+
+
+// Inside AuthenticationRepositoryImpl
+
+@override
+Future<void> signIn({required String email, required String password}) async {
+ try {
+   // Attempt to sign in with the first factor
+   final userCredential = await _firebaseAuth.signInWithEmailAndPassword(
+     email: email,
+     password: password,
+   );
+   // If successful with no MFA required, proceed as normal
+   _userController.add(UserModel.fromFirebaseUser(userCredential.user!));
+   _statusController.add(AuthenticationStatus.authenticated);
+ } on FirebaseAuthMultiFactorException catch (e) {
+   // This is not an error, but a signal for the next step.
+   // Add the MFA required status to the stream, carrying the crucial resolver.
+   _statusController.add(
+     AuthenticationStatus.mfaRequired(resolver: e.resolver)
+   );
+ } catch (e) {
+   // Handle actual sign-in errors.
+   _statusController.add(AuthenticationStatus.unauthenticated);
+   throw e;
+ }
+}
+
+Instead of treating the FirebaseAuthMultiFactorException as a failure, the repository correctly interprets it as a new, valid intermediate state in the authentication flow. It then updates the SSOT stream with this new status, broadcasting the MultiFactorResolver to any interested listeners. The AuthenticationBloc will then receive this new status and emit a corresponding AuthState for the UI to consume.
+
+
+5.3 Building a Multi-Stage UI with BlocConsumer
+
+
+The BlocConsumer widget is the ideal tool for building a UI that needs to both rebuild in response to local state changes and perform one-time actions (like navigation) in response to global state changes.24
+On the login page, a LoginBloc would manage the state of the form itself (e.g., input validation, submission in progress). A BlocConsumer can be used to listen to the global AuthenticationBloc while building based on the local LoginBloc.
+
+
+Dart
+
+
+
+
+// On the Login Page
+return BlocConsumer<AuthenticationBloc, AuthenticationState>(
+ // The listener reacts to global auth state changes for navigation.
+ listener: (context, state) {
+   if (state.status == AuthFlowStatus.mfaRequired) {
+     // Navigate to the OTP entry screen, passing the resolver.
+     Navigator.of(context).push(MfaEntryPage.route(resolver: state.resolver!));
+   } else if (state.status == AuthFlowStatus.success) {
+     // This case is handled by the root-level navigator.
+   }
+ },
+ // The builder reacts to local login state changes for UI updates.
+ builder: (context, authState) {
+   // This builder can be nested inside another BlocBuilder for the LoginBloc
+   return BlocBuilder<LoginBloc, LoginState>(
+     builder: (context, loginState) {
+       if (loginState.isSubmitting) {
+         return CircularProgressIndicator();
+       }
+       return SignInButton(
+         onPressed: () {
+           // Dispatch event to the LoginBloc
+         },
+       );
+     },
+   );
+ },
+);
+
+This demonstrates a sophisticated UI structure where the listener half of the BlocConsumer handles the cross-cutting concern of flow control by listening to the AuthenticationBloc. When it detects that MFA is required, it triggers navigation to the next step of the flow. Meanwhile, the builder half remains focused on the local concerns of the login form, such as showing a loading indicator, managed by its own dedicated LoginBloc.39 This separation of concerns within the UI layer is a hallmark of a well-architected BLoC application.
+
+
+Section 6: Fortifying the Architecture: Concurrency, Error Handling, and Testing
+
+
+A truly resilient architecture is not only well-structured but also hardened against real-world operational challenges like network failures, user-induced race conditions, and regressions. This final section details the advanced techniques required to fortify the authentication flow, ensuring it is robust, performant, and verifiable through a comprehensive testing strategy.
+
+
+6.1 Preventing Race Conditions with bloc_concurrency
+
+
+A common source of bugs in asynchronous applications is race conditions. In the context of our authentication flow, imagine a user with a slow network connection who impatiently taps the "Sign In" button multiple times. Without proper concurrency management, this could trigger several SignInRequested events, leading to multiple, simultaneous API requests to the sign-in endpoint.41 This is inefficient and can lead to unpredictable behavior, where the result of an earlier request overwrites a later one.
+The bloc_concurrency package provides a powerful and elegant solution to this problem through event transformers.42 By applying a transformer to an event handler, we can control how concurrent events of the same type are processed.
+For a user-initiated action like signing in, the restartable() transformer is ideal. It ensures that if a new SignInRequested event is added while a previous one is still being processed, the handler for the previous event is canceled, and the logic is restarted for the new event.
+
+
+Dart
+
+
+
+
+// Inside a LoginBloc, which handles the sign-in form interaction
+import 'package:bloc_concurrency/bloc_concurrency.dart';
+
+class LoginBloc extends Bloc<LoginEvent, LoginState> {
+ LoginBloc({required AuthenticationRepository authRepository}) : super(LoginInitial()) {
+   on<SignInRequested>(
+     _onSignInRequested,
+     // Apply the restartable transformer to this event handler.
+     transformer: restartable(),
+   );
+ }
+
+ Future<void> _onSignInRequested(
+   SignInRequested event,
+   Emitter<LoginState> emit,
+ ) async {
+   //... logic to call authRepository.signIn()
+ }
+}
+
+By adding transformer: restartable(), we have effectively fortified the sign-in process against user-induced race conditions. This small addition significantly enhances the robustness and predictability of the application.
+
+
+Table 3: bloc_concurrency Event Transformers
+
+
+Transformer
+	Behavior Description
+	Authentication Use Case Example
+	concurrent()
+	(Default) Processes all events in parallel as they are added. Can lead to race conditions.
+	Generally not recommended for operations that modify state to avoid conflicts.
+	sequential()
+	Processes events one at a time, in the order they were added. A new event is not processed until the previous one has completed.
+	Useful for a sequence of critical updates where order matters, such as processing a queue of offline actions that must be synced sequentially.
+	restartable()
+	Processes only the latest event. If a new event is added while a previous one is running, the previous one is canceled and the new one begins.
+	Ideal for SignInRequested or search queries. Prevents multiple login attempts and ensures the UI reflects the result of the user's most recent action.
+	droppable()
+	Processes only the first event. If a new event is added while a previous one is running, the new event is ignored (dropped).
+	Suitable for actions that should only happen once at a time, like a "Refresh Profile" button, to prevent the user from spamming the refresh action.
+	
+
+6.2 Resilient Stream Error Handling with RxDart
+
+
+A critical point of failure in any reactive system is the stream itself. If an unhandled error is thrown from a data source and propagates into a stream, it can terminate the stream. In our architecture, if the AuthenticationRepository's BehaviorSubject were to close due to an error, the SSOT would die, and the entire reactive system would collapse, leaving the app in an unresponsive state.
+To prevent this, the repository must implement robust error handling on its underlying data sources. The rxdart library provides powerful operators for this purpose, such as catchError or onErrorResumeNext.43
+Within the AuthenticationRepository, any interaction with an external service that returns a Stream (e.g., listening to Firebase's authStateChanges) should be wrapped with an error-handling operator.
+
+
+Dart
+
+
+
+
+// Inside AuthenticationRepositoryImpl, if listening to an external stream
+
+// Assume _firebaseAuth.authStateChanges() is the external stream
+_firebaseAuth.authStateChanges()
+.map((firebaseUser) {
+   // Transform Firebase user to our app's user model
+   if (firebaseUser == null) {
+     return AuthenticationStatus.unauthenticated;
+   }
+   // Potentially fetch more user data here, which could also fail
+   return AuthenticationStatus.authenticated;
+ })
+.catchError((error, stackTrace) {
+   // Log the error for debugging purposes
+   print("Error in auth stream: $error");
+   // VERY IMPORTANT: Emit an error status but DO NOT close the stream.
+   // Instead of letting the error propagate, we catch it and emit a known state.
+   _statusController.add(AuthenticationStatus.unauthenticated); 
+ })
+.listen((status) {
+   // Add the processed status to our internal SSOT controller
+   _statusController.add(status);
+ });
+
+By using catchError, we intercept any exception from the upstream source. Instead of allowing it to crash our _statusController, we can log the error and then gracefully push a known state (like unauthenticated) into our SSOT stream. This ensures the stream remains alive and the application can react to the failure predictably (e.g., by navigating the user to a login screen with an error message) rather than freezing.43 This makes the SSOT stream itself resilient to failures in its dependencies.
+
+
+6.3 A Comprehensive Testing Strategy
+
+
+The decoupled nature of this architecture lends itself to a straightforward and comprehensive multi-layered testing strategy.
+1. Repository Unit Testing:
+The AuthenticationRepositoryImpl can be unit tested by mocking its dependencies (e.g., the AuthApiService or FirebaseAuth instance). This allows for testing the repository's logic in isolation—for example, verifying that a successful call to the mocked service results in AuthenticationStatus.authenticated being added to the stream.
+2. BLoC Unit Testing with bloc_test:
+Testing the BLoCs is the most critical part of verifying the business logic. The bloc_test package provides a declarative API for this. To test a BLoC that depends on our reactive repository, we must mock the AuthenticationRepository.22
+The key to testing a reactive BLoC is to control the stream that the BLoC listens to. This is achieved by equipping the mock repository with its own StreamController, which the test can manipulate directly.22
+
+
+Dart
+
+
+
+
+import 'package:bloc_test/bloc_test.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
+import 'dart:async';
+
+// 1. Mock the repository
+class MockAuthenticationRepository extends Mock implements AuthenticationRepository {}
+
+void main() {
+ group('AuthenticationBloc', () {
+   late AuthenticationRepository authenticationRepository;
+   // 2. Create a StreamController to control the mock repository's stream
+   late StreamController<AuthenticationStatus> authStatusController;
+
+   setUp(() {
+     authenticationRepository = MockAuthenticationRepository();
+     authStatusController = StreamController<AuthenticationStatus>();
+
+     // 3. Stub the repository's status stream to return our controller's stream
+     when(() => authenticationRepository.status).thenAnswer(
+       (_) => authStatusController.stream,
+     );
+   });
+
+   // Test the initial state
+   test('initial state is AuthenticationState.unknown', () {
+     expect(
+       AuthenticationBloc(authenticationRepository: authenticationRepository).state,
+       const AuthenticationState.unknown(),
+     );
+   });
+
+   // Test the BLoC's reaction to stream emissions
+   blocTest<AuthenticationBloc, AuthenticationState>(
+     'emits [authenticated] when status stream emits authenticated',
+     build: () {
+       // Mock any other repository methods the BLoC might call
+       when(() => authenticationRepository.user).thenAnswer((_) => Stream.value(mockUser));
+       return AuthenticationBloc(authenticationRepository: authenticationRepository);
+     },
+     // 4. Act by adding events to our controlled stream
+     act: (bloc) => authStatusController.add(AuthenticationStatus.authenticated),
+     // 5. Expect the BLoC to emit the correct corresponding state
+     expect: () => <AuthenticationState>,
+   );
+
+   blocTest<AuthenticationBloc, AuthenticationState>(
+     'emits [unauthenticated] when status stream emits unauthenticated',
+     build: () => AuthenticationBloc(authenticationRepository: authenticationRepository),
+     act: (bloc) => authStatusController.add(AuthenticationStatus.unauthenticated),
+     expect: () => <AuthenticationState>,
+   );
+ });
+}
+
+This pattern provides precise control over the test environment. The act phase simulates the repository (our SSOT) emitting a new status, and the expect phase verifies that the AuthenticationBloc correctly translated that status into its own state. This is the definitive method for unit testing BLoCs within a reactive architecture.22
+
+
+Conclusion and Final Recommendations
+
+
+The architecture detailed in this report, founded on the principles of a Reactive Repository as a Single Source of Truth and orchestrated by the BLoC pattern, provides a comprehensive solution to the challenges of managing authentication in a modern Flutter application. It moves beyond simplistic examples to deliver a framework that is simultaneously resilient, scalable, and testable.
+The profound benefits of this approach can be summarized as follows:
+* Resilience: By establishing a unidirectional data flow originating from a single, authoritative source, the system becomes predictable and robust. The use of RxDart for stream error handling ensures the SSOT remains alive even when underlying data sources fail, while bloc_concurrency prevents user-induced race conditions, leading to a stable and reliable user experience.
+* Decoupling & Scalability: The architecture achieves a superior level of decoupling. Feature BLoCs are entirely self-contained, reacting to global state changes without any direct dependencies on one another. This modularity is the key to scalability; new features can be added to the application with confidence, knowing they will not create a tangled web of dependencies or disrupt existing functionality.
+* Testability: The clear separation of concerns between the data, domain, and presentation layers makes the application highly testable. Each component—from the repository's data handling to the BLoC's event-to-state logic and the UI's reaction to state—can be mocked and verified in isolation, leading to higher code quality and easier maintenance.
+For developers and architects seeking to implement a production-grade authentication system in Flutter, the following tenets serve as a final checklist for architectural integrity:
+1. Establish the Repository as the SSOT: The AuthenticationRepository must be the sole owner and arbiter of the user's authentication status. BLoCs and widgets are consumers of this truth, never originators.
+2. Embrace Reactivity with Caching: Expose the authentication status from the repository as a Stream. Use a BehaviorSubject to power this stream, ensuring that late-subscribing components receive the current state immediately.
+3. Keep BLoCs Decoupled: A BLoC should never depend directly on another BLoC. When multiple BLoCs require the same data, they should all subscribe to the same repository stream.
+4. Delegate, Don't Duplicate: When a BLoC receives a UI event (e.g., SignOutRequested), it should delegate the action to the repository and wait for the reactive loop to propagate the resulting state change. Do not optimistically emit a state from the BLoC.
+5. Harden Against Failure: Implement robust error handling within the repository to keep the SSOT stream alive during data source failures. Use concurrency transformers to manage and prevent race conditions.
+6. Test the Reactions: Center the BLoC testing strategy on mocking the reactive repository. Use a StreamController in tests to manually drive the SSOT stream and verify that the BLoC emits the correct states in response.
+By adhering to these principles, teams can construct an authentication flow that not only meets the immediate functional requirements but also provides a durable and adaptable foundation capable of supporting the application's growth and evolution over time.
+Works cited
+1. What is a Single Source of Truth (SSOT) - MuleSoft, accessed July 22, 2025, https://www.mulesoft.com/resources/esb/what-is-single-source-of-truth-ssot
+2. Implementing Single Source of Truth in Android | by Jephthah Afolayan | Medium, accessed July 22, 2025, https://medium.com/@afolayanseyi/implementing-single-source-of-truth-in-android-9b2cc9510704
+3. What Is a Single Source of Truth (SSOT) & How to Build One? - Airbyte, accessed July 22, 2025, https://airbyte.com/data-engineering-resources/single-point-of-truth
+4. Single source of truth. Based on the android developer guide: | by sina.rahimi - Medium, accessed July 22, 2025, https://medium.com/@sina.rahimi/single-source-of-truth-with-mvvm-retrofit2-livedata-rxjava-and-room-in-repository-pattern-f5304f39175
+5. Guide to app architecture - Flutter Documentation, accessed July 22, 2025, https://docs.flutter.dev/app-architecture/guide
+6. Flutter Clean Architecture with BLoC and Dependency Injection in detail. - Stackademic, accessed July 22, 2025, https://blog.stackademic.com/flutter-clean-architecture-with-bloc-and-dependency-injection-in-detail-9424c9b3fa8b
+7. Flutter App Architecture: The Repository Pattern - Code With Andrea, accessed July 22, 2025, https://codewithandrea.com/articles/flutter-repository-pattern/
+8. Flutter BLoC Architecture - DEV Community, accessed July 22, 2025, https://dev.to/djibrilm/flutter-bloc-architecture-5a6o
+9. accessed December 31, 1969, https.codewithandrea.com/articles/flutter-repository-pattern/
+10. Authentication in Flutter with Supabase and BLoC | by Milan Petrovic | Medium, accessed July 22, 2025, https://medium.com/@miljepetrovic/authentication-in-flutter-with-supabase-and-bloc-37593ac639f9
+11. A Taste of Reactive Programming in Flutter with RxDart and ..., accessed July 22, 2025, https://dev.to/b_plab98/a-taste-of-reactive-programming-in-flutter-with-rxdart-and-flutterbloc-3p12
+12. Using the BloC Pattern to Build Reactive Applications with Streams in Dart's Flutter Framework - Steemit, accessed July 23, 2025, https://steemit.com/utopianio/@tensor/using-the-bloc-pattern-to-build-reactive-applications-with-streams-in-dart-s-flutter-framework
+13. Asynchronous programming: Streams | Dart, accessed July 22, 2025, https://dart.dev/libraries/async/using-streams
+14. Blocs with Reactive Repository. Inspired by the updated section on… | by Sandro Lovnički | Flutter Community | Medium, accessed July 22, 2025, https://medium.com/flutter-community/blocs-with-reactive-repository-5fd440d3b1dc
+15. rxdart | Dart package - Pub.dev, accessed July 23, 2025, https://pub.dev/packages/rxdart
+16. Flutter Bloc + RxDart: A Complete guide to Building Reactive Apps ..., accessed July 23, 2025, https://www.lorensala.com/blog/flutter-bloc-reactive-repositories
+17. How To Perform Secure Authentication With Firebase & Bloc In Flutter?, accessed July 22, 2025, https://flutterjunction.com/how-to-perform-secure-authentication-with-firebase-bloc-in-flutter
+18. Flutter: Authentication using BLoC Pattern - Dhairya's Blog, accessed July 22, 2025, https://rajurastogi.hashnode.dev/flutter-authentication-using-bloc-pattern
+19. Flutter Bloc-Don't prefer single state class. | by Bharath | Medium, accessed July 23, 2025, https://bharath-dev.medium.com/flutter-bloc-dont-follow-its-docs-as-it-is-40bf60be38c8
+20. How to Build a Secure User Authentication Flow in Flutter with Firebase and Bloc State Management - freeCodeCamp, accessed July 22, 2025, https://www.freecodecamp.org/news/user-authentication-flow-in-flutter-with-firebase-and-bloc/
+21. Bloc to Bloc Communication in Flutter | by Saiteja Sadadevi - Medium, accessed July 22, 2025, https://medium.com/@saitejaerumandla/bloc-to-bloc-communication-in-flutter-3e6d2fba6fbf
+22. flutter - Testing BLoC that uses a reactive repository returning a ..., accessed July 22, 2025, https://stackoverflow.com/questions/62755836/testing-bloc-that-uses-a-reactive-repository-returning-a-stream
+23. Mastering Flutter Bloc: Best Practices, Optimization, and Real-World Patterns - Medium, accessed July 23, 2025, https://medium.com/@balaeon/mastering-flutter-bloc-best-practices-optimization-and-real-world-patterns-b1122d20fab5
+24. flutter_bloc - Dart API docs - Pub.dev, accessed July 22, 2025, https://pub.dev/documentation/flutter_bloc/latest/
+25. flutter_bloc | Flutter package - Pub.dev, accessed July 23, 2025, https://pub.dev/packages/flutter_bloc
+26. Flutter bloc for beginners. What is flutter bloc? | by Ana Polo | Flutter Community - Medium, accessed July 22, 2025, https://medium.com/flutter-community/flutter-bloc-for-beginners-839e22adb9f5
+27. Building an authentication flow in Flutter using the BLoC pattern ..., accessed July 22, 2025, https://honesdev.com/flutter-authentication-with-bloc-architecture/
+28. Ultimate Flutter BLoC Guide: State Management Best Practices, accessed July 22, 2025, https://www.oneclickitsolution.com/blog/flutter-bloc-state-management-best-practices
+29. Flutter Clean Architecture with BLoC | Dio | GetIt | by Vivek Sharma - Medium, accessed July 23, 2025, https://medium.com/@imviveksharma/flutter-clean-architecture-with-bloc-dio-getit-10ac4e7d624b
+30. Dependency Injection made easy with get_it: Step by step Flutter tutorial | by Firdous nath, accessed July 23, 2025, https://medium.com/@firunath/dependency-injection-made-easy-with-get-it-step-by-step-flutter-tutorial-1d02e39da885
+31. flutter - Does get_it have a real use with bloc? - Stack Overflow, accessed July 23, 2025, https://stackoverflow.com/questions/77284239/does-get-it-have-a-real-use-with-bloc
+32. get_it with Flutter bloc - dart - Stack Overflow, accessed July 23, 2025, https://stackoverflow.com/questions/77784741/get-it-with-flutter-bloc
+33. Flutter listen Bloc state from Other Bloc - Stack Overflow, accessed July 22, 2025, https://stackoverflow.com/questions/59137180/flutter-listen-bloc-state-from-other-bloc
+34. Is it OK for a Bloc to consume other Blocs ? : r/FlutterDev - Reddit, accessed July 23, 2025, https://www.reddit.com/r/FlutterDev/comments/17c77ob/is_it_ok_for_a_bloc_to_consume_other_blocs/
+35. Implementing Advanced State Management with Bloc in Flutter: A Comprehensive Guide, accessed July 23, 2025, https://blog.stackademic.com/implementing-advanced-state-management-with-bloc-in-flutter-a-comprehensive-guide-7e2f308abf17
+36. Handling flutter bloc states - dart - Stack Overflow, accessed July 23, 2025, https://stackoverflow.com/questions/79621038/handling-flutter-bloc-states
+37. Add multi-factor authentication to your Flutter app | Firebase ..., accessed July 22, 2025, https://firebase.google.com/docs/auth/flutter/multi-factor
+38. Firebase Authentication and Flutter: Building Secure User Sign-In for Your App - Medium, accessed July 22, 2025, https://medium.com/@mvpcatalyst/firebase-authentication-and-flutter-building-secure-user-sign-in-for-your-app-8cb565aca9ab
+39. Mastering Flutter: BLoC pattern for Login: Part 1 - DEV Community, accessed July 22, 2025, https://dev.to/theotherdevs/mastering-flutter-bloc-pattern-for-login-part-1-432f
+40. Complete Flutter BLoC Tutorial: Understanding State Management in Flutter - DhiWise, accessed July 23, 2025, https://www.dhiwise.com/post/flutter-bloc-tutorial-understanding-state-management
+41. How to use Bloc with streams and concurrency - Very Good Ventures, accessed July 23, 2025, https://verygood.ventures/blog/how-to-use-bloc-with-streams-and-concurrency
+42. bloc - Dart API docs - Pub.dev, accessed July 22, 2025, https://pub.dev/documentation/bloc/latest/
+43. Reactive Programming with RxDart in Flutter with Example - DEV ..., accessed July 23, 2025, https://dev.to/ayoubzulfiqar/reactive-programming-with-rxdart-in-flutter-with-example-3m8e
+44. Flutter Testing With Practical Examples | Flutter Bloc & Repository Unit Testing - YouTube, accessed July 22, 2025, https://www.youtube.com/watch?v=fhS0tTx1vEc
