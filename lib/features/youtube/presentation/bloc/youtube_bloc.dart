@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:bloc/bloc.dart';
 import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:equatable/equatable.dart';
+import 'package:hydrated_bloc/hydrated_bloc.dart';
 import 'package:zensort/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:zensort/features/youtube/domain/entities/liked_video.dart';
 import 'package:zensort/features/youtube/domain/entities/sync_progress.dart';
@@ -11,7 +12,7 @@ import 'package:zensort/features/youtube/domain/repositories/youtube_repository.
 part 'youtube_event.dart';
 part 'youtube_state.dart';
 
-class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
+class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
   final YoutubeRepository _youtubeRepository;
   final AuthBloc _authBloc;
   StreamSubscription<SyncProgress>? _syncProgressSubscription;
@@ -123,5 +124,33 @@ class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
     _authStateSubscription?.cancel();
     _likedVideosSubscription?.cancel();
     return super.close();
+  }
+
+  // HydratedBloc serialization methods
+  @override
+  YoutubeState? fromJson(Map<String, dynamic> json) {
+    try {
+      final stateType = json['stateType'] as String?;
+      if (stateType == 'YoutubeLoaded') {
+        return YoutubeLoaded.fromJson(json);
+      }
+      // For other states, return null to use default initial state
+      return null;
+    } catch (_) {
+      // If deserialization fails, return null to use default initial state
+      return null;
+    }
+  }
+
+  @override
+  Map<String, dynamic>? toJson(YoutubeState state) {
+    if (state is YoutubeLoaded) {
+      return {
+        'stateType': 'YoutubeLoaded',
+        ...state.toJson(),
+      };
+    }
+    // Only persist YoutubeLoaded states, ignore others
+    return null;
   }
 }
