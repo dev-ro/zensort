@@ -93,7 +93,9 @@ class LikedVideoRelation:
 @https_fn.on_call()
 def get_liked_videos_total(req: https_fn.CallableRequest) -> dict:
     """
-    Fetch total number of liked videos for a user from the YouTube Data API.
+    Fetch total number of liked videos for a user from the YouTube Data API using the correct endpoint.
+    Uses the playlistItems.list endpoint with the special "Liked Videos" playlist to get accurate count
+    including private, deleted, and legacy videos.
     Returns an integer.
     """
     access_token = req.data.get("access_token")
@@ -116,8 +118,9 @@ def get_liked_videos_total(req: https_fn.CallableRequest) -> dict:
         # Build the YouTube service
         youtube = build("youtube", "v3", credentials=credentials)
 
-        # Request liked videos with minimal data to get total count
-        request = youtube.videos().list(myRating="like", part="id", maxResults=1)
+        # Use playlistItems.list with the special "Liked Videos" playlist ID 'LL'
+        # to get accurate total count including private/deleted videos
+        request = youtube.playlistItems().list(playlistId="LL", part="id", maxResults=1)
         response = request.execute()
 
         return {"total": response["pageInfo"]["totalResults"]}
@@ -142,8 +145,118 @@ def get_liked_videos_total(req: https_fn.CallableRequest) -> dict:
         )
 
 
+def fetch_liked_video_items(access_token: str) -> list[dict]:
+    """
+    Fetch all items from the user's special "Liked Videos" playlist using the correct API endpoint.
+    This function uses the playlistItems.list endpoint with playlistId 'LL' to get ALL liked videos
+    (including private, deleted, and legacy videos) with their correct likedAt timestamps.
+
+    Returns a list of dictionaries with 'videoId' and 'likedAt' keys.
+    """
+    try:
+        logger.info("=== Starting fetch_liked_video_items ===")
+
+        # Create OAuth2 credentials from the access token
+        credentials = Credentials(
+            token=access_token,
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id="unused",
+            client_secret="unused",
+            scopes=["https://www.googleapis.com/auth/youtube.readonly"],
+        )
+
+        # Build the YouTube service
+        youtube = build("youtube", "v3", credentials=credentials)
+
+        video_items = []
+        next_page_token = None
+        page_count = 0
+
+        while True:
+            page_count += 1
+            logger.info(f"Fetching page {page_count} of liked video items")
+
+            # Use playlistItems.list with the special "Liked Videos" playlist ID 'LL'
+            request = youtube.playlistItems().list(
+                playlistId="LL",  # Special playlist ID for "Liked Videos"
+                part="snippet",
+                maxResults=50,
+                pageToken=next_page_token,
+            )
+
+            response = request.execute()
+
+            # Extract video items with videoId and likedAt timestamp
+            for item in response.get("items", []):
+                snippet = item.get("snippet", {})
+                video_id = snippet.get("resourceId", {}).get("videoId")
+
+                # The likedAt timestamp is the snippet.publishedAt from the playlist item
+                liked_at_str = snippet.get("publishedAt", "")
+                try:
+                    liked_at = datetime.fromisoformat(
+                        liked_at_str.replace("Z", "+00:00")
+                    )
+                except ValueError:
+                    logger.warning(
+                        f"Invalid likedAt timestamp for video {video_id}: {liked_at_str}"
+                    )
+                    liked_at = datetime.now(timezone.utc)
+
+                if video_id:
+                    video_items.append({"videoId": video_id, "likedAt": liked_at})
+
+            logger.info(
+                f"Page {page_count}: Retrieved {len(response.get('items', []))} video items"
+            )
+
+            # Check for next page
+            next_page_token = response.get("nextPageToken")
+            if not next_page_token:
+                logger.info(
+                    f"Completed fetching all video items. Total: {len(video_items)}"
+                )
+                break
+
+        return video_items
+
+    except HttpError as e:
+        logger.error(
+            f"YouTube API HttpError: {e.resp.status if hasattr(e, 'resp') else 'unknown'}"
+        )
+
+        if e.resp.status == 401:
+            raise https_fn.HttpsError(
+                code=https_fn.FunctionsErrorCode.UNAUTHENTICATED,
+                message="Invalid or expired YouTube access token.",
+            )
+        elif e.resp.status == 403:
+            error_content = json.loads(e.content) if e.content else {}
+            error_info = error_content.get("error", {})
+            raise https_fn.HttpsError(
+                code=https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+                message=f"YouTube API access denied: {error_info.get('message', 'Permission denied')}",
+            )
+        else:
+            raise https_fn.HttpsError(
+                code=https_fn.FunctionsErrorCode.INTERNAL,
+                message=f"YouTube API error: HTTP {e.resp.status}",
+            )
+    except Exception as e:
+        logger.error(
+            f"Unexpected error in fetch_liked_video_items: {type(e).__name__}: {str(e)}"
+        )
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INTERNAL,
+            message=f"Failed to fetch video items: {type(e).__name__}: {str(e)}",
+        )
+
+
 def fetch_liked_video_ids(access_token: str) -> list[str]:
     """
+    DEPRECATED: This function uses the wrong endpoint and excludes private/deleted videos.
+    Use fetch_liked_video_items() instead for complete data integrity.
+
     Fetch all liked video IDs for a user from the YouTube Data API, handling pagination.
     Returns a list of video IDs only (no metadata).
     """
@@ -231,13 +344,15 @@ def fetch_liked_video_ids(access_token: str) -> list[str]:
 def fetch_video_details(access_token: str, video_ids: list[str]) -> list[Video]:
     """
     Fetch detailed metadata for specified video IDs from YouTube API.
+    Implements proper batching to handle more than 50 videos by making multiple
+    paginated calls to the videos.list endpoint.
     Returns a list of Video objects with full metadata.
     """
     if not video_ids:
         return []
 
     try:
-        logger.info(f"Fetching details for {len(video_ids)} videos")
+        logger.info(f"=== Starting fetch_video_details for {len(video_ids)} videos ===")
 
         credentials = Credentials(
             token=access_token,
@@ -249,21 +364,53 @@ def fetch_video_details(access_token: str, video_ids: list[str]) -> list[Video]:
 
         youtube = build("youtube", "v3", credentials=credentials)
 
-        videos = []
+        all_videos = []  # Master list to aggregate all results
+        batch_size = 50  # YouTube API limit for videos.list endpoint
 
-        # Process in batches of 50 (API limit)
-        for i in range(0, len(video_ids), 50):
-            batch_ids = video_ids[i : i + 50]
-            logger.info(f"Processing batch {i//50 + 1}: {len(batch_ids)} videos")
+        # Process video_ids in chunks of 50
+        total_batches = (len(video_ids) + batch_size - 1) // batch_size
+        logger.info(
+            f"Processing {len(video_ids)} video IDs in {total_batches} batches of {batch_size}"
+        )
 
-            request = youtube.videos().list(part="id,snippet", id=",".join(batch_ids))
+        for batch_index in range(0, len(video_ids), batch_size):
+            # Get the current batch of video IDs
+            batch_ids = video_ids[batch_index : batch_index + batch_size]
+            current_batch_number = (batch_index // batch_size) + 1
 
-            response = request.execute()
+            logger.info(
+                f"Processing batch {current_batch_number}/{total_batches}: {len(batch_ids)} video IDs"
+            )
+            logger.info(
+                f"Batch {current_batch_number} IDs: {batch_ids[:5]}{'...' if len(batch_ids) > 5 else ''}"
+            )
 
-            for item in response.get("items", []):
-                snippet = item.get("snippet", {})
-                videos.append(
-                    Video(
+            # Make API request for this batch
+            try:
+                request = youtube.videos().list(
+                    part="id,snippet", id=",".join(batch_ids)
+                )
+                response = request.execute()
+
+                batch_videos = []  # Videos from this batch
+
+                # Process each item in the response
+                for item in response.get("items", []):
+                    snippet = item.get("snippet", {})
+
+                    # Parse publishedAt timestamp safely
+                    published_at_str = snippet.get("publishedAt", "")
+                    try:
+                        published_at = datetime.fromisoformat(
+                            published_at_str.replace("Z", "+00:00")
+                        )
+                    except ValueError:
+                        logger.warning(
+                            f"Invalid publishedAt format for video {item['id']}: {published_at_str}"
+                        )
+                        published_at = datetime.now(timezone.utc)
+
+                    video = Video(
                         videoId=item["id"],
                         title=snippet.get("title", ""),
                         description=snippet.get("description", ""),
@@ -271,19 +418,57 @@ def fetch_video_details(access_token: str, video_ids: list[str]) -> list[Video]:
                         .get("default", {})
                         .get("url", ""),
                         channelTitle=snippet.get("channelTitle", ""),
-                        publishedAt=datetime.fromisoformat(
-                            snippet.get("publishedAt", "").replace("Z", "+00:00")
-                        ),
+                        publishedAt=published_at,
                         platform="YouTube",
                         addedToZensortAt=datetime.now(timezone.utc),
                     )
-                )
+                    batch_videos.append(video)
 
-        logger.info(f"Successfully fetched details for {len(videos)} videos")
-        return videos
+                # Add this batch's results to the master list
+                all_videos.extend(batch_videos)
+                logger.info(
+                    f"Batch {current_batch_number}: Successfully fetched {len(batch_videos)} video details"
+                )
+                logger.info(f"Total videos fetched so far: {len(all_videos)}")
+
+            except HttpError as e:
+                logger.error(
+                    f"YouTube API error for batch {current_batch_number}: HTTP {e.resp.status}"
+                )
+                # Continue with next batch instead of failing completely
+                if e.resp.status == 401:
+                    raise https_fn.HttpsError(
+                        code=https_fn.FunctionsErrorCode.UNAUTHENTICATED,
+                        message="Invalid or expired YouTube access token.",
+                    )
+                else:
+                    logger.warning(
+                        f"Skipping batch {current_batch_number} due to API error: {e}"
+                    )
+                    continue
+
+            except Exception as e:
+                logger.error(
+                    f"Unexpected error processing batch {current_batch_number}: {type(e).__name__}: {str(e)}"
+                )
+                # Continue with next batch
+                continue
+
+        logger.info(
+            f"=== Completed fetch_video_details: {len(all_videos)} videos fetched out of {len(video_ids)} requested ==="
+        )
+
+        if len(all_videos) != len(video_ids):
+            logger.warning(
+                f"Video count mismatch: requested {len(video_ids)}, got {len(all_videos)}"
+            )
+
+        return all_videos
 
     except Exception as e:
-        logger.error(f"Error fetching video details: {type(e).__name__}: {str(e)}")
+        logger.error(
+            f"Critical error in fetch_video_details: {type(e).__name__}: {str(e)}"
+        )
         raise
 
 
@@ -331,7 +516,13 @@ def get_existing_video_ids(video_ids: list[str]) -> set[str]:
 def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
     """
     A scalable callable Cloud Function to sync a user's liked YouTube videos to Firestore.
-    Uses a new data model that separates public video data from user-specific data.
+    Uses the correct two-step API process for complete data integrity and performance.
+
+    This function implements the efficient, batched algorithm:
+    - Step A: Fetch all liked video items (public + private/legacy) with correct timestamps
+    - Step B: Categorize videos and identify new public videos needing metadata
+    - Step C: Batch fetch details for new public videos only
+    - Step D: Atomic batch write for all operations
 
     Expects: access_token and user_id in the request data.
     Returns: dict with sync statistics.
@@ -352,93 +543,123 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
         )
 
     try:
-        logger.info(f"Starting sync for user {user_id}")
+        logger.info(f"Starting efficient sync for user {user_id}")
 
-        # Step 1: Fetch all liked video IDs
-        all_video_ids = fetch_liked_video_ids(access_token)
-        logger.info(f"Found {len(all_video_ids)} total liked videos")
+        # Step A: Fetch All Items - Get complete list with correct likedAt timestamps
+        logger.info("Step A: Fetching all liked video items from playlist")
+        all_video_items = fetch_liked_video_items(access_token)
+        logger.info(f"Found {len(all_video_items)} total liked videos")
 
-        if not all_video_ids:
+        if not all_video_items:
             return {"synced": 0, "public_videos": 0, "private_legacy_videos": 0}
 
-        # Step 2: Check which videos already exist in the public collection
-        existing_video_ids = get_existing_video_ids(all_video_ids)
+        # Step B: Categorize and Identify New Public Videos
+        logger.info("Step B: Categorizing videos and checking existing public videos")
 
-        # Step 3: Identify new videos that need metadata fetching
+        # First, we need to get titles for categorization - but only for videos we don't have yet
+        # Extract all video IDs
+        all_video_ids = [item["videoId"] for item in all_video_items]
+
+        # Check which videos already exist in the root /videos collection
+        existing_video_ids = get_existing_video_ids(all_video_ids)
+        logger.info(
+            f"Found {len(existing_video_ids)} videos already in public collection"
+        )
+
+        # Get new video IDs that need metadata fetching
         new_video_ids = [
             vid_id for vid_id in all_video_ids if vid_id not in existing_video_ids
         ]
         logger.info(f"Need to fetch metadata for {len(new_video_ids)} new videos")
 
-        # Step 4: Fetch details for new videos only
+        # Step C: Batch Fetch Details for New Videos
+        logger.info("Step C: Batch fetching details for new public videos")
         new_videos = []
         if new_video_ids:
             new_videos = fetch_video_details(access_token, new_video_ids)
+            logger.info(
+                f"Successfully fetched details for {len(new_videos)} new videos"
+            )
 
-        # Step 5: Categorize videos and prepare for batch write
+        # Categorize new videos into public and private/legacy
+        public_videos = []
+        private_legacy_video_ids = set()
+
+        for video in new_videos:
+            if is_private_legacy_video(video.title):
+                private_legacy_video_ids.add(video.videoId)
+                logger.info(
+                    f"Categorized {video.videoId} as private/legacy: {video.title}"
+                )
+            else:
+                public_videos.append(video)
+
+        logger.info(
+            f"Categorization complete: {len(public_videos)} public, {len(private_legacy_video_ids)} private/legacy new videos"
+        )
+
+        # Step D: Atomic Batch Write
+        logger.info("Step D: Executing atomic batch write")
         db = firestore.client()
         batch = db.batch()
 
-        public_video_count = 0
-        private_legacy_video_count = 0
         sync_timestamp = datetime.now(timezone.utc)
 
-        # Add new public videos to the root collection
-        for video in new_videos:
-            if not is_private_legacy_video(video.title):
-                # This is a public video - add to root collection
-                video_doc_ref = db.collection("videos").document(video.videoId)
-                batch.set(
-                    video_doc_ref,
-                    {
-                        "platform": video.platform,
-                        "videoId": video.videoId,
-                        "title": video.title,
-                        "description": video.description,
-                        "channelTitle": video.channelTitle,
-                        "thumbnailUrl": video.thumbnailUrl,
-                        "publishedAt": video.publishedAt,
-                        "addedToZensortAt": video.addedToZensortAt,
-                    },
-                )
-                public_video_count += 1
+        # Add new public videos to the root /videos collection
+        for video in public_videos:
+            video_doc_ref = db.collection("videos").document(video.videoId)
+            batch.set(
+                video_doc_ref,
+                {
+                    "platform": video.platform,
+                    "videoId": video.videoId,
+                    "title": video.title,
+                    "description": video.description,
+                    "channelTitle": video.channelTitle,
+                    "thumbnailUrl": video.thumbnailUrl,
+                    "publishedAt": video.publishedAt,
+                    "addedToZensortAt": video.addedToZensortAt,
+                },
+            )
 
         # Add ALL videos (public + private/legacy) to user's liked videos subcollection
-        for video_id in all_video_ids:
-            # For existing videos, we don't have the likedAt timestamp,
-            # so we'll use the sync timestamp as a fallback
+        # Using the correct likedAt timestamps from Step A
+        for video_item in all_video_items:
             liked_video_doc_ref = (
                 db.collection("users")
                 .document(user_id)
                 .collection("likedVideos")
-                .document(video_id)
+                .document(video_item["videoId"])
             )
             batch.set(
                 liked_video_doc_ref,
                 {
-                    "likedAt": sync_timestamp,  # This could be enhanced to get actual like timestamp
+                    "likedAt": video_item[
+                        "likedAt"
+                    ],  # Correct timestamp from playlist API
                     "syncedAt": sync_timestamp,
                 },
             )
 
-            # Count private/legacy videos
-            for video in new_videos:
-                if video.videoId == video_id and is_private_legacy_video(video.title):
-                    private_legacy_video_count += 1
+        # Execute the atomic batch write
+        total_public_videos = len(public_videos)
+        total_private_legacy = len(private_legacy_video_ids)
+        total_user_relations = len(all_video_items)
 
-        # Step 6: Execute atomic batch write
         logger.info(
-            f"Executing batch write: {public_video_count} public videos, {len(all_video_ids)} user relations"
+            f"Executing batch write: {total_public_videos} new public videos, {total_user_relations} user relations"
         )
         batch.commit()
 
         logger.info(f"Sync completed successfully for user {user_id}")
 
         return {
-            "synced": len(all_video_ids),
-            "public_videos": public_video_count,
-            "private_legacy_videos": private_legacy_video_count,
-            "total_liked_videos": len(all_video_ids),
+            "synced": len(all_video_items),
+            "public_videos": total_public_videos,
+            "private_legacy_videos": total_private_legacy,
+            "total_liked_videos": len(all_video_items),
+            "new_videos_processed": len(new_videos),
+            "existing_videos_skipped": len(existing_video_ids),
         }
 
     except Exception as e:
