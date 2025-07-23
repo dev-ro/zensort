@@ -1,3 +1,9 @@
+---
+description: Defines the state management architecture for the project, focusing on scalability and testability.
+globs:
+  - "lib/**/*.dart"
+alwaysApply: false
+---
 # State Management Architecture
 
 To ensure the application is scalable, maintainable, and testable, you MUST follow a structured state management approach.
@@ -22,3 +28,4 @@ To ensure the application is scalable, maintainable, and testable, you MUST foll
 
 - **Triggering Initial Data Loads:** For a feature's BLoC that depends on an authenticated user (e.g., `YouTubeBloc`), the initial data load **MUST NOT** be triggered by the UI's `initState` or `build` methods. This creates tight coupling with the widget lifecycle and can cause infinite loops.
 - **Correct Pattern:** The feature BLoC (`YouTubeBloc`) **MUST** listen to the stream of the foundational BLoC (`AuthBloc`). When the `AuthBloc` emits an `Authenticated` state, the `YouTubeBloc` should then dispatch its own initial data loading event (e.g., `InitialVideosLoaded`). This ensures data is loaded exactly once per authentication session, fully decoupled from the UI.
+  - **State-Based Guarding:** The listening BLoC (`YouTubeBloc`) **MUST** use its own state as a guard. The data loading event should only be dispatched if the listening BLoC is in its initial state (e.g., `if (authState is Authenticated && state is YoutubeInitial)`). This prevents re-loading data on redundant or subsequent state emissions from the source BLoC.

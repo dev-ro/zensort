@@ -27,22 +27,32 @@ class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
     // Listen to AuthBloc state changes for automatic data loading
     _authStateSubscription = _authBloc.stream.listen((authState) {
       print('YouTubeBloc received AuthState: ${authState.runtimeType}');
-      if (authState is Authenticated && authState.accessToken != null) {
+      print('Current YouTubeBloc state: ${state.runtimeType}');
+      if (authState is Authenticated && authState.accessToken != null && state is YoutubeInitial) {
         print(
-          'User authenticated with access token, loading initial videos...',
+          'User authenticated with access token and YouTubeBloc is initial, loading initial videos...',
         );
         add(InitialVideosLoaded());
+      } else if (authState is Authenticated && authState.accessToken != null) {
+        print(
+          'User authenticated but YouTubeBloc is not initial (${state.runtimeType}), skipping reload...',
+        );
       }
     });
 
     // Also check current auth state in case we're already authenticated
     final currentAuthState = _authBloc.state;
     if (currentAuthState is Authenticated &&
-        currentAuthState.accessToken != null) {
+        currentAuthState.accessToken != null &&
+        state is YoutubeInitial) {
       print(
-        'Already authenticated on YouTubeBloc creation, loading initial videos...',
+        'Already authenticated on YouTubeBloc creation and state is initial, loading initial videos...',
       );
       add(InitialVideosLoaded());
+    } else if (currentAuthState is Authenticated && currentAuthState.accessToken != null) {
+      print(
+        'Already authenticated on YouTubeBloc creation but state is not initial (${state.runtimeType}), skipping load...',
+      );
     }
   }
 
