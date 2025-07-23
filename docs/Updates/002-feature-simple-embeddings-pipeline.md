@@ -18,7 +18,7 @@ Implemented an event-driven video embedding system that automatically generates 
 - Direct storage of embeddings within video documents for simplified data model
 
 ### Data Model Enhancement
-- Added `embedding` field (array<number>) to store 768-dimensional vectors
+- Added `embedding` field (array<number>) to store 1536-dimensional vectors
 - Added `embedding_status` field with states: `pending`, `processing`, `complete`, `failed`
 - Added metadata fields for tracking generation timestamps and error states
 - Implemented text preparation combining title, description, and channel information
@@ -37,7 +37,7 @@ This foundation unlocks powerful AI-driven features: intelligent video recommend
 ## Technical Highlights
 
 - **Event-Driven Processing:** Firestore document triggers ensure new videos automatically receive embeddings
-- **Vertex AI Integration:** Using `text-embedding-gecko@001` model for high-quality, cost-effective embeddings
+- **Google Generative AI Integration:** Using `models/gemini-embedding-001` model for high-quality, 1536-dimensional embeddings optimized for clustering
 - **Idempotent Design:** Status-based processing prevents duplicate API calls and ensures system reliability
 - **Batch Processing:** Controlled backfill system processes existing videos without overwhelming infrastructure
 - **Text Optimization:** Strategic combination of title, description, and channel data for comprehensive semantic capture
