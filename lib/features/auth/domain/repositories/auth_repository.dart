@@ -6,4 +6,5 @@ abstract class AuthRepository {
   Future<SignInResult?> signInWithGoogle();
   Future<void> signOut();
   Future<String?> getAccessToken();
+  Future<String?> signInSilentlyWithGoogle();
 }

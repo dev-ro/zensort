@@ -41,9 +41,13 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     final user = event.user;
     if (user != null) {
-      // Handles automatic sign-in on app startup.
-      // The accessToken is null because there was no active sign-in flow.
-      emit(Authenticated(user: user, accessToken: null));
+      // Attempt to get a fresh access token through silent sign-in
+      final accessToken = await _authRepository.signInSilentlyWithGoogle();
+
+      // Emit authenticated state with the refreshed token
+      // Note: accessToken may still be null if silent sign-in fails,
+      // but this is better than always passing null
+      emit(Authenticated(user: user, accessToken: accessToken));
     } else {
       emit(const AuthUnauthenticated());
     }

@@ -105,4 +105,25 @@ class AuthRepositoryImpl implements AuthRepository {
     }
     return null;
   }
+
+  @override
+  Future<String?> signInSilentlyWithGoogle() async {
+    try {
+      if (kIsWeb) {
+        // Attempt to sign in silently (no user interaction required)
+        final GoogleSignInAccount? googleUser = await _googleSignIn
+            .signInSilently();
+        if (googleUser != null) {
+          final GoogleSignInAuthentication googleAuth =
+              await googleUser.authentication;
+          return googleAuth.accessToken;
+        }
+      }
+      return null;
+    } catch (e) {
+      // Silent sign-in failed, return null to indicate no token available
+      print('Silent sign-in failed: $e');
+      return null;
+    }
+  }
 }
