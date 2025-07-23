@@ -72,7 +72,7 @@ test(youtube): Add unit tests for sync progress tracking
 
 ## Branch Workflow: Merging a Feature Branch
 
-When instructed to "merge a feature branch", you MUST follow this exact sequence of commands to ensure a safe and clean merge.
+When instructed to "merge a branch", you MUST follow this exact sequence of commands to ensure a safe and clean merge.
 
 ## 1. Prepare the `main` Branch
 
