@@ -16,11 +16,18 @@ from googleapiclient.errors import HttpError
 import logging
 import json
 import time
-import google.generativeai as genai
+import vertexai
+from vertexai.language_models import TextEmbeddingModel, TextEmbeddingInput
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Initialize Vertex AI
+vertexai.init(project=None, location="us-central1")
+
+# Constants for embedding configuration
+EMBEDDING_DIMENSIONALITY = 1536
 
 # For cost control, you can set the maximum number of containers that can be
 # running at the same time. This helps mitigate the impact of unexpected
@@ -253,8 +260,6 @@ def fetch_liked_video_items(access_token: str) -> list[dict]:
             message=f"Failed to fetch video items: {type(e).__name__}: {str(e)}",
         )
 
-
-def fetch_liked_video_ids(access_token: str) -> list[str]:
     """
     DEPRECATED: This function uses the wrong endpoint and excludes private/deleted videos.
     Use fetch_liked_video_items() instead for complete data integrity.
@@ -753,8 +758,8 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
 
 
 @firestore_fn.on_document_written(document="videos/{videoId}")
-def process_video_embedding(
-    event: firestore_fn.Event[firestore_fn.DocumentSnapshot],
+def create_video_embedding(
+    event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot]],
 ) -> None:
     """
     Event-driven function to generate embeddings for videos when they are created or updated.
@@ -763,13 +768,22 @@ def process_video_embedding(
     try:
         logger.info(f"Processing embedding for video: {event.params['videoId']}")
 
-        # Get the video document data
-        video_data = event.data.to_dict() if event.data else None
+        # Get the video document data from the 'after' snapshot
+        video_data = (
+            event.data.after.to_dict() if event.data and event.data.after else None
+        )
         if not video_data:
             logger.warning(f"No data found for video {event.params['videoId']}")
             return
 
-        # Idempotency check: Skip if embedding is already complete or if this is not a new video
+        # Skip if this is a batch update from the backfill process
+        if "backfill_completed_at" in video_data:
+            logger.info(
+                f"Video {event.params['videoId']} is being updated by batch process, skipping individual processing"
+            )
+            return
+
+        # Idempotency check: Skip if embedding is already complete
         embedding_status = video_data.get("embedding_status")
         if embedding_status == "complete":
             logger.info(
@@ -803,8 +817,15 @@ def process_video_embedding(
         # Update status to processing
         _update_embedding_status(event.params["videoId"], "processing")
 
-        # Generate embedding using Vertex AI
-        embedding_vector = _generate_embedding(combined_text)
+        # Generate embedding using the dedicated helper function
+        try:
+            embedding_vector = _generate_embedding(combined_text)
+        except Exception as e:
+            logger.error(
+                f"Error generating embedding for video {event.params['videoId']}: {str(e)}"
+            )
+            _update_embedding_status(event.params["videoId"], "failed", error=str(e))
+            return
 
         # Update document with embedding and mark as complete
         db = firestore.client()
@@ -821,6 +842,9 @@ def process_video_embedding(
             f"Successfully generated embedding for video {event.params['videoId']}"
         )
 
+        # Add rate limiting delay to prevent overwhelming the API
+        time.sleep(0.2)
+
     except Exception as e:
         logger.error(
             f"Error processing embedding for video {event.params['videoId']}: {str(e)}"
@@ -829,10 +853,11 @@ def process_video_embedding(
 
 
 @https_fn.on_request()
-def initiate_embedding_backfill(req: https_fn.Request) -> https_fn.Response:
+def trigger_video_embeddings(req: https_fn.Request) -> https_fn.Response:
     """
-    HTTPS-triggered function to initiate embedding backfill for all videos without embeddings.
-    Secured endpoint that updates videos to trigger the embedding processor.
+    Efficient batch processing function to generate embeddings for all videos without embeddings.
+    Uses single batch API calls and Firestore batch updates for maximum efficiency.
+    Processes up to 1000 videos per invocation with auto-continuation for unlimited scalability.
     """
     try:
         # Simple security check - require a secret parameter
@@ -841,69 +866,194 @@ def initiate_embedding_backfill(req: https_fn.Request) -> https_fn.Response:
         if secret != "zensort-embedding-backfill-2024":
             return https_fn.Response("Unauthorized", status=401)
 
-        logger.info("Starting embedding backfill process")
+        # Get pagination cursor for resuming from previous batch
+        start_after_id = req.args.get("start_after")
+        batch_number = int(req.args.get("batch", "1"))
+
+        logger.info(f"Starting embedding backfill process - Batch #{batch_number}")
+        if start_after_id:
+            logger.info(f"Resuming from video ID: {start_after_id}")
 
         db = firestore.client()
         videos_collection = db.collection("videos")
 
-        # Query for videos without embedding_status field (meaning they need processing)
-        videos_query = videos_collection.where("embedding_status", "==", None)
-        videos_without_embedding = videos_query.stream()
+        # Build query with cursor support for pagination
+        # Process 1000 videos per batch (safe for 9-minute Cloud Function timeout)
+        videos_query = videos_collection.order_by("__name__").limit(1000)
 
-        processed_count = 0
+        # Resume from where previous batch left off
+        if start_after_id:
+            start_after_doc = videos_collection.document(start_after_id).get()
+            if start_after_doc.exists:
+                videos_query = videos_query.start_after(start_after_doc)
+
+        videos_batch = videos_query.get()
+
+        logger.info(f"Retrieved {len(videos_batch)} videos for processing")
+
+        # Collect videos that need embeddings
+        videos_to_process = []
+        video_texts = []
+        skipped_count = 0
+        last_doc_id = None
+
+        for video_doc in videos_batch:
+            last_doc_id = video_doc.id  # Track last processed document for pagination
+            video_data = video_doc.to_dict()
+
+            # Skip if video already has a valid, complete embedding
+            if _has_valid_embedding(video_data):
+                skipped_count += 1
+                continue
+
+            # Extract text fields for embedding
+            title = video_data.get("title", "").strip()
+            description = video_data.get("description", "").strip()
+            channel_title = video_data.get("channelTitle", "").strip()
+
+            if not title and not description and not channel_title:
+                logger.warning(f"No text content found for video {video_doc.id}")
+                skipped_count += 1
+                continue
+
+            # Combine text fields for embedding
+            combined_text = _prepare_embedding_text(title, description, channel_title)
+
+            videos_to_process.append(
+                {
+                    "id": video_doc.id,
+                    "reference": video_doc.reference,
+                    "text": combined_text,
+                }
+            )
+            video_texts.append(combined_text)
+
+        processed_count = len(videos_to_process)
         failed_count = 0
 
-        # Process videos in batches to avoid overwhelming the system
-        batch = db.batch()
-        batch_size = 0
-        max_batch_size = 500  # Firestore batch limit
+        if processed_count == 0:
+            logger.info("No videos need embedding processing in this batch")
+            result_message = f"Batch #{batch_number}: No videos needed processing, skipped {skipped_count} already processed"
+        else:
+            logger.info(f"Processing embeddings for {processed_count} videos")
 
-        for video_doc in videos_without_embedding:
             try:
-                # Set embedding_status to 'pending' to trigger the onWrite function
-                batch.update(
-                    video_doc.reference,
-                    {
-                        "embedding_status": "pending",
-                        "backfill_initiated_at": datetime.now(timezone.utc),
-                    },
+                # Process embeddings one by one (gemini-embedding-001 limitation)
+                logger.info(
+                    f"Processing embeddings for {len(videos_to_process)} videos one by one"
                 )
-                batch_size += 1
-                processed_count += 1
+                firestore_batch = db.batch()
+                batch_timestamp = datetime.now(timezone.utc)
+                successful_embeddings = 0
 
-                # Commit batch when it reaches the limit
-                if batch_size >= max_batch_size:
-                    batch.commit()
-                    batch = db.batch()
-                    batch_size = 0
-                    logger.info(
-                        f"Committed batch, processed {processed_count} videos so far"
-                    )
+                for video_info in videos_to_process:
+                    try:
+                        # Generate embedding using the dedicated helper function
+                        embedding_vector = _generate_embedding(video_info["text"])
 
-                    # Add a small delay to prevent overwhelming the system
-                    time.sleep(1)
+                        firestore_batch.update(
+                            video_info["reference"],
+                            {
+                                "embedding": embedding_vector,
+                                "embedding_status": "complete",
+                                "embedding_generated_at": batch_timestamp,
+                                "backfill_completed_at": batch_timestamp,
+                            },
+                        )
+                        successful_embeddings += 1
+
+                        # Add rate limiting delay to prevent overwhelming the API
+                        time.sleep(0.2)
+
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to generate embedding for video {video_info['id']}: {str(e)}"
+                        )
+                        # Mark video as failed
+                        firestore_batch.update(
+                            video_info["reference"],
+                            {
+                                "embedding_status": "failed",
+                                "embedding_error": str(e),
+                                "embedding_updated_at": batch_timestamp,
+                                "backfill_completed_at": batch_timestamp,
+                            },
+                        )
+
+                # Commit all updates in a single batch
+                firestore_batch.commit()
+                logger.info(
+                    f"Successfully processed {successful_embeddings} videos with embeddings"
+                )
+
+                failed_count = processed_count - successful_embeddings
+                processed_count = successful_embeddings
+                result_message = f"Batch #{batch_number}: Successfully processed {processed_count} videos, skipped {skipped_count} already processed"
+                if failed_count > 0:
+                    result_message += f", {failed_count} failed"
 
             except Exception as e:
-                logger.error(f"Failed to update video {video_doc.id}: {str(e)}")
-                failed_count += 1
+                logger.error(f"Error in batch embedding processing: {str(e)}")
+                failed_count = processed_count
+                processed_count = 0
+                result_message = f"Batch #{batch_number}: Failed to process {failed_count} videos - {str(e)}"
 
-        # Commit any remaining updates in the batch
-        if batch_size > 0:
-            batch.commit()
+        # Check if we need to continue processing more videos
+        has_more_videos = (
+            len(videos_batch) == 1000
+        )  # If we got a full batch, more likely exist
 
-        result_message = f"Embedding backfill initiated for {processed_count} videos"
         if failed_count > 0:
-            result_message += f" ({failed_count} failed to update)"
+            result_message += f", {failed_count} failed"
 
         logger.info(result_message)
+
+        # Auto-continuation: If we processed a full batch, trigger next batch
+        if has_more_videos and last_doc_id:
+            next_batch_number = batch_number + 1
+            continuation_url = f"https://us-central1-zensort-dev.cloudfunctions.net/trigger_video_embeddings?secret={secret}&start_after={last_doc_id}&batch={next_batch_number}"
+
+            logger.info(
+                f"Full batch processed. Triggering continuation batch #{next_batch_number}"
+            )
+
+            # Trigger next batch asynchronously
+            try:
+                import threading
+
+                def trigger_next_batch():
+                    time.sleep(2)  # Brief delay to avoid overwhelming
+                    response = requests.get(continuation_url, timeout=10)
+                    logger.info(
+                        f"Triggered batch #{next_batch_number}: {response.status_code}"
+                    )
+
+                # Start continuation in background thread
+                thread = threading.Thread(target=trigger_next_batch)
+                thread.daemon = True
+                thread.start()
+
+                result_message += f" | Triggered batch #{next_batch_number}"
+
+            except Exception as e:
+                logger.error(f"Failed to trigger continuation: {e}")
+                result_message += f" | Manual continuation needed: {continuation_url}"
+
+        elif not has_more_videos:
+            logger.info("Embedding backfill completed - no more videos to process")
+            result_message += " | Backfill completed"
 
         return https_fn.Response(
             json.dumps(
                 {
                     "success": True,
                     "message": result_message,
+                    "batch_number": batch_number,
                     "processed_count": processed_count,
+                    "skipped_count": skipped_count,
                     "failed_count": failed_count,
+                    "has_more_videos": has_more_videos,
+                    "last_doc_id": last_doc_id,
                 }
             ),
             status=200,
@@ -920,19 +1070,17 @@ def initiate_embedding_backfill(req: https_fn.Request) -> https_fn.Response:
 
 
 def _is_new_video_creation(
-    event: firestore_fn.Event[firestore_fn.DocumentSnapshot],
+    event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot]],
 ) -> bool:
     """Check if this is a new video creation by examining the before/after snapshots."""
     # If there's no before data, this is a new document creation
-    return event.data_before is None or not event.data_before.exists
+    return event.data.before is None or not event.data.before.exists
 
 
 def _prepare_embedding_text(title: str, description: str, channel_title: str) -> str:
     """Combine video fields into embedding-optimized text."""
-    # Truncate description to prevent extremely long inputs
-    description = description[:500] if description else ""
-
     # Create structured text for better embedding quality
+    # Let the API handle truncation automatically (no manual truncation)
     parts = []
     if title:
         parts.append(f"Title: {title}")
@@ -945,36 +1093,59 @@ def _prepare_embedding_text(title: str, description: str, channel_title: str) ->
 
 
 def _generate_embedding(text: str) -> list:
-    """Generate embedding vector using Google Generative AI Embeddings API."""
+    """Generate embedding vector using Vertex AI TextEmbeddingModel with proper TextEmbeddingInput."""
     try:
-        # Configure the API (API key should be set via environment variable GOOGLE_API_KEY)
-        # In Cloud Functions, this will be automatically configured
-        
-        # Generate embedding with high-quality 1536-dimensional vectors optimized for clustering
-        result = genai.embed_content(
-            model="models/gemini-embedding-001",
-            content=text,
-            task_type="CLUSTERING",
-            output_dimensionality=1536
+        # Initialize the text embedding model
+        model = TextEmbeddingModel.from_pretrained("gemini-embedding-001")
+
+        # Create TextEmbeddingInput with CLUSTERING task type
+        embedding_input = TextEmbeddingInput(text, task_type="CLUSTERING")
+
+        # Generate embedding using the correct API
+        # gemini-embedding-001 accepts only a single input per request
+        embedding_result = model.get_embeddings(
+            [embedding_input], output_dimensionality=EMBEDDING_DIMENSIONALITY
         )
-        
+
         # Extract the embedding values
-        if not result or 'embedding' not in result:
-            raise ValueError("No embedding returned from model")
-        
-        embedding_values = result['embedding']
-        if not embedding_values:
-            raise ValueError("No embedding values in response")
-        
+        embedding_vector = list(embedding_result[0].values)
+
         # Ensure we have the expected dimensionality
-        if len(embedding_values) != 1536:
-            logger.warning(f"Expected 1536 dimensions, got {len(embedding_values)}")
-        
-        return list(embedding_values)
-        
+        if len(embedding_vector) != EMBEDDING_DIMENSIONALITY:
+            logger.warning(
+                f"Expected {EMBEDDING_DIMENSIONALITY} dimensions, got {len(embedding_vector)}"
+            )
+
+        return embedding_vector
+
     except Exception as e:
-        logger.error(f"Error generating embedding with google-generativeai: {e}")
+        logger.error(
+            f"Error generating embedding with vertexai TextEmbeddingModel: {e}"
+        )
         raise ValueError(f"Embedding generation failed: {e}")
+
+
+def _has_valid_embedding(video_data: dict) -> bool:
+    """
+    Check if a video document has a complete, valid embedding vector.
+
+    Returns True only if:
+    - 'embedding' field exists
+    - It's a list/array
+    - It has the correct dimensionality
+    """
+    embedding = video_data.get("embedding")
+
+    if not embedding:
+        return False
+
+    if not isinstance(embedding, list):
+        return False
+
+    if len(embedding) != EMBEDDING_DIMENSIONALITY:
+        return False
+
+    return True
 
 
 def _update_embedding_status(video_id: str, status: str, error: str = None) -> None:
