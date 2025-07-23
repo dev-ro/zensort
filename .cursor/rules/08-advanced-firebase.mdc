@@ -1,27 +1,546 @@
 ---
-description: Enforces advanced best practices for Firestore security, data modeling, and query performance.
-globs:
-  - "firestore.rules"
-  - "functions/**/*.py"
-  - "lib/features/**/data/*.dart"
-alwaysApply: false
+title: Advanced Firebase Patterns
 ---
+
 # Advanced Firebase Patterns
 
-All Firebase interactions must be secure, performant, and cost-effective.
+All Firebase interactions must be secure, performant, cost-effective, and scalable for advanced features like embeddings and vector search.
 
 ## 1. Firestore Security Rules
+
+### 1.1 Security-First Design
 
 - **Start Locked:** All new collections in `firestore.rules` MUST start in a "locked mode" (`allow read, write: if false;`). You must then explicitly grant access as needed.
 - **Content-Owner Only Access:** A common pattern is to restrict access to a user's own data. This MUST be implemented by matching the document ID or a field with the user's UID from the request (`request.auth.uid`).
 - **Role-Based Access Control (RBAC):** For advanced permissions (e.g., admins), you MUST use **Custom Claims**. Claims are to be set from a secure backend environment (a Cloud Function) and checked within security rules via `request.auth.token.<claimName>`. Do not store roles in Firestore documents for security checks.
 
+### 1.2 Vector Database Security
+
+For embedding-enhanced collections, apply additional security measures:
+
+```javascript
+// firestore.rules - Vector database security pattern
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Vector-enhanced video collection
+    match /videos/{videoId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null 
+        && request.auth.uid == resource.data.ownerId
+        && validateVideoData(request.resource.data);
+    }
+    
+    // User's private embedding workspace
+    match /users/{userId}/embeddings/{embeddingId} {
+      allow read, write: if request.auth != null 
+        && request.auth.uid == userId;
+    }
+  }
+}
+
+function validateVideoData(data) {
+  return data.keys().hasAll(['title', 'channelName', 'publishedAt'])
+    && data.title is string
+    && data.title.size() <= 1000;
+}
+```
+
 ## 2. Performance & Cost Optimization
 
-- **Pagination:** When fetching large lists of data, you MUST NOT use `offset()`. It is inefficient and costly. You MUST implement pagination using **query cursors** (`startAfter()` or `startAfterDocument()`).
-- **Indexes:** For complex queries involving multiple fields, you MUST create a **composite index**. The error message from the Firebase SDK provides a direct link to create it.
+### 2.1 Query Optimization Patterns
 
-## 3. Data Modeling
+**Pagination:** When fetching large lists of data, you MUST NOT use `offset()`. It is inefficient and costly. You MUST implement pagination using **query cursors** (`startAfter()` or `startAfterDocument()`).
 
-- **Type-Safe Models:** Do not pass `Map<String, dynamic>` through your app logic. All Firestore documents MUST be represented by type-safe Dart model classes that include `fromJson` and `toJson` methods.
-- **Denormalization:** To improve read performance and reduce costs, you SHOULD strategically denormalize (duplicate) data. For example, store `authorName` directly on a `post` document instead of requiring a separate lookup to the `users` collection.
+```dart
+// ✅ CORRECT: Cursor-based pagination
+class VideosRepository {
+  static const int pageSize = 20;
+  
+  Future<PaginatedResult<Video>> getVideos({
+    DocumentSnapshot? startAfter,
+  }) async {
+    Query query = _firestore
+        .collection('videos')
+        .orderBy('publishedAt', descending: true)
+        .limit(pageSize);
+    
+    if (startAfter != null) {
+      query = query.startAfterDocument(startAfter);
+    }
+    
+    final snapshot = await query.get();
+    final videos = snapshot.docs.map((doc) => Video.fromFirestore(doc)).toList();
+    
+    return PaginatedResult(
+      items: videos,
+      lastDocument: snapshot.docs.isNotEmpty ? snapshot.docs.last : null,
+      hasMore: snapshot.docs.length == pageSize,
+    );
+  }
+}
+
+// ❌ FORBIDDEN: Using offset() pagination
+Future<List<Video>> getBadPagination(int page) async {
+  final snapshot = await _firestore
+      .collection('videos')
+      .offset(page * 20) // EXPENSIVE AND SLOW
+      .limit(20)
+      .get();
+  return snapshot.docs.map((doc) => Video.fromFirestore(doc)).toList();
+}
+```
+
+### 2.2 N+1 Query Prevention
+
+**The N+1 Problem:** Occurs when you fetch a list of items and then make separate queries for related data for each item.
+
+**Solution Pattern: Denormalization and Batch Reads**
+
+```dart
+// ✅ CORRECT: Denormalized data model prevents N+1 queries
+class Video {
+  final String id;
+  final String title;
+  final String channelName; // Denormalized from channel document
+  final String channelAvatarUrl; // Denormalized for immediate display
+  final DateTime publishedAt;
+  final int likeCount; // Cached aggregate
+}
+
+// ✅ CORRECT: Batch read pattern for related data
+class EnhancedVideosRepository {
+  Future<List<VideoWithDetails>> getVideosWithChannelDetails(
+    List<String> videoIds,
+  ) async {
+    // Single batch read instead of N+1 queries
+    final futures = videoIds.map((id) => 
+      _firestore.collection('videos').doc(id).get()
+    );
+    
+    final videoSnapshots = await Future.wait(futures);
+    return videoSnapshots.map((snapshot) => 
+      VideoWithDetails.fromFirestore(snapshot)
+    ).toList();
+  }
+}
+
+// ❌ FORBIDDEN: N+1 Query anti-pattern
+class BadRepository {
+  Future<List<VideoWithChannel>> getVideosWithChannels() async {
+    final videosSnapshot = await _firestore.collection('videos').get();
+    final results = <VideoWithChannel>[];
+    
+    // This creates N+1 queries (1 for videos + N for each channel)
+    for (final videoDoc in videosSnapshot.docs) {
+      final video = Video.fromFirestore(videoDoc);
+      
+      // EXPENSIVE: Separate query for each video's channel
+      final channelDoc = await _firestore
+          .collection('channels')
+          .doc(video.channelId)
+          .get();
+      
+      results.add(VideoWithChannel(video, Channel.fromFirestore(channelDoc)));
+    }
+    
+    return results;
+  }
+}
+```
+
+### 2.3 Composite Indexes
+
+For complex queries involving multiple fields, you MUST create a **composite index**. The error message from the Firebase SDK provides a direct link to create it.
+
+```dart
+// This query requires a composite index on (ownerId, publishedAt)
+Future<List<Video>> getUserVideosOrderedByDate(String userId) async {
+  return _firestore
+      .collection('videos')
+      .where('ownerId', isEqualTo: userId)
+      .orderBy('publishedAt', descending: true)
+      .limit(50)
+      .get()
+      .then((snapshot) => snapshot.docs.map((doc) => Video.fromFirestore(doc)).toList());
+}
+```
+
+## 3. Vector Database & Embeddings Architecture
+
+### 3.1 Embedding Storage Strategy
+
+**Hybrid Storage Pattern:** Store embeddings separately from main document data to optimize query performance and cost.
+
+```dart
+// Main video document (frequent reads)
+class Video {
+  final String id;
+  final String title;
+  final String description;
+  final String channelName;
+  final DateTime publishedAt;
+  final String thumbnailUrl;
+  // NO embedding vectors here - kept in separate collection
+}
+
+// Embedding document (infrequent reads, vector search only)
+class VideoEmbedding {
+  final String videoId;
+  final List<double> titleEmbedding;
+  final List<double> descriptionEmbedding;
+  final List<double> combinedEmbedding;
+  final DateTime createdAt;
+  final String modelVersion; // Track embedding model used
+}
+```
+
+### 3.2 Embedding Generation Pipeline
+
+**Cloud Function Implementation:**
+```python
+# functions/generate_embeddings.py
+import openai
+import numpy as np
+from google.cloud import firestore
+
+def generate_video_embeddings(video_data):
+    """Generate embeddings for video content."""
+    
+    # Combine title and description for comprehensive embedding  
+    combined_text = f"{video_data['title']} {video_data['description']}"
+    
+    # Generate embedding using OpenAI API
+    response = openai.Embedding.create(
+        input=combined_text,
+        model="text-embedding-3-small"  # Cost-effective model
+    )
+    
+    embedding = response['data'][0]['embedding']
+    
+    # Store in separate embeddings collection
+    firestore_client = firestore.Client()
+    embedding_doc = {
+        'videoId': video_data['id'],
+        'combinedEmbedding': embedding,
+        'modelVersion': 'text-embedding-3-small',
+        'createdAt': firestore.SERVER_TIMESTAMP,
+        'textLength': len(combined_text)
+    }
+    
+    firestore_client.collection('videoEmbeddings').document(video_data['id']).set(embedding_doc)
+    
+    return embedding
+```
+
+### 3.3 Vector Similarity Search
+
+**Cosine Similarity Implementation:**
+```dart
+class VectorSearchRepository {
+  Future<List<String>> findSimilarVideos(
+    String queryVideoId,
+    {int limit = 10, double threshold = 0.7}
+  ) async {
+    // Get query video's embedding
+    final queryEmbeddingDoc = await _firestore
+        .collection('videoEmbeddings')
+        .doc(queryVideoId)
+        .get();
+    
+    if (!queryEmbeddingDoc.exists) {
+      throw Exception('No embedding found for video: $queryVideoId');
+    }
+    
+    final queryEmbedding = List<double>.from(
+      queryEmbeddingDoc.data()!['combinedEmbedding']
+    );
+    
+    // Get all embeddings for comparison (paginated for large datasets)
+    final embeddingsSnapshot = await _firestore
+        .collection('videoEmbeddings')
+        .limit(1000) // Process in batches
+        .get();
+    
+    final similarities = <SimilarityResult>[];
+    
+    for (final doc in embeddingsSnapshot.docs) {
+      if (doc.id == queryVideoId) continue; // Skip self
+      
+      final candidateEmbedding = List<double>.from(doc.data()['combinedEmbedding']);
+      final similarity = _cosineSimilarity(queryEmbedding, candidateEmbedding);
+      
+      if (similarity >= threshold) {
+        similarities.add(SimilarityResult(doc.id, similarity));
+      }
+    }
+    
+    // Sort by similarity score and return top results
+    similarities.sort((a, b) => b.similarity.compareTo(a.similarity));
+    return similarities.take(limit).map((result) => result.videoId).toList();
+  }
+  
+  double _cosineSimilarity(List<double> a, List<double> b) {
+    double dotProduct = 0.0;
+    double magnitudeA = 0.0;
+    double magnitudeB = 0.0;
+    
+    for (int i = 0; i < a.length; i++) {
+      dotProduct += a[i] * b[i];
+      magnitudeA += a[i] * a[i];
+      magnitudeB += b[i] * b[i];
+    }
+    
+    magnitudeA = sqrt(magnitudeA);
+    magnitudeB = sqrt(magnitudeB);
+    
+    if (magnitudeA == 0.0 || magnitudeB == 0.0) return 0.0;
+    
+    return dotProduct / (magnitudeA * magnitudeB);
+  }
+}
+
+class SimilarityResult {
+  final String videoId;
+  final double similarity;
+  
+  SimilarityResult(this.videoId, this.similarity);
+}
+```
+
+### 3.4 Embedding Backfill Strategy
+
+**Scalable Backfill Architecture:**
+```python
+# functions/embedding_backfill.py
+def backfill_embeddings_batch(request):
+    """Process embedding generation in batches to handle large datasets."""
+    
+    batch_size = 50  # Process in small batches to avoid timeouts
+    offset = request.json.get('offset', 0)
+    
+    # Query videos without embeddings
+    videos_query = (
+        firestore_client.collection('videos')
+        .where('hasEmbedding', '==', False)
+        .offset(offset)
+        .limit(batch_size)
+    )
+    
+    videos = videos_query.stream()
+    processed_count = 0
+    
+    for video_doc in videos:
+        video_data = video_doc.to_dict()
+        video_data['id'] = video_doc.id
+        
+        try:
+            # Generate embedding
+            embedding = generate_video_embeddings(video_data)
+            
+            # Mark video as having embedding
+            video_doc.reference.update({'hasEmbedding': True})
+            
+            processed_count += 1
+            
+        except Exception as e:
+            print(f"Failed to generate embedding for video {video_doc.id}: {e}")
+            continue
+    
+    # If we processed a full batch, trigger next batch
+    if processed_count == batch_size:
+        next_offset = offset + batch_size
+        # Trigger next batch via Pub/Sub or Cloud Tasks
+        trigger_next_batch(next_offset)
+    
+    return {'processed': processed_count, 'next_offset': offset + processed_count}
+```
+
+## 4. Data Modeling Excellence
+
+### 4.1 Type-Safe Models
+
+Do not pass `Map<String, dynamic>` through your app logic. All Firestore documents MUST be represented by type-safe Dart model classes that include `fromJson` and `toJson` methods.
+
+```dart
+class Video {
+  final String id;
+  final String title;
+  final String description;
+  final String channelName;
+  final DateTime publishedAt;
+  final String maxResThumbnailUrl;
+  final Map<String, dynamic>? metadata; // Optional flexible field
+
+  const Video({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.channelName,
+    required this.publishedAt,
+    required this.maxResThumbnailUrl,
+    this.metadata,
+  });
+
+  factory Video.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return Video(
+      id: doc.id,
+      title: data['title'] ?? '',
+      description: data['description'] ?? '',
+      channelName: data['channelName'] ?? '',
+      publishedAt: (data['publishedAt'] as Timestamp).toDate(),
+      maxResThumbnailUrl: data['maxResThumbnailUrl'] ?? '',
+      metadata: data['metadata'] as Map<String, dynamic>?,
+    );
+  }
+
+  Map<String, dynamic> toFirestore() {
+    return {
+      'title': title,
+      'description': description,
+      'channelName': channelName,
+      'publishedAt': Timestamp.fromDate(publishedAt),
+      'maxResThumbnailUrl': maxResThumbnailUrl,
+      if (metadata != null) 'metadata': metadata,
+    };
+  }
+}
+```
+
+### 4.2 Strategic Denormalization
+
+To improve read performance and reduce costs, you SHOULD strategically denormalize (duplicate) data. For example, store `channelName` directly on a `video` document instead of requiring a separate lookup to the `channels` collection.
+
+**Denormalization Strategy:**
+```dart
+// ✅ CORRECT: Denormalized for performance
+class Video {
+  final String id;
+  final String title;
+  final String channelId;        // Reference for updates
+  final String channelName;      // Denormalized for display
+  final String channelAvatarUrl; // Denormalized for immediate UI
+  final int subscriberCount;     // Denormalized aggregate
+}
+
+// Update pattern: Maintain consistency with batch writes
+Future<void> updateChannelInfo(String channelId, String newName, String newAvatarUrl) async {
+  final batch = _firestore.batch();
+  
+  // Update the source channel document
+  batch.update(_firestore.collection('channels').doc(channelId), {
+    'name': newName,
+    'avatarUrl': newAvatarUrl,
+  });
+  
+  // Find and update all denormalized references
+  final videosSnapshot = await _firestore
+      .collection('videos')
+      .where('channelId', isEqualTo: channelId)
+      .get();
+  
+  for (final videoDoc in videosSnapshot.docs) {
+    batch.update(videoDoc.reference, {
+      'channelName': newName,
+      'channelAvatarUrl': newAvatarUrl,
+    });
+  }
+  
+  await batch.commit();
+}
+```
+
+## 5. Advanced Query Patterns
+
+### 5.1 Aggregation Queries
+
+Use Firestore's aggregation capabilities for efficient counting and statistics:
+
+```dart
+// ✅ EFFICIENT: Use aggregation queries for counts
+Future<int> getUserVideoCount(String userId) async {
+  final aggregateQuery = _firestore
+      .collection('videos')
+      .where('ownerId', isEqualTo: userId)
+      .count();
+  
+  final snapshot = await aggregateQuery.get();
+  return snapshot.count;
+}
+
+// ❌ INEFFICIENT: Don't fetch all documents just to count
+Future<int> getBadCount(String userId) async {
+  final snapshot = await _firestore
+      .collection('videos')
+      .where('ownerId', isEqualTo: userId)
+      .get();
+  
+  return snapshot.docs.length; // Downloads all documents unnecessarily
+}
+```
+
+### 5.2 Real-time Updates with Filters
+
+```dart
+// Efficient real-time listener with filtering
+Stream<List<Video>> watchUserVideos(String userId) {
+  return _firestore
+      .collection('videos')
+      .where('ownerId', isEqualTo: userId)
+      .where('isPublic', isEqualTo: true)
+      .orderBy('publishedAt', descending: true)
+      .limit(50) // Limit to prevent excessive data transfer
+      .snapshots()
+      .map((snapshot) => snapshot.docs
+          .map((doc) => Video.fromFirestore(doc))
+          .toList());
+}
+```
+
+## 6. Cost Optimization Strategies
+
+### 6.1 Read/Write Minimization
+
+```dart
+// ✅ EFFICIENT: Batch writes reduce costs
+Future<void> syncMultipleVideos(List<Video> videos) async {
+  final batch = _firestore.batch();
+  
+  for (final video in videos) {
+    final docRef = _firestore.collection('videos').doc(video.id);
+    batch.set(docRef, video.toFirestore(), SetOptions(merge: true));
+  }
+  
+  await batch.commit(); // Single network round trip
+}
+
+// ❌ EXPENSIVE: Individual writes are costly
+Future<void> syncVideosBadly(List<Video> videos) async {
+  for (final video in videos) {
+    await _firestore
+        .collection('videos')
+        .doc(video.id)
+        .set(video.toFirestore()); // Separate network call for each
+  }
+}
+```
+
+### 6.2 Selective Field Updates
+
+```dart
+// ✅ EFFICIENT: Update only changed fields
+Future<void> updateVideoStats(String videoId, int likeCount, int viewCount) async {
+  await _firestore.collection('videos').doc(videoId).update({
+    'likeCount': likeCount,
+    'viewCount': viewCount,
+    'lastUpdated': FieldValue.serverTimestamp(),
+  });
+}
+```
+
+For detailed implementation patterns and advanced strategies, refer to:
+- `docs/Embeddings and Clustering/Embedding Backfill_ Scalable Architecture_.txt`
+- `docs/Embeddings and Clustering/Firestore Vector Clustering Strategy Research_.txt`
+- `docs/Firestore/N+1 Query Solution_ Flutter Firestore_.txt`
+- `docs/Embeddings and Clustering/LLM Embeddings in Firebase_.txt`
