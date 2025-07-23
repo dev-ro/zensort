@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:rxdart/rxdart.dart';
 import 'package:zensort/features/auth/domain/repositories/auth_repository.dart';
 import 'package:zensort/features/auth/domain/entities/sign_in_result.dart';
 
@@ -14,10 +15,22 @@ class AuthRepositoryImpl implements AuthRepository {
     scopes: ['email', 'https://www.googleapis.com/auth/youtube.readonly'],
   );
 
-  AuthRepositoryImpl(this._firebaseAuth, this._firestore);
+  /// BehaviorSubject caches the latest user state and immediately emits it to new subscribers
+  /// This is the single source of truth for authentication status
+  final _userSubject = BehaviorSubject<User?>.seeded(null);
+
+  AuthRepositoryImpl(this._firebaseAuth, this._firestore) {
+    // Listen to Firebase auth changes and update our single source of truth
+    _firebaseAuth.authStateChanges().listen((user) {
+      _userSubject.add(user);
+    });
+  }
 
   @override
   Stream<User?> get authStateChanges => _firebaseAuth.authStateChanges();
+
+  @override
+  Stream<User?> get currentUser => _userSubject.stream;
 
   @override
   Future<SignInResult?> signInWithGoogle() async {
@@ -55,7 +68,8 @@ class AuthRepositoryImpl implements AuthRepository {
 
           await _createUserDocument(user);
 
-          // 5. Return the result with the user AND the accessToken
+          // 5. The Firebase authStateChanges listener will automatically update _userSubject
+          // 6. Return the result with the user AND the accessToken
           return SignInResult(user: user, accessToken: accessToken);
         } catch (e) {
           // Handle errors
@@ -94,6 +108,7 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<void> signOut() async {
     await _googleSignIn.signOut();
     await _firebaseAuth.signOut();
+    // The Firebase authStateChanges listener will automatically update _userSubject to null
   }
 
   @override
@@ -127,5 +142,10 @@ class AuthRepositoryImpl implements AuthRepository {
       print('Silent sign-in failed: $e');
       return null;
     }
+  }
+
+  /// Dispose method to close the BehaviorSubject and prevent memory leaks
+  void dispose() {
+    _userSubject.close();
   }
 }

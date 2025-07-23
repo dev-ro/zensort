@@ -21,3 +21,12 @@ class _YoutubeSyncProgressUpdated extends YoutubeEvent {
   @override
   List<Object> get props => [progress];
 }
+
+class _AuthStatusChanged extends YoutubeEvent {
+  final User? user;
+
+  const _AuthStatusChanged(this.user);
+
+  @override
+  List<Object> get props => [user ?? 'null'];
+}

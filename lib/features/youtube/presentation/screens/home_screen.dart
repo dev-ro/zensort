@@ -6,40 +6,21 @@ import 'package:zensort/features/youtube/presentation/widgets/video_list_item.da
 import 'package:zensort/theme.dart';
 import 'package:zensort/widgets/gradient_loader.dart';
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
-  @override
-  State<HomeScreen> createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends State<HomeScreen> {
-  final ScrollController _scrollController = ScrollController();
-
-  @override
-  void initState() {
-    super.initState();
-    _scrollController.addListener(_onScroll);
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  void _onScroll() {
-    if (_isBottom) {
-      // Dispatch more videos load event for infinite scroll
-      context.read<YouTubeBloc>().add(MoreVideosLoaded());
+  bool _onScrollNotification(
+    ScrollNotification notification,
+    BuildContext context,
+  ) {
+    if (notification is ScrollUpdateNotification && notification.depth == 0) {
+      final metrics = notification.metrics;
+      if (metrics.pixels >= (metrics.maxScrollExtent * 0.9)) {
+        // Trigger when 90% scrolled
+        context.read<YouTubeBloc>().add(MoreVideosLoaded());
+      }
     }
-  }
-
-  bool get _isBottom {
-    if (!_scrollController.hasClients) return false;
-    final maxScroll = _scrollController.position.maxScrollExtent;
-    final currentScroll = _scrollController.offset;
-    return currentScroll >= (maxScroll * 0.9); // Trigger when 90% scrolled
+    return false;
   }
 
   @override
@@ -110,7 +91,7 @@ class _HomeScreenState extends State<HomeScreen> {
             );
           }
         },
-                builder: (context, state) {
+        builder: (context, state) {
           if (state is YoutubeLoading || state is YoutubeInitial) {
             return const Center(child: GradientLoader());
           }
@@ -142,21 +123,24 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Text('No liked videos found. Try syncing!'),
               );
             }
-            return ListView.builder(
-              controller: _scrollController,
-              itemCount: state.videos.length + (state.hasReachedMax ? 0 : 1),
-              itemBuilder: (context, index) {
-                if (index >= state.videos.length) {
-                  // Show loading indicator at the end when more videos are being fetched
-                  return state.isLoadingMore
-                      ? const Padding(
-                          padding: EdgeInsets.all(16.0),
-                          child: Center(child: GradientLoader()),
-                        )
-                      : const SizedBox.shrink();
-                }
-                return VideoListItem(video: state.videos[index]);
-              },
+            return NotificationListener<ScrollNotification>(
+              onNotification: (notification) =>
+                  _onScrollNotification(notification, context),
+              child: ListView.builder(
+                itemCount: state.videos.length + (state.hasReachedMax ? 0 : 1),
+                itemBuilder: (context, index) {
+                  if (index >= state.videos.length) {
+                    // Show loading indicator at the end when more videos are being fetched
+                    return state.isLoadingMore
+                        ? const Padding(
+                            padding: EdgeInsets.all(16.0),
+                            child: Center(child: GradientLoader()),
+                          )
+                        : const SizedBox.shrink();
+                  }
+                  return VideoListItem(video: state.videos[index]);
+                },
+              ),
             );
           }
           return const Center(child: Text('Welcome! Please sync your videos.'));

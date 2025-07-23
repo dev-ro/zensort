@@ -41,13 +41,19 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     final user = event.user;
     if (user != null) {
+      // First emit loading state to prevent premature HomeScreen builds
+      emit(const AuthLoading());
+
       // Attempt to get a fresh access token through silent sign-in
       final accessToken = await _authRepository.signInSilentlyWithGoogle();
 
-      // Emit authenticated state with the refreshed token
-      // Note: accessToken may still be null if silent sign-in fails,
-      // but this is better than always passing null
-      emit(Authenticated(user: user, accessToken: accessToken));
+      // Only emit authenticated state if we have a valid access token
+      if (accessToken != null) {
+        emit(Authenticated(user: user, accessToken: accessToken));
+      } else {
+        // If we can't get an access token, treat as unauthenticated
+        emit(const AuthUnauthenticated());
+      }
     } else {
       emit(const AuthUnauthenticated());
     }

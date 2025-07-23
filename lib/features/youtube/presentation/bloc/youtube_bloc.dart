@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:bloc/bloc.dart';
+import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:equatable/equatable.dart';
-import 'package:zensort/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:zensort/features/auth/domain/repositories/auth_repository.dart';
 import 'package:zensort/features/youtube/domain/entities/liked_video.dart';
 import 'package:zensort/features/youtube/domain/entities/sync_progress.dart';
 import 'package:zensort/features/youtube/domain/repositories/youtube_repository.dart';
@@ -13,33 +15,38 @@ part 'youtube_state.dart';
 
 class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
   final YoutubeRepository _youtubeRepository;
-  final AuthBloc _authBloc;
+  final AuthRepository _authRepository;
   StreamSubscription<SyncProgress>? _syncProgressSubscription;
-  StreamSubscription<AuthState>? _authStateSubscription;
-  bool _isInitialLoadDispatched = false;
+  StreamSubscription<User?>? _authStateSubscription;
 
-  YouTubeBloc(this._youtubeRepository, this._authBloc)
+  YouTubeBloc(this._youtubeRepository, this._authRepository)
     : super(YoutubeInitial()) {
-    on<InitialVideosLoaded>(_onInitialVideosLoaded);
+    on<InitialVideosLoaded>(_onInitialVideosLoaded, transformer: restartable());
     on<MoreVideosLoaded>(_onMoreVideosLoaded);
     on<SyncLikedVideos>(_onSyncLikedVideos);
     on<_YoutubeSyncProgressUpdated>(_onYoutubeSyncProgressUpdated);
+    on<_AuthStatusChanged>(_onAuthStatusChanged, transformer: restartable());
 
-    // Listen to AuthBloc state changes for automatic data loading
-    _authStateSubscription = _authBloc.stream.listen((authState) {
-      if (authState is Authenticated && authState.accessToken != null && !_isInitialLoadDispatched) {
-        _isInitialLoadDispatched = true;
-        add(InitialVideosLoaded());
-      } else if (authState is AuthUnauthenticated) {
-        _isInitialLoadDispatched = false;
-      }
+    // Listen to AuthRepository's currentUser stream (the single source of truth)
+    _authStateSubscription = _authRepository.currentUser.listen((user) {
+      add(_AuthStatusChanged(user));
     });
+  }
 
-    // Also check current auth state in case we're already authenticated
-    final currentAuthState = _authBloc.state;
-    if (currentAuthState is Authenticated && currentAuthState.accessToken != null && !_isInitialLoadDispatched) {
-      _isInitialLoadDispatched = true;
+  void _onAuthStatusChanged(
+    _AuthStatusChanged event,
+    Emitter<YoutubeState> emit,
+  ) async {
+    final user = event.user;
+
+    if (user != null) {
+      // User is authenticated - load initial videos
       add(InitialVideosLoaded());
+    } else {
+      // User is not authenticated - clear state and cancel subscriptions
+      _syncProgressSubscription?.cancel();
+      _syncProgressSubscription = null;
+      emit(YoutubeInitial());
     }
   }
 
