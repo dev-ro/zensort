@@ -24,7 +24,7 @@ class ZenSortScaffold extends StatelessWidget {
   final String? restorationId;
 
   const ZenSortScaffold({
-    Key? key,
+    super.key,
     this.appBar,
     this.body,
     this.floatingActionButton,
@@ -42,8 +42,7 @@ class ZenSortScaffold extends StatelessWidget {
     this.extendBody = false,
     this.scaffoldKey,
     this.restorationId,
-  }) : extendBodyBehindAppBar = true,
-       super(key: key);
+  }) : extendBodyBehindAppBar = true;
 
   @override
   Widget build(BuildContext context) {

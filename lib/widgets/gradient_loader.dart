@@ -3,7 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 /// A branded spinning loader using the ZenSort circular logo SVG.
 class GradientLoader extends StatefulWidget {
-  const GradientLoader({Key? key, this.size = 40.0}) : super(key: key);
+  const GradientLoader({super.key, this.size = 40.0});
 
   final double size;
 

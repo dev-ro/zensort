@@ -1,0 +1,386 @@
+# Legal Documentation Standards
+
+All legal documents must prioritize clarity, precision, and unambiguity to prevent disputes and ensure proper legal protection.
+
+## 1. Core Writing Principles
+
+### 1.1 Fundamental Objective
+
+The primary goal of any legal document is to be clear, precise, and unambiguous to prevent future disputes. The language must be interpreted in only one way.
+
+### 1.2 Essential Standards
+
+- **Use Plain, Unambiguous Language:** Opt for simplicity and clarity over complex jargone. The goal is to be understood, not to sound overly "legalistic."
+- **Define Key Terms:** Create a "Definitions" section at the beginning of the document. Once a term is defined, use it consistently throughout.
+- **Maintain a Formal, Neutral Tone:** Legal documents are objective. Avoid emotional language, opinions, or subjective statements.
+- **Structure Logically:** Use numbered paragraphs, sections, and clear headings for easy navigation and reference.
+- **Be Specific and Precise:** Avoid vague terms. Quantify whenever possible.
+
+## 2. Document Structure Requirements
+
+### 2.1 Standard Document Format
+
+```markdown
+# [Document Title]
+
+**Effective Date:** [Date]
+**Last Updated:** [Date]
+
+## 1. Definitions
+
+[Define all key terms used throughout the document]
+
+## 2. [Main Content Sections]
+
+[Numbered sections with clear headings]
+
+## 3. [Additional Sections as Needed]
+
+## Contact Information
+
+[Clear contact details for legal inquiries]
+```
+
+### 2.2 Definitions Section (MANDATORY)
+
+Every legal document MUST include a definitions section that clearly defines all key terms:
+
+```markdown
+## 1. Definitions
+
+**"Service"** shall mean ZenSort, the digital organization platform accessible at zensort.app.
+
+**"User"** shall mean any individual who accesses or uses the Service.
+
+**"Content"** shall mean any data, text, graphics, photos, audio, video, location data, and all other forms of data or communication.
+
+**"Effective Date"** shall mean [specific date].
+
+**"We," "Us," "Our"** shall mean ZenSort and its affiliates.
+```
+
+## 3. Language Standards
+
+### 3.1 Required Practices
+
+**Consistent Terminology:**
+```markdown
+✅ CORRECT: Use the same term throughout
+"The User may terminate their account..."
+"When a User violates these terms..."
+
+❌ INCORRECT: Using synonyms creates ambiguity
+"The User may terminate their account..."
+"When a customer violates these terms..." // Don't switch terms
+```
+
+**Specific Quantification:**
+```markdown
+✅ CORRECT: Specific and measurable
+"User data will be deleted within thirty (30) days of account termination."
+
+❌ INCORRECT: Vague and subjective
+"User data will be deleted in a reasonable timeframe."
+```
+
+**Conditional Clarity:**
+```markdown
+✅ CORRECT: Clear conditions
+"Users may upload up to ten (10) videos per month, provided each video is less than 100MB in size."
+
+❌ INCORRECT: Ambiguous conditions
+"Users may upload videos, subject to reasonable limits."
+```
+
+### 3.2 Forbidden Practices
+
+**Avoid These Patterns:**
+
+- **"And/Or" Usage:** This phrase is inherently ambiguous
+  ```markdown
+  ❌ INCORRECT: "Users may not share and/or distribute content."
+  ✅ CORRECT: "Users may not share or distribute content."
+  ```
+
+- **Conversational Language:**
+  ```markdown
+  ❌ INCORRECT: "We'll do our best to keep your data safe."
+  ✅ CORRECT: "We implement industry-standard security measures to protect User data."
+  ```
+
+- **Subjective Terms Without Definition:**
+  ```markdown
+  ❌ INCORRECT: "Reasonable use of the Service"
+  ✅ CORRECT: "Use of the Service in accordance with the acceptable use policy defined in Section 4."
+  ```
+
+## 4. Content-Specific Standards
+
+### 4.1 Privacy Policy Requirements
+
+For privacy policies, you MUST include these specific sections:
+
+```markdown
+## Information We Collect
+[Specific types of data collected]
+
+## How We Use Your Information
+[Specific purposes, not vague "business purposes"]
+
+## Data Sharing and Disclosure
+[Specific circumstances when data may be shared]
+
+## Data Retention
+[Specific timeframes for data retention]
+
+## Your Rights
+[Specific user rights with clear procedures]
+
+## Security Measures
+[Specific security practices implemented]
+
+## Contact Information
+[Clear contact details for privacy inquiries]
+```
+
+### 4.2 Terms of Service Requirements
+
+For terms of service, you MUST include:
+
+```markdown
+## Service Description
+[Clear description of what the Service provides]
+
+## User Obligations
+[Specific requirements and prohibitions]
+
+## Intellectual Property Rights
+[Clear ownership and usage rights]
+
+## Limitation of Liability
+[Specific limitations and exclusions]
+
+## Termination
+[Clear termination procedures and consequences]
+
+## Governing Law
+[Specific jurisdiction and applicable law]
+
+## Dispute Resolution
+[Clear process for handling disputes]
+```
+
+## 5. Technical Implementation
+
+### 5.1 Legal Screen Integration
+
+The legal screen must properly display legal documents with appropriate formatting:
+
+```dart
+// lib/screens/legal_screen.dart
+class LegalScreen extends StatelessWidget {
+  final String documentType; // 'privacy', 'terms', 'disclaimer'
+  
+  const LegalScreen({super.key, required this.documentType});
+  
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_getDocumentTitle(documentType)),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: FutureBuilder<String>(
+          future: _loadLegalDocument(documentType),
+          builder: (context, snapshot) {
+            if (snapshot.hasData) {
+              return _buildLegalContent(snapshot.data!);
+            } else if (snapshot.hasError) {
+              return _buildErrorState();
+            }
+            return const Center(child: ZenSortLoader());
+          },
+        ),
+      ),
+    );
+  }
+  
+  String _getDocumentTitle(String type) {
+    switch (type) {
+      case 'privacy':
+        return 'Privacy Policy';
+      case 'terms':
+        return 'Terms of Service';
+      case 'disclaimer':
+        return 'Disclaimer';
+      default:
+        return 'Legal Document';
+    }
+  }
+  
+  Future<String> _loadLegalDocument(String type) async {
+    final String content = await rootBundle.loadString('assets/legal/$type.md');
+    return content;
+  }
+  
+  Widget _buildLegalContent(String markdown) {
+    return MarkdownBody(
+      data: markdown,
+      styleSheet: MarkdownStyleSheet(
+        h1: const TextStyle(
+          fontSize: 24,
+          fontWeight: FontWeight.bold,
+          color: Colors.black87,
+        ),
+        h2: const TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+          color: Colors.black87,
+        ),
+        p: const TextStyle(
+          fontSize: 16,
+          height: 1.5,
+          color: Colors.black87,
+        ),
+        listBullet: const TextStyle(
+          fontSize: 16,
+          color: Colors.black87,
+        ),
+      ),
+    );
+  }
+}
+```
+
+### 5.2 Document Versioning
+
+Legal documents MUST include proper versioning:
+
+```markdown
+---
+version: "1.2"
+effective_date: "2025-01-15"
+last_updated: "2025-01-15"
+previous_version: "1.1"
+---
+
+# Privacy Policy
+
+**Version:** 1.2  
+**Effective Date:** January 15, 2025  
+**Last Updated:** January 15, 2025
+
+[Document content]
+
+## Document History
+
+- **Version 1.2** (January 15, 2025): Updated data retention policies
+- **Version 1.1** (December 1, 2024): Added section on analytics data
+- **Version 1.0** (November 1, 2024): Initial version
+```
+
+## 6. Content Review Checklist
+
+Before publishing any legal document, verify:
+
+### 6.1 Language Review
+- [ ] All key terms are defined in the Definitions section
+- [ ] No "and/or" constructions are used
+- [ ] No conversational or emotional language
+- [ ] All statements are specific and quantifiable
+- [ ] Consistent terminology throughout document
+
+### 6.2 Structure Review
+- [ ] Clear, numbered sections with descriptive headings
+- [ ] Logical flow from general to specific
+- [ ] Contact information is current and accurate
+- [ ] Version information is properly included
+- [ ] Effective date is clearly stated
+
+### 6.3 Content Review
+- [ ] All legal requirements for document type are addressed
+- [ ] No contradictory statements within the document
+- [ ] All obligations and rights are clearly defined
+- [ ] Dispute resolution procedures are clear
+- [ ] Termination procedures are specific
+
+### 6.4 Technical Review
+- [ ] Document displays properly in the legal screen
+- [ ] Markdown formatting is correct
+- [ ] All links and references work properly
+- [ ] Document is accessible on all supported platforms
+
+## 7. Common Legal Writing Mistakes
+
+### 7.1 Ambiguity Examples
+
+**❌ BAD: Payment Terms**
+```markdown
+"The consultant will be paid a reasonable fee for their work in a timely manner."
+```
+*Why it's bad:* "Reasonable fee" and "timely manner" are subjective and undefined.
+
+**✅ GOOD: Payment Terms**
+```markdown
+"Client shall pay Consultant a fixed fee of $2,500.00. Payment shall be made in full via wire transfer within fifteen (15) days of the Client's receipt of the final deliverable."
+```
+
+**❌ BAD: Confidentiality**
+```markdown
+"Both parties agree to keep things confidential."
+```
+*Why it's bad:* Vague about what is confidential, for how long, and with what exceptions.
+
+**✅ GOOD: Confidentiality**
+```markdown
+**Confidential Information** shall mean any and all non-public technical and business information disclosed by one party to the other, including but not limited to trade secrets, financial information, and client lists.
+
+The receiving party shall not disclose the Confidential Information for a period of three (3) years from the Effective Date.
+```
+
+### 7.2 Structure Mistakes
+
+**❌ BAD: Wall of Text**
+```markdown
+Users agree that by using our service they will not violate any laws or regulations and will not upload harmful content or abuse other users and understand that we may terminate their access if they violate these terms and that they are responsible for their own content and actions.
+```
+
+**✅ GOOD: Clear Structure**
+```markdown
+## User Obligations
+
+Users agree to:
+
+1. Comply with all applicable laws and regulations
+2. Refrain from uploading harmful or inappropriate content
+3. Respect other users and maintain civil discourse
+4. Accept responsibility for all content and activities on their account
+
+Violation of these obligations may result in account termination as described in Section 8.
+```
+
+## 8. Legal Document Maintenance
+
+### 8.1 Update Procedures
+
+When updating legal documents:
+
+1. **Version Control:** Increment version number and update dates
+2. **Change Documentation:** Document what changed and why
+3. **User Notification:** Notify users of material changes
+4. **Grace Period:** Implement reasonable notice periods for changes
+5. **Archive:** Maintain previous versions for reference
+
+### 8.2 Regular Review Schedule
+
+Legal documents should be reviewed:
+- **Annually:** Complete review of all documents
+- **Quarterly:** Review for regulatory changes
+- **As Needed:** When features or policies change
+- **After Incidents:** Review after any legal or security incidents
+
+For detailed legal writing guidance and examples, refer to:
+- `docs/Agent Guide - Writing Legal Docs.md`

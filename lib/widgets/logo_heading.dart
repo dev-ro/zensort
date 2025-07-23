@@ -10,12 +10,12 @@ class LogoHeading extends StatelessWidget {
   final double spacing;
 
   const LogoHeading({
-    Key? key,
+    super.key,
     required this.title,
     this.style,
     this.logoSize = 36,
     this.spacing = 4,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

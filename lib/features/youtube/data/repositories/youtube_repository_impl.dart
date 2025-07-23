@@ -159,7 +159,7 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
 
         // Map the raw DocumentSnapshots to our strongly-typed LikedVideo model objects
         final videos = flatList.map((doc) {
-          final data = doc.data() as Map<String, dynamic>;
+          final data = doc.data();
           return LikedVideo(
             id: doc.id,
             title: data['title'] ?? '',
