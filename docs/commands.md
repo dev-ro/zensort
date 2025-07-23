@@ -10,6 +10,14 @@ flutter run -d chrome --web-hostname localhost --web-port 7357 --dart-define=FLA
 
 ```bash
 firebase deploy --only functions --project zensort-dev
+# or
+firebase use zensort-dev
+firebase deploy --only functions
+```
+
+```bash
+curl "https://us-central1-zensort-dev.cloudfunctions.net/trigger_video_embeddings?secret=zensort-embedding-backfill-2024"
+
 ```
 
 ```markdown
