@@ -74,7 +74,10 @@ class ZenSortApp extends StatelessWidget {
                 AuthBloc(authRepository: context.read<AuthRepository>()),
           ),
           BlocProvider<YouTubeBloc>(
-            create: (context) => YouTubeBloc(context.read<YoutubeRepository>()),
+            create: (context) => YouTubeBloc(
+              context.read<YoutubeRepository>(),
+              context.read<AuthBloc>(),
+            ),
           ),
         ],
         child: MaterialApp.router(

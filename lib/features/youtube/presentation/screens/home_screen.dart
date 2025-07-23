@@ -110,12 +110,7 @@ class _HomeScreenState extends State<HomeScreen> {
             );
           }
         },
-        builder: (context, state) {
-          // Dispatch initial load event only once when BLoC is in initial state
-          if (state is YoutubeInitial) {
-            context.read<YouTubeBloc>().add(InitialVideosLoaded());
-          }
-
+                builder: (context, state) {
           if (state is YoutubeLoading || state is YoutubeInitial) {
             return const Center(child: GradientLoader());
           }

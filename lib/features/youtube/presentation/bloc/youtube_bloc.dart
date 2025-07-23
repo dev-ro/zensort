@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:bloc/bloc.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:equatable/equatable.dart';
+import 'package:zensort/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:zensort/features/youtube/domain/entities/liked_video.dart';
 import 'package:zensort/features/youtube/domain/entities/sync_progress.dart';
 import 'package:zensort/features/youtube/domain/repositories/youtube_repository.dart';
@@ -12,13 +13,37 @@ part 'youtube_state.dart';
 
 class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
   final YoutubeRepository _youtubeRepository;
+  final AuthBloc _authBloc;
   StreamSubscription<SyncProgress>? _syncProgressSubscription;
+  StreamSubscription<AuthState>? _authStateSubscription;
 
-  YouTubeBloc(this._youtubeRepository) : super(YoutubeInitial()) {
+  YouTubeBloc(this._youtubeRepository, this._authBloc)
+    : super(YoutubeInitial()) {
     on<InitialVideosLoaded>(_onInitialVideosLoaded);
     on<MoreVideosLoaded>(_onMoreVideosLoaded);
     on<SyncLikedVideos>(_onSyncLikedVideos);
     on<_YoutubeSyncProgressUpdated>(_onYoutubeSyncProgressUpdated);
+
+    // Listen to AuthBloc state changes for automatic data loading
+    _authStateSubscription = _authBloc.stream.listen((authState) {
+      print('YouTubeBloc received AuthState: ${authState.runtimeType}');
+      if (authState is Authenticated && authState.accessToken != null) {
+        print(
+          'User authenticated with access token, loading initial videos...',
+        );
+        add(InitialVideosLoaded());
+      }
+    });
+
+    // Also check current auth state in case we're already authenticated
+    final currentAuthState = _authBloc.state;
+    if (currentAuthState is Authenticated &&
+        currentAuthState.accessToken != null) {
+      print(
+        'Already authenticated on YouTubeBloc creation, loading initial videos...',
+      );
+      add(InitialVideosLoaded());
+    }
   }
 
   void _onInitialVideosLoaded(
@@ -136,6 +161,7 @@ class YouTubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
   @override
   Future<void> close() {
     _syncProgressSubscription?.cancel();
+    _authStateSubscription?.cancel();
     return super.close();
   }
 }
