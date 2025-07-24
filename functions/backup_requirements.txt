@@ -1,0 +1,9 @@
+firebase-functions
+firebase-admin
+openai
+google-cloud-secret-manager
+google-cloud-firestore
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
+requests

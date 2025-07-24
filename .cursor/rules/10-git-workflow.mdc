@@ -1,8 +1,3 @@
----
-description: Defines git best practices for commits and merging feature branches safely into main.
-globs: []
-alwaysApply: true
----
 # Git Workflow: Commit Standards and Branch Management
 
 ## Commit Standards
@@ -91,7 +86,22 @@ When instructed to "merge a branch", you MUST follow this exact sequence of comm
 - **Push `main`:** Push the newly merged `main` branch to the remote.
   `git push origin main`
 
-## 4. Clean Up
+## 4. Publish and Merge Workflow (MANDATORY)
+
+After successful deployment and manual approval, you MUST:
+
+- **Publish the feature branch to the remote:**
+  `git push origin <branch-name>`
+- **Create a Pull Request (PR):**
+  - Open a PR from `<branch-name>` into `main` on GitHub
+  - Ensure the PR includes a summary of changes and links to update documentation
+  - Wait for all required checks and reviews
+- **Merge the PR:**
+  - Use the GitHub UI to merge the PR (always use a merge commit, not squash or rebase)
+- **Update other active branches:**
+  - After merging, rebase or merge `main` into any other active feature branches to keep them up to date
+
+## 5. Clean Up
 
 - **Delete Local Branch:** After a successful merge, delete the local copy of the feature branch.
   `git branch -d <branch-name>`

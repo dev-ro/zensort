@@ -2,10 +2,10 @@
 # To get started, simply uncomment the below code or create your own.
 # Deploy with `firebase deploy --only functions`
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Generator
-from firebase_admin import firestore, initialize_app
+import os
+from google.cloud import secretmanager
+from google.cloud import firestore
+from firebase_admin import initialize_app
 from firebase_functions import https_fn, firestore_fn
 from firebase_functions.options import set_global_options
 import requests
@@ -16,15 +16,15 @@ from googleapiclient.errors import HttpError
 import logging
 import json
 import time
-import vertexai
-from vertexai.language_models import TextEmbeddingModel, TextEmbeddingInput
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Generator
+from openai import OpenAI
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Initialize Vertex AI
-vertexai.init(project="zensort-dev", location="us-central1")
 
 # Constants for embedding configuration
 EMBEDDING_DIMENSIONALITY = 1536
@@ -36,7 +36,104 @@ EMBEDDING_DIMENSIONALITY = 1536
 # parameter in the decorator, e.g. @https_fn.on_request(max_instances=5).
 set_global_options(max_instances=10)
 
+
+def _get_openai_api_key() -> str:
+    """
+    Securely retrieve the OpenAI API key from Google Cloud Secret Manager.
+    """
+    try:
+        # For local development, check environment variable first
+        local_key = os.environ.get("OPENAI_API_KEY")
+        if local_key:
+            logger.info("Using OpenAI API key from local environment variable")
+            return local_key
+
+        # For production, fetch from Secret Manager
+        project_id = os.environ.get("GCP_PROJECT")
+        if not project_id:
+            raise ValueError("GCP_PROJECT environment variable is not set.")
+
+        # Create the Secret Manager client
+        client = secretmanager.SecretManagerServiceClient()
+
+        # Build the resource name
+        secret_id = "openai-api-key"
+        version_id = "latest"
+        name = f"projects/{project_id}/secrets/{secret_id}/versions/{version_id}"
+
+        # Access the secret
+        response = client.access_secret_version(request={"name": name})
+        api_key = response.payload.data.decode("UTF-8")
+        logger.info("Successfully retrieved OpenAI API key from Secret Manager")
+        return api_key
+
+    except Exception as e:
+        logger.error(f"Error retrieving OpenAI API key: {str(e)}")
+        raise ValueError(f"Failed to retrieve OpenAI API key: {str(e)}")
+
+
 initialize_app()
+
+
+@https_fn.on_request()
+def test_secret_manager(req: https_fn.Request) -> https_fn.Response:
+    """
+    Debug function to test Secret Manager integration and OpenAI API key retrieval.
+    Returns environment information and success/failure status.
+    """
+    try:
+        # Get project ID and function target from environment (use consistent variable names)
+        project_id = os.environ.get("GCP_PROJECT", "Not found")
+        function_region = os.environ.get("FUNCTION_REGION", "Not found")
+        function_target = os.environ.get("K_SERVICE", "Not found")
+
+        # Try to get the OpenAI API key
+        api_key = _get_openai_api_key()
+
+        # If we got here, it worked - create a safe response
+        # Only return the first and last 4 chars of the key for verification
+        key_preview = f"{api_key[:4]}...{api_key[-4:]}" if api_key else "No key found"
+
+        return https_fn.Response(
+            json.dumps(
+                {
+                    "status": "success",
+                    "environment": {
+                        "project_id": project_id,
+                        "function_region": function_region,
+                        "function_target": function_target,
+                    },
+                    "secret_manager": {
+                        "key_retrieved": bool(api_key),
+                        "key_preview": key_preview,
+                    },
+                }
+            ),
+            status=200,
+            headers={"Content-Type": "application/json"},
+        )
+
+    except Exception as e:
+        logger.error(f"Debug function error: {str(e)}")
+        # Use the same consistent environment variable names in error response
+        project_id = os.environ.get("GCP_PROJECT", "Not found")
+        function_region = os.environ.get("FUNCTION_REGION", "Not found")
+        function_target = os.environ.get("K_SERVICE", "Not found")
+        return https_fn.Response(
+            json.dumps(
+                {
+                    "status": "error",
+                    "error": str(e),
+                    "environment": {
+                        "project_id": project_id,
+                        "function_region": function_region,
+                        "function_target": function_target,
+                    },
+                }
+            ),
+            status=500,
+            headers={"Content-Type": "application/json"},
+        )
 
 
 @https_fn.on_call()
@@ -54,7 +151,7 @@ def add_to_waitlist(req: https_fn.CallableRequest) -> dict:
 
     try:
         # 2. Check if the email already exists in the 'waitlist' collection
-        db = firestore.client()
+        db = firestore.Client()
         waitlist_collection = db.collection("waitlist")
         existing_entries = (
             waitlist_collection.where("email", "==", email).limit(1).get()
@@ -160,7 +257,8 @@ def fetch_liked_video_items(access_token: str) -> list[dict]:
     This function uses the playlistItems.list endpoint with playlistId 'LL' to get ALL liked videos
     (including private, deleted, and legacy videos) with their correct likedAt timestamps.
 
-    Returns a list of dictionaries with 'videoId' and 'likedAt' keys.
+    Returns a list of dictionaries with 'videoId', 'likedAt', and 'title' keys.
+    The title field contains the actual video title or status labels like "Private video", "Deleted video".
     """
     try:
         logger.info("=== Starting fetch_liked_video_items ===")
@@ -195,10 +293,13 @@ def fetch_liked_video_items(access_token: str) -> list[dict]:
 
             response = request.execute()
 
-            # Extract video items with videoId and likedAt timestamp
+            # Extract video items with videoId, likedAt timestamp, and title
             for item in response.get("items", []):
                 snippet = item.get("snippet", {})
                 video_id = snippet.get("resourceId", {}).get("videoId")
+
+                # YouTube API provides the actual title here, including "Private video", "Deleted video", etc.
+                title = snippet.get("title", "")
 
                 # The likedAt timestamp is the snippet.publishedAt from the playlist item
                 liked_at_str = snippet.get("publishedAt", "")
@@ -213,7 +314,9 @@ def fetch_liked_video_items(access_token: str) -> list[dict]:
                     liked_at = datetime.now(timezone.utc)
 
                 if video_id:
-                    video_items.append({"videoId": video_id, "likedAt": liked_at})
+                    video_items.append(
+                        {"videoId": video_id, "likedAt": liked_at, "title": title}
+                    )
 
             logger.info(
                 f"Page {page_count}: Retrieved {len(response.get('items', []))} video items"
@@ -258,93 +361,6 @@ def fetch_liked_video_items(access_token: str) -> list[dict]:
         raise https_fn.HttpsError(
             code=https_fn.FunctionsErrorCode.INTERNAL,
             message=f"Failed to fetch video items: {type(e).__name__}: {str(e)}",
-        )
-
-    """
-    DEPRECATED: This function uses the wrong endpoint and excludes private/deleted videos.
-    Use fetch_liked_video_items() instead for complete data integrity.
-
-    Fetch all liked video IDs for a user from the YouTube Data API, handling pagination.
-    Returns a list of video IDs only (no metadata).
-    """
-    try:
-        logger.info("=== Starting fetch_liked_video_ids ===")
-
-        # Create OAuth2 credentials from the access token
-        credentials = Credentials(
-            token=access_token,
-            token_uri="https://oauth2.googleapis.com/token",
-            client_id="unused",
-            client_secret="unused",
-            scopes=["https://www.googleapis.com/auth/youtube.readonly"],
-        )
-
-        # Build the YouTube service
-        youtube = build("youtube", "v3", credentials=credentials)
-
-        video_ids = []
-        next_page_token = None
-        page_count = 0
-
-        while True:
-            page_count += 1
-            logger.info(f"Fetching page {page_count} of liked video IDs")
-
-            # Request only IDs to minimize API usage
-            request = youtube.videos().list(
-                myRating="like",
-                part="id",
-                maxResults=50,
-                pageToken=next_page_token,
-            )
-
-            response = request.execute()
-
-            # Extract video IDs
-            page_video_ids = [item["id"] for item in response.get("items", [])]
-            video_ids.extend(page_video_ids)
-
-            logger.info(f"Page {page_count}: Retrieved {len(page_video_ids)} video IDs")
-
-            # Check for next page
-            next_page_token = response.get("nextPageToken")
-            if not next_page_token:
-                logger.info(
-                    f"Completed fetching all video IDs. Total: {len(video_ids)}"
-                )
-                break
-
-        return video_ids
-
-    except HttpError as e:
-        logger.error(
-            f"YouTube API HttpError: {e.resp.status if hasattr(e, 'resp') else 'unknown'}"
-        )
-
-        if e.resp.status == 401:
-            raise https_fn.HttpsError(
-                code=https_fn.FunctionsErrorCode.UNAUTHENTICATED,
-                message="Invalid or expired YouTube access token.",
-            )
-        elif e.resp.status == 403:
-            error_content = json.loads(e.content) if e.content else {}
-            error_info = error_content.get("error", {})
-            raise https_fn.HttpsError(
-                code=https_fn.FunctionsErrorCode.PERMISSION_DENIED,
-                message=f"YouTube API access denied: {error_info.get('message', 'Permission denied')}",
-            )
-        else:
-            raise https_fn.HttpsError(
-                code=https_fn.FunctionsErrorCode.INTERNAL,
-                message=f"YouTube API error: HTTP {e.resp.status}",
-            )
-    except Exception as e:
-        logger.error(
-            f"Unexpected error in fetch_liked_video_ids: {type(e).__name__}: {str(e)}"
-        )
-        raise https_fn.HttpsError(
-            code=https_fn.FunctionsErrorCode.INTERNAL,
-            message=f"Failed to fetch video IDs: {type(e).__name__}: {str(e)}",
         )
 
 
@@ -511,7 +527,7 @@ def get_existing_video_ids(video_ids: list[str]) -> set[str]:
         return set()
 
     try:
-        db = firestore.client()
+        db = firestore.Client()
         videos_collection = db.collection("videos")
 
         existing_ids = set()
@@ -538,19 +554,19 @@ def get_existing_video_ids(video_ids: list[str]) -> set[str]:
 def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
     """
     A scalable callable Cloud Function to sync a user's liked YouTube videos to Firestore.
-    Uses the correct two-step API process for complete data integrity and performance.
+    Uses the correct merge pattern to handle private and deleted videos with proper placeholders.
     Now includes real-time progress reporting and video categorization.
 
-    This function implements the efficient, batched algorithm:
+    This function implements the efficient merge pattern algorithm:
     - Step 0: Create sync job document for progress tracking
-    - Step A: Fetch all liked video items (public + private/legacy) with correct timestamps
-    - Step B: Categorize videos and identify new public videos needing metadata
-    - Step C: Batch fetch details for new public videos only
-    - Step D: Atomic batch write for all operations with category fields
+    - Step A: Fetch all liked video items (public + private/deleted) with correct timestamps
+    - Step B: Fetch video details for ALL liked videos using merge pattern
+    - Step C: Create lookup map and merge liked items with details, creating placeholders for private/deleted videos
+    - Step D: Atomic batch write for all videos (real + placeholders) with category fields
     - Step E: Update sync job completion status
 
     Expects: access_token and user_id in the request data.
-    Returns: dict with sync statistics.
+    Returns: dict with sync statistics including placeholder count.
     """
     access_token = req.data.get("access_token")
     user_id = req.data.get("user_id")
@@ -567,7 +583,7 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
             message="The function must be called with a valid 'user_id'.",
         )
 
-    db = firestore.client()
+    db = firestore.Client()
     sync_job_ref = (
         db.collection("users")
         .document(user_id)
@@ -608,11 +624,31 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
             )
             return {"synced": 0, "public_videos": 0, "private_legacy_videos": 0}
 
-        # Step B: Categorize and Identify New Public Videos
-        logger.info("Step B: Categorizing videos and checking existing public videos")
+        # Step B: Fetch Video Details Using Merge Pattern for Private/Deleted Videos
+        logger.info(
+            "Step B: Fetching video details with merge pattern for private/deleted videos"
+        )
 
-        # Extract all video IDs
+        # Extract all video IDs from liked items
         all_video_ids = [item["videoId"] for item in all_video_items]
+        logger.info(f"Total video IDs to process: {len(all_video_ids)}")
+
+        # Step C: Batch Fetch Details for ALL Videos (not just new ones)
+        logger.info("Step C: Batch fetching details for all liked videos")
+        video_details = []
+        if all_video_ids:
+            video_details = fetch_video_details(access_token, all_video_ids)
+            logger.info(
+                f"Successfully fetched details for {len(video_details)} out of {len(all_video_ids)} videos"
+            )
+
+            # Update progress after fetching video details
+            sync_job_ref.update({"syncedCount": len(video_details)})
+            logger.info(f"Updated sync progress: {len(video_details)} videos processed")
+
+        # Create lookup map from video details keyed by videoId
+        video_details_map = {video.videoId: video for video in video_details}
+        logger.info(f"Created lookup map with {len(video_details_map)} video details")
 
         # Check which videos already exist in the root /videos collection
         existing_video_ids = get_existing_video_ids(all_video_ids)
@@ -620,40 +656,79 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
             f"Found {len(existing_video_ids)} videos already in public collection"
         )
 
-        # Get new video IDs that need metadata fetching
-        new_video_ids = [
-            vid_id for vid_id in all_video_ids if vid_id not in existing_video_ids
-        ]
-        logger.info(f"Need to fetch metadata for {len(new_video_ids)} new videos")
+        # Merge liked items with video details, creating placeholders for private/deleted videos
+        videos_to_store = []
+        private_legacy_count = 0
 
-        # Step C: Batch Fetch Details for New Videos
-        logger.info("Step C: Batch fetching details for new public videos")
-        new_videos = []
-        if new_video_ids:
-            new_videos = fetch_video_details(access_token, new_video_ids)
-            logger.info(
-                f"Successfully fetched details for {len(new_videos)} new videos"
-            )
+        for video_item in all_video_items:
+            video_id = video_item["videoId"]
+            liked_at = video_item["likedAt"]
+            playlist_title = video_item[
+                "title"
+            ]  # Title from playlist API (includes "Private video", "Deleted video", etc.)
 
-            # Update progress after fetching video details
-            sync_job_ref.update({"syncedCount": len(new_videos)})
-            logger.info(f"Updated sync progress: {len(new_videos)} videos processed")
+            # Skip videos that already exist in the /videos collection
+            if video_id in existing_video_ids:
+                continue
 
-        # Categorize new videos into public and private/legacy
+            if video_id in video_details_map:
+                # Use actual video details from videos.list API
+                video = video_details_map[video_id]
+                videos_to_store.append(video)
+                logger.debug(f"Using real details for video {video_id}: {video.title}")
+            else:
+                # Create placeholder using the title from playlist API
+                # YouTube API provides accurate titles like "Private video", "Deleted video", etc.
+                placeholder_title = (
+                    playlist_title if playlist_title else "Private video"
+                )
+
+                # Set appropriate description based on the title
+                if placeholder_title == "Private video":
+                    placeholder_description = (
+                        "This video is private and cannot be accessed."
+                    )
+                elif placeholder_title == "Deleted video":
+                    placeholder_description = (
+                        "This video has been deleted and is no longer available."
+                    )
+                else:
+                    placeholder_description = (
+                        f"This video ({placeholder_title}) is not accessible."
+                    )
+
+                # Create placeholder with the actual title from YouTube API
+                placeholder_video = Video(
+                    videoId=video_id,
+                    title=placeholder_title,
+                    description=placeholder_description,
+                    thumbnailUrl="",
+                    channelTitle="Unknown Channel",
+                    publishedAt=liked_at,  # Use likedAt as publishedAt for placeholders
+                    platform="YouTube",
+                    addedToZensortAt=datetime.now(timezone.utc),
+                )
+                videos_to_store.append(placeholder_video)
+                private_legacy_count += 1
+                logger.info(
+                    f"Created placeholder for video {video_id}: '{placeholder_title}'"
+                )
+
+        # Categorize videos into public and private/legacy
         public_videos = []
         private_legacy_video_ids = set()
 
-        for video in new_videos:
+        for video in videos_to_store:
             if is_private_legacy_video(video.title):
                 private_legacy_video_ids.add(video.videoId)
-                logger.info(
-                    f"Categorized {video.videoId} as private/legacy: {video.title}"
-                )
             else:
                 public_videos.append(video)
 
         logger.info(
-            f"Categorization complete: {len(public_videos)} public, {len(private_legacy_video_ids)} private/legacy new videos"
+            f"Categorization complete: {len(public_videos)} public videos, {len(private_legacy_video_ids)} private/legacy videos to store"
+        )
+        logger.info(
+            f"Total placeholders created for private/deleted videos: {private_legacy_count}"
         )
 
         # Step D: Atomic Batch Write with Category Fields
@@ -662,8 +737,8 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
 
         sync_timestamp = datetime.now(timezone.utc)
 
-        # Add new public videos to the root /videos collection with category field
-        for video in public_videos:
+        # Add all videos (public + placeholders) to the root /videos collection
+        for video in videos_to_store:
             video_doc_ref = db.collection("videos").document(video.videoId)
             category = get_video_category(video.title, video.channelTitle)
 
@@ -707,9 +782,10 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
         total_public_videos = len(public_videos)
         total_private_legacy = len(private_legacy_video_ids)
         total_user_relations = len(all_video_items)
+        total_videos_stored = len(videos_to_store)
 
         logger.info(
-            f"Executing batch write: {total_public_videos} new public videos, {total_user_relations} user relations"
+            f"Executing batch write: {total_public_videos} public videos, {total_private_legacy} private/legacy videos, {total_user_relations} user relations"
         )
         batch.commit()
 
@@ -730,8 +806,9 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
             "public_videos": total_public_videos,
             "private_legacy_videos": total_private_legacy,
             "total_liked_videos": len(all_video_items),
-            "new_videos_processed": len(new_videos),
+            "videos_stored_in_collection": total_videos_stored,
             "existing_videos_skipped": len(existing_video_ids),
+            "placeholders_created": private_legacy_count,
         }
 
     except Exception as e:
@@ -757,6 +834,45 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
         )
 
 
+def update_embedding_progress(user_id):
+    db = firestore.Client()
+    # Get all videoIds liked by this user
+    liked_videos_ref = (
+        db.collection("users").document(user_id).collection("likedVideos")
+    )
+    liked_video_docs = liked_videos_ref.stream()
+    video_ids = [doc.id for doc in liked_video_docs]
+    total = len(video_ids)
+    completed = 0
+    failed = 0
+    for video_id in video_ids:
+        video_doc = db.collection("videos").document(video_id).get()
+        if not video_doc.exists:
+            continue
+        status = video_doc.get("embedding_status")
+        if status == "complete":
+            completed += 1
+        elif status == "failed":
+            failed += 1
+    pending = total - completed - failed
+    progress_ref = (
+        db.collection("users")
+        .document(user_id)
+        .collection("embeddingProgress")
+        .document("current")
+    )
+    progress_ref.set(
+        {
+            "total": total,
+            "completed": completed,
+            "failed": failed,
+            "pending": pending,
+            "last_updated": datetime.now(timezone.utc),
+        },
+        merge=True,
+    )
+
+
 @firestore_fn.on_document_written(document="videos/{videoId}")
 def create_video_embedding(
     event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot]],
@@ -765,6 +881,7 @@ def create_video_embedding(
     Event-driven function to generate embeddings for videos when they are created or updated.
     Triggered by onWrite on /videos/{videoId} documents.
     """
+    video_data = None  # Ensure video_data is always defined
     try:
         logger.info(f"Processing embedding for video: {event.params['videoId']}")
 
@@ -808,6 +925,8 @@ def create_video_embedding(
             _update_embedding_status(
                 event.params["videoId"], "failed", error="No text content"
             )
+            # Update progress for all users who have liked this video
+            _update_progress_for_all_users(event.params["videoId"])
             return
 
         # Combine text fields for embedding
@@ -817,18 +936,33 @@ def create_video_embedding(
         # Update status to processing
         _update_embedding_status(event.params["videoId"], "processing")
 
-        # Generate embedding using the dedicated helper function
+        # Initialize OpenAI client once
         try:
-            embedding_vector = _generate_embedding(combined_text)
+            api_key = _get_openai_api_key()
+            openai_client = OpenAI(api_key=api_key)
+        except Exception as e:
+            logger.error(f"Failed to initialize OpenAI client: {str(e)}")
+            _update_embedding_status(
+                event.params["videoId"],
+                "failed",
+                error=f"OpenAI client initialization failed: {str(e)}",
+            )
+            _update_progress_for_all_users(event.params["videoId"])
+            return
+
+        # Generate embedding using the pre-initialized client
+        try:
+            embedding_vector = _generate_embedding(openai_client, combined_text)
         except Exception as e:
             logger.error(
                 f"Error generating embedding for video {event.params['videoId']}: {str(e)}"
             )
             _update_embedding_status(event.params["videoId"], "failed", error=str(e))
+            _update_progress_for_all_users(event.params["videoId"])
             return
 
         # Update document with embedding and mark as complete
-        db = firestore.client()
+        db = firestore.Client()
         video_ref = db.collection("videos").document(event.params["videoId"])
         video_ref.update(
             {
@@ -842,24 +976,57 @@ def create_video_embedding(
             f"Successfully generated embedding for video {event.params['videoId']}"
         )
 
-        # Add rate limiting delay to prevent overwhelming the API
-        time.sleep(0.2)
+        # Update progress for all users who have liked this video
+        _update_progress_for_all_users(event.params["videoId"])
 
     except Exception as e:
         logger.error(
             f"Error processing embedding for video {event.params['videoId']}: {str(e)}"
         )
         _update_embedding_status(event.params["videoId"], "failed", error=str(e))
+        _update_progress_for_all_users(event.params["videoId"])
 
 
-@https_fn.on_request()
+def _update_progress_for_all_users(video_id):
+    """For a given video_id, update embedding progress for all users who have liked it."""
+    db = firestore.Client()
+    # Query all users who have liked this video
+    users_ref = db.collection("users")
+    user_docs = users_ref.stream()
+    for user_doc in user_docs:
+        liked_video_ref = (
+            users_ref.document(user_doc.id).collection("likedVideos").document(video_id)
+        )
+        if liked_video_ref.get().exists:
+            update_embedding_progress(user_doc.id)
+
+
+@https_fn.on_request(timeout_sec=300)
 def trigger_video_embeddings(req: https_fn.Request) -> https_fn.Response:
     """
-    Efficient batch processing function to generate embeddings for all videos without embeddings.
-    Uses single batch API calls and Firestore batch updates for maximum efficiency.
-    Processes up to 1000 videos per invocation with auto-continuation for unlimited scalability.
+    Efficient batch processing function to generate embeddings for videos without valid embeddings.
+    Processes batches of 25 videos per invocation to prevent timeouts.
+    Handles all scenarios: new videos, failed embeddings, or invalid embedding dimensions.
     """
     try:
+        # Initialize OpenAI client once at the start to avoid repeated Secret Manager calls
+        try:
+            api_key = _get_openai_api_key()
+            openai_client = OpenAI(api_key=api_key)
+            logger.info("Successfully initialized OpenAI client")
+        except Exception as e:
+            logger.error(f"Failed to initialize OpenAI client: {str(e)}")
+            return https_fn.Response(
+                json.dumps(
+                    {
+                        "success": False,
+                        "error": f"Failed to initialize OpenAI client: {str(e)}",
+                    }
+                ),
+                status=500,
+                headers={"Content-Type": "application/json"},
+            )
+
         # Simple security check - require a secret parameter
         # In production, this should use proper authentication
         secret = req.args.get("secret")
@@ -874,12 +1041,12 @@ def trigger_video_embeddings(req: https_fn.Request) -> https_fn.Response:
         if start_after_id:
             logger.info(f"Resuming from video ID: {start_after_id}")
 
-        db = firestore.client()
+        db = firestore.Client()
         videos_collection = db.collection("videos")
 
         # Build query with cursor support for pagination
-        # Process 1000 videos per batch (safe for 9-minute Cloud Function timeout)
-        videos_query = videos_collection.order_by("__name__").limit(1000)
+        # Process 25 videos per batch to prevent timeouts (reduced from 50)
+        videos_query = videos_collection.order_by("__name__").limit(25)
 
         # Resume from where previous batch left off
         if start_after_id:
@@ -938,55 +1105,73 @@ def trigger_video_embeddings(req: https_fn.Request) -> https_fn.Response:
             logger.info(f"Processing embeddings for {processed_count} videos")
 
             try:
-                # Process embeddings one by one (gemini-embedding-001 limitation)
+                # Process embeddings concurrently using ThreadPoolExecutor
                 logger.info(
-                    f"Processing embeddings for {len(videos_to_process)} videos one by one"
+                    f"Processing embeddings for {len(videos_to_process)} videos concurrently"
                 )
                 firestore_batch = db.batch()
                 batch_timestamp = datetime.now(timezone.utc)
                 successful_embeddings = 0
+                failed_count = 0
 
-                for video_info in videos_to_process:
-                    try:
-                        # Generate embedding using the dedicated helper function
-                        embedding_vector = _generate_embedding(video_info["text"])
+                # Use ThreadPoolExecutor to process embeddings in parallel
+                with ThreadPoolExecutor(max_workers=10) as executor:
+                    # Submit all embedding generation tasks
+                    future_to_video = {
+                        executor.submit(
+                            _generate_embedding, openai_client, video["text"]
+                        ): video
+                        for video in videos_to_process
+                    }
 
-                        firestore_batch.update(
-                            video_info["reference"],
-                            {
-                                "embedding": embedding_vector,
-                                "embedding_status": "complete",
-                                "embedding_generated_at": batch_timestamp,
-                                "backfill_completed_at": batch_timestamp,
-                            },
-                        )
-                        successful_embeddings += 1
+                    logger.info(
+                        f"Submitted {len(future_to_video)} embedding tasks to thread pool"
+                    )
 
-                        # Add rate limiting delay to prevent overwhelming the API
-                        time.sleep(0.2)
+                    # Process results as they complete
+                    for future in as_completed(future_to_video):
+                        video_info = future_to_video[future]
+                        try:
+                            # Get the embedding result
+                            embedding_vector = future.result()
 
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to generate embedding for video {video_info['id']}: {str(e)}"
-                        )
-                        # Mark video as failed
-                        firestore_batch.update(
-                            video_info["reference"],
-                            {
-                                "embedding_status": "failed",
-                                "embedding_error": str(e),
-                                "embedding_updated_at": batch_timestamp,
-                                "backfill_completed_at": batch_timestamp,
-                            },
-                        )
+                            # Update Firestore batch with successful result
+                            firestore_batch.update(
+                                video_info["reference"],
+                                {
+                                    "embedding": embedding_vector,
+                                    "embedding_status": "complete",
+                                    "embedding_generated_at": batch_timestamp,
+                                    "backfill_completed_at": batch_timestamp,
+                                },
+                            )
+                            successful_embeddings += 1
+                            logger.debug(
+                                f"Successfully generated embedding for video {video_info['id']}"
+                            )
 
-                # Commit all updates in a single batch
+                        except Exception as e:
+                            logger.error(
+                                f"Failed to generate embedding for video {video_info['id']}: {str(e)}"
+                            )
+                            # Mark video as failed in Firestore batch
+                            firestore_batch.update(
+                                video_info["reference"],
+                                {
+                                    "embedding_status": "failed",
+                                    "embedding_error": str(e),
+                                    "embedding_updated_at": batch_timestamp,
+                                    "backfill_completed_at": batch_timestamp,
+                                },
+                            )
+                            failed_count += 1
+
+                # Commit all updates in a single batch after all futures complete
                 firestore_batch.commit()
                 logger.info(
-                    f"Successfully processed {successful_embeddings} videos with embeddings"
+                    f"Successfully processed {successful_embeddings} videos with embeddings, {failed_count} failed"
                 )
 
-                failed_count = processed_count - successful_embeddings
                 processed_count = successful_embeddings
                 result_message = f"Batch #{batch_number}: Successfully processed {processed_count} videos, skipped {skipped_count} already processed"
                 if failed_count > 0:
@@ -994,13 +1179,13 @@ def trigger_video_embeddings(req: https_fn.Request) -> https_fn.Response:
 
             except Exception as e:
                 logger.error(f"Error in batch embedding processing: {str(e)}")
-                failed_count = processed_count
+                failed_count = len(videos_to_process)
                 processed_count = 0
                 result_message = f"Batch #{batch_number}: Failed to process {failed_count} videos - {str(e)}"
 
-        # Check if we need to continue processing more videos
+        # Check if we need to continue processing more videos (adjusted for new batch size)
         has_more_videos = (
-            len(videos_batch) == 1000
+            len(videos_batch) == 25
         )  # If we got a full batch, more likely exist
 
         if failed_count > 0:
@@ -1092,36 +1277,20 @@ def _prepare_embedding_text(title: str, description: str, channel_title: str) ->
     return " | ".join(parts)
 
 
-def _generate_embedding(text: str) -> list:
-    """Generate embedding vector using Vertex AI TextEmbeddingModel with proper TextEmbeddingInput."""
+def _generate_embedding(client: OpenAI, text: str) -> list:
+    """Generate embedding vector using OpenAI's text-embedding-3-small model."""
     try:
-        # Initialize the text embedding model
-        model = TextEmbeddingModel.from_pretrained("gemini-embedding-001")
-
-        # Create TextEmbeddingInput with CLUSTERING task type
-        embedding_input = TextEmbeddingInput(text, task_type="CLUSTERING")
-
-        # Generate embedding using the correct API
-        # gemini-embedding-001 accepts only a single input per request
-        embedding_result = model.get_embeddings(
-            [embedding_input], output_dimensionality=EMBEDDING_DIMENSIONALITY
+        response = client.embeddings.create(
+            model="text-embedding-3-small", input=[text]
         )
-
-        # Extract the embedding values
-        embedding_vector = list(embedding_result[0].values)
-
-        # Ensure we have the expected dimensionality
+        embedding_vector = response.data[0].embedding
         if len(embedding_vector) != EMBEDDING_DIMENSIONALITY:
             logger.warning(
                 f"Expected {EMBEDDING_DIMENSIONALITY} dimensions, got {len(embedding_vector)}"
             )
-
         return embedding_vector
-
     except Exception as e:
-        logger.error(
-            f"Error generating embedding with vertexai TextEmbeddingModel: {e}"
-        )
+        logger.error(f"Error generating embedding with OpenAI: {e}")
         raise ValueError(f"Embedding generation failed: {e}")
 
 
@@ -1151,7 +1320,7 @@ def _has_valid_embedding(video_data: dict) -> bool:
 def _update_embedding_status(video_id: str, status: str, error: str = None) -> None:
     """Update the embedding status for a video document."""
     try:
-        db = firestore.client()
+        db = firestore.Client()
         video_ref = db.collection("videos").document(video_id)
 
         update_data = {
@@ -1168,3 +1337,35 @@ def _update_embedding_status(video_id: str, status: str, error: str = None) -> N
         logger.error(
             f"Failed to update embedding status for video {video_id}: {str(e)}"
         )
+
+
+@https_fn.on_call()
+def retry_failed_embeddings(req: https_fn.CallableRequest) -> dict:
+    user_id = req.data.get("user_id")
+    if not user_id:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            message="The function must be called with a valid 'user_id'.",
+        )
+    db = firestore.Client()
+    # Get all videoIds liked by this user
+    liked_videos_ref = (
+        db.collection("users").document(user_id).collection("likedVideos")
+    )
+    liked_video_docs = liked_videos_ref.stream()
+    retried = 0
+    for doc in liked_video_docs:
+        video_id = doc.id
+        video_ref = db.collection("videos").document(video_id)
+        video_doc = video_ref.get()
+        if video_doc.exists and video_doc.get("embedding_status") == "failed":
+            video_ref.update(
+                {
+                    "embedding_status": "pending",
+                    "embedding_error": firestore.DELETE_FIELD,
+                    "embedding_updated_at": datetime.now(timezone.utc),
+                }
+            )
+            retried += 1
+    update_embedding_progress(user_id)
+    return {"retried": retried}
