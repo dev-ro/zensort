@@ -751,7 +751,6 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
                 "thumbnailUrl": video.thumbnailUrl,
                 "publishedAt": video.publishedAt,
                 "addedToZensortAt": video.addedToZensortAt,
-                "user_id": user_id,  # Add user_id to the document
             }
 
             # Only add category field if it's not None (to avoid unnecessary null fields)
