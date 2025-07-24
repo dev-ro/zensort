@@ -36,6 +36,13 @@ service cloud.firestore {
         && request.auth.uid == userId
         && validateSyncJobData(request.resource.data);
     }
+    
+    // User's embedding status
+    match /users/{userId}/embeddingProgress/{docId} {
+      allow read: if request.auth != null 
+      	&& request.auth.uid == userId;
+      allow write: if false;
+    }
   }
 }
 
@@ -123,7 +130,3 @@ function validateSyncJobData(data) {
   return hasRequiredFields && validStatus && validTimestamps && validOptionalFields;
 }
 
-match /users/{userId}/embeddingProgress/{docId} {
-  allow read: if request.auth != null && request.auth.uid == userId;
-  allow write: if false;
-}

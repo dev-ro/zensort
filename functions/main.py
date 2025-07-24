@@ -5,10 +5,9 @@
 import os
 from google.cloud import secretmanager
 from google.cloud import firestore
-from google.cloud import https_fn
-from google.cloud import firestore_fn
-from google.cloud import https_fn
-from google.cloud.functions_v2.options import set_global_options
+from firebase_admin import initialize_app
+from firebase_functions import https_fn, firestore_fn
+from firebase_functions.options import set_global_options
 import requests
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
