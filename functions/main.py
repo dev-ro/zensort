@@ -3,7 +3,7 @@
 # Deploy with `firebase deploy --only functions`
 
 import os
-from google.cloud import secretmanager
+from google.cloud import secret_manager as secretmanager
 from google.cloud import firestore
 from firebase_admin import initialize_app
 from firebase_functions import https_fn, firestore_fn
@@ -25,9 +25,7 @@ from openai import OpenAI
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize Secret Manager client
-secret_client = secretmanager.SecretManagerServiceClient()
-
+# Initialize Secret Manager clien
 # Constants for embedding configuration
 EMBEDDING_DIMENSIONALITY = 1536
 
@@ -42,7 +40,6 @@ set_global_options(max_instances=10)
 def _get_openai_api_key() -> str:
     """
     Securely retrieve the OpenAI API key from Google Cloud Secret Manager.
-    Returns the API key as a string.
     """
     try:
         # For local development, check environment variable first
@@ -50,8 +47,15 @@ def _get_openai_api_key() -> str:
         if local_key:
             logger.info("Using OpenAI API key from local environment variable")
             return local_key
+
         # For production, fetch from Secret Manager
-        project_id = "zensort-dev"  # Your Firebase project ID
+        project_id = os.environ.get("GCP_PROJECT")
+        if not project_id:
+            raise ValueError("GCP_PROJECT environment variable is not set.")
+
+        # LAZY INITIALIZATION: Create the client here, inside the function.
+        secret_client = secretmanager.SecretManagerServiceClient()
+
         secret_id = "openai-api-key"
         version_id = "latest"
         name = f"projects/{project_id}/secrets/{secret_id}/versions/{version_id}"
@@ -65,6 +69,49 @@ def _get_openai_api_key() -> str:
 
 
 initialize_app()
+
+
+@https_fn.on_call()
+def test_secret_manager(req: https_fn.CallableRequest) -> dict:
+    """
+    Debug function to test Secret Manager integration and OpenAI API key retrieval.
+    Returns environment information and success/failure status.
+    """
+    try:
+        # Get project ID from environment
+        project_id = os.environ.get("GCP_PROJECT", "Not found")
+
+        # Try to get the OpenAI API key
+        api_key = _get_openai_api_key()
+
+        # If we got here, it worked - create a safe response
+        # Only return the first and last 4 chars of the key for verification
+        key_preview = f"{api_key[:4]}...{api_key[-4:]}" if api_key else "No key found"
+
+        return {
+            "status": "success",
+            "environment": {
+                "project_id": project_id,
+                "function_region": os.environ.get("FUNCTION_REGION", "Not found"),
+                "function_target": os.environ.get("FUNCTION_TARGET", "Not found"),
+            },
+            "secret_manager": {
+                "key_retrieved": bool(api_key),
+                "key_preview": key_preview,
+            },
+        }
+
+    except Exception as e:
+        logger.error(f"Debug function error: {str(e)}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "environment": {
+                "project_id": os.environ.get("GCP_PROJECT", "Not found"),
+                "function_region": os.environ.get("FUNCTION_REGION", "Not found"),
+                "function_target": os.environ.get("FUNCTION_TARGET", "Not found"),
+            },
+        }
 
 
 @https_fn.on_call()
