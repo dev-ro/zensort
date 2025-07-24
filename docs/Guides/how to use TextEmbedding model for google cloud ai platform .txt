@@ -1,0 +1,100 @@
+Here's a Python code example demonstrating how to use the TextEmbeddingModel from the google-cloud-aiplatform library to get embeddings using the gemini-embedding-001 model on Google Cloud's Vertex AI:
+import vertexai
+from vertexai.language_models import TextEmbeddingModel, TextEmbeddingInput
+
+# Initialize Vertex AI
+# Replace 'YOUR_PROJECT_ID' with your Google Cloud Project ID
+# Replace 'YOUR_REGION' with the desired region, e.g., 'us-central1'
+vertexai.init(project="YOUR_PROJECT_ID", location="YOUR_REGION")
+
+# Load the Gemini Embedding 001 model
+model = TextEmbeddingModel.from_pretrained("gemini-embedding-001")
+
+# Text inputs for which to generate embeddings
+texts = [
+    "What is the meaning of life?",
+    "How much wood would a woodchuck chuck?",
+    "The quick brown fox jumps over the lazy dog.",
+    "Artificial intelligence is transforming industries.",
+]
+
+# Generate embeddings
+# For gemini-embedding-001, you typically process one input at a time.
+embeddings = []
+for text in texts:
+    embedding_input = TextEmbeddingInput(text, task_type="SEMANTIC_SIMILARITY") # Or choose another task type like "CLUSTERING"
+    embedding_result = model.get_embeddings([embedding_input])
+    embeddings.append(embedding_result[0].values)  # Extract the embedding vector
+
+# Print the generated embeddings
+for i, embedding in enumerate(embeddings):
+    print(f"Embedding for text '{texts[i]}':")
+    print(f"  Length: {len(embedding)}") # Gemini Embedding 001 defaults to 3072 dimensions
+    print(f"  Values: {embedding[:5]}...") # Print first 5 dimensions for brevity
+
+# Example with output_dimensionality parameter
+# You can specify a different output dimensionality to save storage and increase computational efficiency.
+# Supported dimensions include the default 3072, as well as 1536 and 768.
+embeddings_reduced_dim = []
+for text in texts:
+    embedding_input = TextEmbeddingInput(text, task_type="SEMANTIC_SIMILARITY")
+    embedding_result_reduced_dim = model.get_embeddings(
+        [embedding_input],
+        output_dimensionality=768 # Specify the desired dimensionality
+    )
+    embeddings_reduced_dim.append(embedding_result_reduced_dim[0].values)
+
+print("\nEmbeddings with reduced dimensionality (768):")
+for i, embedding in enumerate(embeddings_reduced_dim):
+    print(f"Embedding for text '{texts[i]}':")
+    print(f"  Length: {len(embedding)}")
+    print(f"  Values: {embedding[:5]}...")
+
+
+Since gemini-embedding-001 only supports a single input text per request using get_embeddings(), you must implement your own batching mechanism. Iterate through your text list and send individual requests for each text to the get_embeddings() method. Manage the rate limits associated with the gemini-embedding quota for this model. 
+Example of Manual Batching (for gemini-embedding-001 with Many Texts)
+python
+import vertexai
+from vertexai.language_models import TextEmbeddingModel, TextEmbeddingInput
+import time
+
+# Initialize Vertex AI
+vertexai.init(project="YOUR_PROJECT_ID", location="YOUR_REGION")
+
+# Load the Gemini Embedding 001 model
+model = TextEmbeddingModel.from_pretrained("gemini-embedding-001")
+
+# Texts to embed
+all_texts = [
+    "Text 1 for embedding",
+    "Text 2 for embedding",
+    "Text 3 for embedding",
+    # ... many more texts
+]
+
+embeddings = []
+# Implement your own batching for gemini-embedding-001
+for i, text in enumerate(all_texts):
+    embedding_input = TextEmbeddingInput(text, task_type="SEMANTIC_SIMILARITY")
+    embedding_result = model.get_embeddings([embedding_input])
+    embeddings.append(embedding_result.values)
+    # Add a delay to avoid rate limiting
+    time.sleep(0.1) # Adjust this as needed based on your quota and usage patterns
+
+print("Embeddings generated.")
+Use code with caution.
+
+Considerations
+Token Limits: Each individual input text is limited to 2048 tokens; any excess is silently truncated.
+Rate Limits: While there are no predefined limits on batch inference for Gemini models, the service provides access to a shared pool of resources, and requests might be queued during peak periods.
+Batch Prediction for Larger Datasets: For very large datasets, consider using Vertex AI's Batch Prediction service. Submit data in a Cloud Storage bucket or BigQuery table, and Vertex AI handles the parallelization and processing according to Google Cloud.
+Performance and Scaling: Batch processing offers cost savings and higher rate limits compared to real-time inference. Google Cloud recommends combining smaller jobs into larger ones (within system limits) and optimizing for cost by using batch processing for non-latency-sensitive tasks. 
+By understanding the batching limitations of gemini-embedding-001 and utilizing the correct tools (manual batching or Vertex AI Batch Prediction) and strategies, you can efficiently generate embeddings for large datasets.
+
+
+The Gemini Embedding 001 model (gemini-embedding-001) on Vertex AI has these input token limits:
+Maximum Input Tokens per Request: Each get_embeddings() request can include only a single input text.
+Maximum Token Length per Input Text: The first 2,048 tokens in each input text are used to compute the embeddings; any excess is silently truncated. You can also disable silent truncation by setting autoTruncate to false, in which case inputs exceeding this limit will result in a 400 error. 
+In simpler terms:
+Multiple texts cannot be sent in a single get_embeddings() call with gemini-embedding-001. Individual requests must be made for each text.
+Each of those individual texts is limited to 2048 tokens, which is roughly equivalent to 1,500 words. 

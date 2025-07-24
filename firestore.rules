@@ -1,13 +1,124 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Target the 'waitlist' collection specifically.
+    // Waitlist collection - public create access for landing page
     match /waitlist/{docId} {
-      // Allow anyone to create a new document in the collection.
+      // Allow anyone to create a new document in the collection
       allow create: if true;
-
-      // Deny all reads, updates, and deletes to protect user privacy.
+      // Deny all reads, updates, and deletes to protect user privacy
       allow read, update, delete: if false;
     }
+    
+    // Videos collection with comprehensive embedding and categorization support
+    match /videos/{videoId} {
+      // Allow authenticated users to read video data
+      allow read: if request.auth != null;
+      
+      // Allow authenticated users to create/update video data with proper validation
+      // Note: Most writes happen via Cloud Functions using Admin SDK (bypasses rules)
+      allow create: if request.auth != null && validateVideoData(request.resource.data);
+      allow update: if request.auth != null && validateVideoUpdate(request.resource.data, resource.data);
+      
+      // Delete only allowed for authenticated users (though typically handled by Cloud Functions)
+      allow delete: if request.auth != null;
+    }
+    
+    // User's liked videos subcollection
+    match /users/{userId}/likedVideos/{videoId} {
+      allow read, write: if request.auth != null 
+        && request.auth.uid == userId
+        && validateLikedVideoData(request.resource.data);
+    }
+    
+    // User's sync jobs subcollection
+    match /users/{userId}/syncJobs/{jobId} {
+      allow read, write: if request.auth != null 
+        && request.auth.uid == userId
+        && validateSyncJobData(request.resource.data);
+    }
   }
+}
+
+function validateVideoData(data) {
+  // Validate required core video fields
+  let hasRequiredFields = data.keys().hasAll(['videoId', 'title', 'channelTitle', 'publishedAt', 'platform']);
+  
+  // Validate data types and constraints
+  let validTypes = data.videoId is string
+    && data.videoId.size() > 0
+    && data.title is string 
+    && data.title.size() > 0
+    && data.title.size() <= 1000
+    && data.channelTitle is string
+    && data.channelTitle.size() <= 500
+    && data.platform is string
+    && data.platform in ['YouTube']
+    && data.publishedAt is timestamp
+    && data.addedToZensortAt is timestamp;
+    
+  // Validate optional fields
+  let validOptionalFields = (!data.keys().hasAny(['description']) || (data.description is string && data.description.size() <= 5000))
+    && (!data.keys().hasAny(['thumbnailUrl']) || (data.thumbnailUrl is string && data.thumbnailUrl.size() <= 500))
+    && (!data.keys().hasAny(['category']) || (data.category is string && data.category in ['Private', 'Deleted', 'Legacy Music']));
+  
+  // Embedding fields are read-only for clients (only Cloud Functions can write them)
+  let noRestrictedEmbeddingFields = !data.keys().hasAny([
+    'embedding', 
+    'embedding_status', 
+    'embedding_generated_at', 
+    'embedding_updated_at', 
+    'embedding_error',
+    'backfill_initiated_at',
+    'backfill_completed_at'
+  ]);
+  
+  return hasRequiredFields && validTypes && validOptionalFields && noRestrictedEmbeddingFields;
+}
+
+function validateVideoUpdate(newData, existingData) {
+  // Allow updates to most fields, but protect embedding fields from client modification
+  let noRestrictedEmbeddingFields = !newData.keys().hasAny([
+    'embedding', 
+    'embedding_status', 
+    'embedding_generated_at', 
+    'embedding_updated_at', 
+    'embedding_error',
+    'backfill_initiated_at',
+    'backfill_completed_at'
+  ]);
+  
+  // Core fields should maintain their types if being updated
+  let validCoreUpdates = (!newData.keys().hasAny(['videoId']) || newData.videoId == existingData.videoId)
+    && (!newData.keys().hasAny(['title']) || (newData.title is string && newData.title.size() > 0 && newData.title.size() <= 1000))
+    && (!newData.keys().hasAny(['channelTitle']) || (newData.channelTitle is string && newData.channelTitle.size() <= 500))
+    && (!newData.keys().hasAny(['platform']) || newData.platform == existingData.platform)
+    && (!newData.keys().hasAny(['publishedAt']) || newData.publishedAt == existingData.publishedAt);
+    
+  // Optional field updates
+  let validOptionalUpdates = (!newData.keys().hasAny(['description']) || (newData.description is string && newData.description.size() <= 5000))
+    && (!newData.keys().hasAny(['thumbnailUrl']) || (newData.thumbnailUrl is string && newData.thumbnailUrl.size() <= 500))
+    && (!newData.keys().hasAny(['category']) || (newData.category is string && newData.category in ['Private', 'Deleted', 'Legacy Music']));
+  
+  return noRestrictedEmbeddingFields && validCoreUpdates && validOptionalUpdates;
+}
+
+function validateLikedVideoData(data) {
+  // Validate liked video relation structure
+  return data.keys().hasAll(['likedAt', 'syncedAt'])
+    && data.likedAt is timestamp
+    && data.syncedAt is timestamp
+    && data.keys().size() == 2; // Only allow these two fields
+}
+
+function validateSyncJobData(data) {
+  // Validate sync job structure
+  let hasRequiredFields = data.keys().hasAll(['status', 'startedAt']);
+  let validStatus = data.status is string && data.status in ['in_progress', 'completed', 'failed'];
+  let validTimestamps = data.startedAt is timestamp
+    && (!data.keys().hasAny(['completedAt']) || data.completedAt is timestamp);
+  let validOptionalFields = (!data.keys().hasAny(['totalCount']) || data.totalCount is int)
+    && (!data.keys().hasAny(['syncedCount']) || data.syncedCount is int)
+    && (!data.keys().hasAny(['error']) || data.error is string);
+    
+  return hasRequiredFields && validStatus && validTimestamps && validOptionalFields;
 }
