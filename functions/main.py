@@ -705,6 +705,7 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
                 "thumbnailUrl": video.thumbnailUrl,
                 "publishedAt": video.publishedAt,
                 "addedToZensortAt": video.addedToZensortAt,
+                "user_id": user_id,  # Add user_id to the document
             }
 
             # Only add category field if it's not None (to avoid unnecessary null fields)
@@ -784,6 +785,33 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
             code=https_fn.FunctionsErrorCode.INTERNAL,
             message="An unexpected error occurred while syncing videos.",
         )
+
+
+def update_embedding_progress(user_id):
+    db = firestore.client()
+    videos_ref = db.collection("videos").where("user_id", "==", user_id)
+    total = videos_ref.count().get()[0][0]
+    completed = (
+        videos_ref.where("embedding_status", "==", "complete").count().get()[0][0]
+    )
+    failed = videos_ref.where("embedding_status", "==", "failed").count().get()[0][0]
+    pending = total - completed - failed
+    progress_ref = (
+        db.collection("users")
+        .document(user_id)
+        .collection("embeddingProgress")
+        .document("current")
+    )
+    progress_ref.set(
+        {
+            "total": total,
+            "completed": completed,
+            "failed": failed,
+            "pending": pending,
+            "last_updated": datetime.now(timezone.utc),
+        },
+        merge=True,
+    )
 
 
 @firestore_fn.on_document_written(document="videos/{videoId}")
@@ -874,11 +902,18 @@ def create_video_embedding(
         # Add rate limiting delay to prevent overwhelming the API
         time.sleep(0.2)
 
+        user_id = video_data.get("user_id")
+        if user_id:
+            update_embedding_progress(user_id)
+
     except Exception as e:
         logger.error(
             f"Error processing embedding for video {event.params['videoId']}: {str(e)}"
         )
         _update_embedding_status(event.params["videoId"], "failed", error=str(e))
+        user_id = video_data.get("user_id")
+        if user_id:
+            update_embedding_progress(user_id)
 
 
 @https_fn.on_request()
@@ -1183,3 +1218,32 @@ def _update_embedding_status(video_id: str, status: str, error: str = None) -> N
         logger.error(
             f"Failed to update embedding status for video {video_id}: {str(e)}"
         )
+
+
+@https_fn.on_call()
+def retry_failed_embeddings(req: https_fn.CallableRequest) -> dict:
+    user_id = req.data.get("user_id")
+    if not user_id:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            message="The function must be called with a valid 'user_id'.",
+        )
+    db = firestore.client()
+    videos_ref = db.collection("videos")
+    failed_videos = (
+        videos_ref.where("embedding_status", "==", "failed")
+        .where("user_id", "==", user_id)
+        .stream()
+    )
+    retried = 0
+    for video in failed_videos:
+        video.reference.update(
+            {
+                "embedding_status": "pending",
+                "embedding_error": firestore.DELETE_FIELD,
+                "embedding_updated_at": datetime.now(timezone.utc),
+            }
+        )
+        retried += 1
+    update_embedding_progress(user_id)
+    return {"retried": retried}
