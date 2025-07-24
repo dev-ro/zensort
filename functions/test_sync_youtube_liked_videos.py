@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 # to prevent Firebase Admin SDK from trying to initialize.
 with patch.dict("sys.modules", {"firebase_admin": Mock()}):
     from main import (
-        fetch_liked_video_ids,
+        fetch_liked_video_items,
         fetch_video_details,
         is_private_legacy_video,
         get_existing_video_ids,
@@ -22,25 +22,42 @@ class TestYouTubeSyncFunctions(unittest.TestCase):
     """
 
     @patch("main.build")
-    def test_fetch_liked_video_ids_creates_proper_credentials(self, mock_build):
+    def test_fetch_liked_video_items_creates_proper_credentials(self, mock_build):
         """
-        Tests that fetch_liked_video_ids correctly constructs the Credentials object
-        and only fetches video IDs (no metadata).
+        Tests that fetch_liked_video_items correctly constructs the Credentials object
+        and fetches from the correct playlist endpoint with timestamps.
         """
         # Arrange: Set up a mock for the YouTube API client
         mock_youtube_service = Mock()
-        mock_videos_list = Mock()
-        mock_videos_list.execute.return_value = {
-            "items": [{"id": "video1"}, {"id": "video2"}],
+        mock_playlist_items = Mock()
+        mock_playlist_items.execute.return_value = {
+            "items": [
+                {
+                    "snippet": {
+                        "resourceId": {"videoId": "video1"},
+                        "publishedAt": "2023-01-01T12:00:00Z",
+                        "title": "Test Video 1"
+                    }
+                },
+                {
+                    "snippet": {
+                        "resourceId": {"videoId": "video2"},
+                        "publishedAt": "2023-01-02T12:00:00Z",
+                        "title": "Private video"
+                    }
+                },
+            ],
             "nextPageToken": None,
         }
-        mock_youtube_service.videos.return_value.list.return_value = mock_videos_list
+        mock_youtube_service.playlistItems.return_value.list.return_value = (
+            mock_playlist_items
+        )
         mock_build.return_value = mock_youtube_service
 
         test_token = "test-access-token-123"
 
         # Act: Call the function
-        result = fetch_liked_video_ids(test_token)
+        result = fetch_liked_video_items(test_token)
 
         # Assert: Verify that 'build' was called with a Credentials object
         mock_build.assert_called_once()
@@ -54,16 +71,22 @@ class TestYouTubeSyncFunctions(unittest.TestCase):
             actual_credentials.token_uri, "https://oauth2.googleapis.com/token"
         )
 
-        # Verify the API call was made with correct parameters (only 'id' part)
-        mock_youtube_service.videos.return_value.list.assert_called_with(
-            myRating="like",
-            part="id",
+        # Verify the API call was made with correct parameters (playlist endpoint)
+        mock_youtube_service.playlistItems.return_value.list.assert_called_with(
+            playlistId="LL",
+            part="snippet",
             maxResults=50,
             pageToken=None,
         )
 
-        # Verify result
-        self.assertEqual(result, ["video1", "video2"])
+        # Verify result structure includes videoId, likedAt, and title
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["videoId"], "video1")
+        self.assertEqual(result[1]["videoId"], "video2")
+        self.assertIn("likedAt", result[0])
+        self.assertIn("likedAt", result[1])
+        self.assertIn("title", result[0])
+        self.assertIn("title", result[1])
 
     def test_is_private_legacy_video(self):
         """

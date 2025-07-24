@@ -257,7 +257,8 @@ def fetch_liked_video_items(access_token: str) -> list[dict]:
     This function uses the playlistItems.list endpoint with playlistId 'LL' to get ALL liked videos
     (including private, deleted, and legacy videos) with their correct likedAt timestamps.
 
-    Returns a list of dictionaries with 'videoId' and 'likedAt' keys.
+    Returns a list of dictionaries with 'videoId', 'likedAt', and 'title' keys.
+    The title field contains the actual video title or status labels like "Private video", "Deleted video".
     """
     try:
         logger.info("=== Starting fetch_liked_video_items ===")
@@ -292,10 +293,13 @@ def fetch_liked_video_items(access_token: str) -> list[dict]:
 
             response = request.execute()
 
-            # Extract video items with videoId and likedAt timestamp
+            # Extract video items with videoId, likedAt timestamp, and title
             for item in response.get("items", []):
                 snippet = item.get("snippet", {})
                 video_id = snippet.get("resourceId", {}).get("videoId")
+
+                # YouTube API provides the actual title here, including "Private video", "Deleted video", etc.
+                title = snippet.get("title", "")
 
                 # The likedAt timestamp is the snippet.publishedAt from the playlist item
                 liked_at_str = snippet.get("publishedAt", "")
@@ -310,7 +314,9 @@ def fetch_liked_video_items(access_token: str) -> list[dict]:
                     liked_at = datetime.now(timezone.utc)
 
                 if video_id:
-                    video_items.append({"videoId": video_id, "likedAt": liked_at})
+                    video_items.append(
+                        {"videoId": video_id, "likedAt": liked_at, "title": title}
+                    )
 
             logger.info(
                 f"Page {page_count}: Retrieved {len(response.get('items', []))} video items"
@@ -356,8 +362,6 @@ def fetch_liked_video_items(access_token: str) -> list[dict]:
             code=https_fn.FunctionsErrorCode.INTERNAL,
             message=f"Failed to fetch video items: {type(e).__name__}: {str(e)}",
         )
-
-
 
 
 def fetch_video_details(access_token: str, video_ids: list[str]) -> list[Video]:
@@ -621,7 +625,9 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
             return {"synced": 0, "public_videos": 0, "private_legacy_videos": 0}
 
         # Step B: Fetch Video Details Using Merge Pattern for Private/Deleted Videos
-        logger.info("Step B: Fetching video details with merge pattern for private/deleted videos")
+        logger.info(
+            "Step B: Fetching video details with merge pattern for private/deleted videos"
+        )
 
         # Extract all video IDs from liked items
         all_video_ids = [item["videoId"] for item in all_video_items]
@@ -657,22 +663,45 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
         for video_item in all_video_items:
             video_id = video_item["videoId"]
             liked_at = video_item["likedAt"]
+            playlist_title = video_item[
+                "title"
+            ]  # Title from playlist API (includes "Private video", "Deleted video", etc.)
 
             # Skip videos that already exist in the /videos collection
             if video_id in existing_video_ids:
                 continue
 
             if video_id in video_details_map:
-                # Use actual video details
+                # Use actual video details from videos.list API
                 video = video_details_map[video_id]
                 videos_to_store.append(video)
                 logger.debug(f"Using real details for video {video_id}: {video.title}")
             else:
-                # Create placeholder for private/deleted video
+                # Create placeholder using the title from playlist API
+                # YouTube API provides accurate titles like "Private video", "Deleted video", etc.
+                placeholder_title = (
+                    playlist_title if playlist_title else "Private video"
+                )
+
+                # Set appropriate description based on the title
+                if placeholder_title == "Private video":
+                    placeholder_description = (
+                        "This video is private and cannot be accessed."
+                    )
+                elif placeholder_title == "Deleted video":
+                    placeholder_description = (
+                        "This video has been deleted and is no longer available."
+                    )
+                else:
+                    placeholder_description = (
+                        f"This video ({placeholder_title}) is not accessible."
+                    )
+
+                # Create placeholder with the actual title from YouTube API
                 placeholder_video = Video(
                     videoId=video_id,
-                    title="Private video",
-                    description="This video is private or has been deleted.",
+                    title=placeholder_title,
+                    description=placeholder_description,
                     thumbnailUrl="",
                     channelTitle="Unknown Channel",
                     publishedAt=liked_at,  # Use likedAt as publishedAt for placeholders
@@ -681,7 +710,9 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
                 )
                 videos_to_store.append(placeholder_video)
                 private_legacy_count += 1
-                logger.info(f"Created placeholder for private/deleted video {video_id}")
+                logger.info(
+                    f"Created placeholder for video {video_id}: '{placeholder_title}'"
+                )
 
         # Categorize videos into public and private/legacy
         public_videos = []
@@ -696,7 +727,9 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
         logger.info(
             f"Categorization complete: {len(public_videos)} public videos, {len(private_legacy_video_ids)} private/legacy videos to store"
         )
-        logger.info(f"Total placeholders created for private/deleted videos: {private_legacy_count}")
+        logger.info(
+            f"Total placeholders created for private/deleted videos: {private_legacy_count}"
+        )
 
         # Step D: Atomic Batch Write with Category Fields
         logger.info("Step D: Executing atomic batch write with categorization")
@@ -831,7 +864,8 @@ def update_embedding_progress(user_id):
 
 @firestore_fn.on_document_written(document="videos/{videoId}")
 def create_video_embedding(
-    event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot]],) -> None:
+    event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot]],
+) -> None:
     """
     Event-driven function to generate embeddings for videos when they are created or updated.
     Triggered by onWrite on /videos/{videoId} documents.
