@@ -357,92 +357,7 @@ def fetch_liked_video_items(access_token: str) -> list[dict]:
             message=f"Failed to fetch video items: {type(e).__name__}: {str(e)}",
         )
 
-    """
-    DEPRECATED: This function uses the wrong endpoint and excludes private/deleted videos.
-    Use fetch_liked_video_items() instead for complete data integrity.
 
-    Fetch all liked video IDs for a user from the YouTube Data API, handling pagination.
-    Returns a list of video IDs only (no metadata).
-    """
-    try:
-        logger.info("=== Starting fetch_liked_video_ids ===")
-
-        # Create OAuth2 credentials from the access token
-        credentials = Credentials(
-            token=access_token,
-            token_uri="https://oauth2.googleapis.com/token",
-            client_id="unused",
-            client_secret="unused",
-            scopes=["https://www.googleapis.com/auth/youtube.readonly"],
-        )
-
-        # Build the YouTube service
-        youtube = build("youtube", "v3", credentials=credentials)
-
-        video_ids = []
-        next_page_token = None
-        page_count = 0
-
-        while True:
-            page_count += 1
-            logger.info(f"Fetching page {page_count} of liked video IDs")
-
-            # Request only IDs to minimize API usage
-            request = youtube.videos().list(
-                myRating="like",
-                part="id",
-                maxResults=50,
-                pageToken=next_page_token,
-            )
-
-            response = request.execute()
-
-            # Extract video IDs
-            page_video_ids = [item["id"] for item in response.get("items", [])]
-            video_ids.extend(page_video_ids)
-
-            logger.info(f"Page {page_count}: Retrieved {len(page_video_ids)} video IDs")
-
-            # Check for next page
-            next_page_token = response.get("nextPageToken")
-            if not next_page_token:
-                logger.info(
-                    f"Completed fetching all video IDs. Total: {len(video_ids)}"
-                )
-                break
-
-        return video_ids
-
-    except HttpError as e:
-        logger.error(
-            f"YouTube API HttpError: {e.resp.status if hasattr(e, 'resp') else 'unknown'}"
-        )
-
-        if e.resp.status == 401:
-            raise https_fn.HttpsError(
-                code=https_fn.FunctionsErrorCode.UNAUTHENTICATED,
-                message="Invalid or expired YouTube access token.",
-            )
-        elif e.resp.status == 403:
-            error_content = json.loads(e.content) if e.content else {}
-            error_info = error_content.get("error", {})
-            raise https_fn.HttpsError(
-                code=https_fn.FunctionsErrorCode.PERMISSION_DENIED,
-                message=f"YouTube API access denied: {error_info.get('message', 'Permission denied')}",
-            )
-        else:
-            raise https_fn.HttpsError(
-                code=https_fn.FunctionsErrorCode.INTERNAL,
-                message=f"YouTube API error: HTTP {e.resp.status}",
-            )
-    except Exception as e:
-        logger.error(
-            f"Unexpected error in fetch_liked_video_ids: {type(e).__name__}: {str(e)}"
-        )
-        raise https_fn.HttpsError(
-            code=https_fn.FunctionsErrorCode.INTERNAL,
-            message=f"Failed to fetch video IDs: {type(e).__name__}: {str(e)}",
-        )
 
 
 def fetch_video_details(access_token: str, video_ids: list[str]) -> list[Video]:
@@ -635,19 +550,19 @@ def get_existing_video_ids(video_ids: list[str]) -> set[str]:
 def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
     """
     A scalable callable Cloud Function to sync a user's liked YouTube videos to Firestore.
-    Uses the correct two-step API process for complete data integrity and performance.
+    Uses the correct merge pattern to handle private and deleted videos with proper placeholders.
     Now includes real-time progress reporting and video categorization.
 
-    This function implements the efficient, batched algorithm:
+    This function implements the efficient merge pattern algorithm:
     - Step 0: Create sync job document for progress tracking
-    - Step A: Fetch all liked video items (public + private/legacy) with correct timestamps
-    - Step B: Categorize videos and identify new public videos needing metadata
-    - Step C: Batch fetch details for new public videos only
-    - Step D: Atomic batch write for all operations with category fields
+    - Step A: Fetch all liked video items (public + private/deleted) with correct timestamps
+    - Step B: Fetch video details for ALL liked videos using merge pattern
+    - Step C: Create lookup map and merge liked items with details, creating placeholders for private/deleted videos
+    - Step D: Atomic batch write for all videos (real + placeholders) with category fields
     - Step E: Update sync job completion status
 
     Expects: access_token and user_id in the request data.
-    Returns: dict with sync statistics.
+    Returns: dict with sync statistics including placeholder count.
     """
     access_token = req.data.get("access_token")
     user_id = req.data.get("user_id")
@@ -705,11 +620,29 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
             )
             return {"synced": 0, "public_videos": 0, "private_legacy_videos": 0}
 
-        # Step B: Categorize and Identify New Public Videos
-        logger.info("Step B: Categorizing videos and checking existing public videos")
+        # Step B: Fetch Video Details Using Merge Pattern for Private/Deleted Videos
+        logger.info("Step B: Fetching video details with merge pattern for private/deleted videos")
 
-        # Extract all video IDs
+        # Extract all video IDs from liked items
         all_video_ids = [item["videoId"] for item in all_video_items]
+        logger.info(f"Total video IDs to process: {len(all_video_ids)}")
+
+        # Step C: Batch Fetch Details for ALL Videos (not just new ones)
+        logger.info("Step C: Batch fetching details for all liked videos")
+        video_details = []
+        if all_video_ids:
+            video_details = fetch_video_details(access_token, all_video_ids)
+            logger.info(
+                f"Successfully fetched details for {len(video_details)} out of {len(all_video_ids)} videos"
+            )
+
+            # Update progress after fetching video details
+            sync_job_ref.update({"syncedCount": len(video_details)})
+            logger.info(f"Updated sync progress: {len(video_details)} videos processed")
+
+        # Create lookup map from video details keyed by videoId
+        video_details_map = {video.videoId: video for video in video_details}
+        logger.info(f"Created lookup map with {len(video_details_map)} video details")
 
         # Check which videos already exist in the root /videos collection
         existing_video_ids = get_existing_video_ids(all_video_ids)
@@ -717,41 +650,53 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
             f"Found {len(existing_video_ids)} videos already in public collection"
         )
 
-        # Get new video IDs that need metadata fetching
-        new_video_ids = [
-            vid_id for vid_id in all_video_ids if vid_id not in existing_video_ids
-        ]
-        logger.info(f"Need to fetch metadata for {len(new_video_ids)} new videos")
+        # Merge liked items with video details, creating placeholders for private/deleted videos
+        videos_to_store = []
+        private_legacy_count = 0
 
-        # Step C: Batch Fetch Details for New Videos
-        logger.info("Step C: Batch fetching details for new public videos")
-        new_videos = []
-        if new_video_ids:
-            new_videos = fetch_video_details(access_token, new_video_ids)
-            logger.info(
-                f"Successfully fetched details for {len(new_videos)} new videos"
-            )
+        for video_item in all_video_items:
+            video_id = video_item["videoId"]
+            liked_at = video_item["likedAt"]
 
-            # Update progress after fetching video details
-            sync_job_ref.update({"syncedCount": len(new_videos)})
-            logger.info(f"Updated sync progress: {len(new_videos)} videos processed")
+            # Skip videos that already exist in the /videos collection
+            if video_id in existing_video_ids:
+                continue
 
-        # Categorize new videos into public and private/legacy
+            if video_id in video_details_map:
+                # Use actual video details
+                video = video_details_map[video_id]
+                videos_to_store.append(video)
+                logger.debug(f"Using real details for video {video_id}: {video.title}")
+            else:
+                # Create placeholder for private/deleted video
+                placeholder_video = Video(
+                    videoId=video_id,
+                    title="Private video",
+                    description="This video is private or has been deleted.",
+                    thumbnailUrl="",
+                    channelTitle="Unknown Channel",
+                    publishedAt=liked_at,  # Use likedAt as publishedAt for placeholders
+                    platform="YouTube",
+                    addedToZensortAt=datetime.now(timezone.utc),
+                )
+                videos_to_store.append(placeholder_video)
+                private_legacy_count += 1
+                logger.info(f"Created placeholder for private/deleted video {video_id}")
+
+        # Categorize videos into public and private/legacy
         public_videos = []
         private_legacy_video_ids = set()
 
-        for video in new_videos:
+        for video in videos_to_store:
             if is_private_legacy_video(video.title):
                 private_legacy_video_ids.add(video.videoId)
-                logger.info(
-                    f"Categorized {video.videoId} as private/legacy: {video.title}"
-                )
             else:
                 public_videos.append(video)
 
         logger.info(
-            f"Categorization complete: {len(public_videos)} public, {len(private_legacy_video_ids)} private/legacy new videos"
+            f"Categorization complete: {len(public_videos)} public videos, {len(private_legacy_video_ids)} private/legacy videos to store"
         )
+        logger.info(f"Total placeholders created for private/deleted videos: {private_legacy_count}")
 
         # Step D: Atomic Batch Write with Category Fields
         logger.info("Step D: Executing atomic batch write with categorization")
@@ -759,8 +704,8 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
 
         sync_timestamp = datetime.now(timezone.utc)
 
-        # Add new public videos to the root /videos collection with category field
-        for video in public_videos:
+        # Add all videos (public + placeholders) to the root /videos collection
+        for video in videos_to_store:
             video_doc_ref = db.collection("videos").document(video.videoId)
             category = get_video_category(video.title, video.channelTitle)
 
@@ -805,9 +750,10 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
         total_public_videos = len(public_videos)
         total_private_legacy = len(private_legacy_video_ids)
         total_user_relations = len(all_video_items)
+        total_videos_stored = len(videos_to_store)
 
         logger.info(
-            f"Executing batch write: {total_public_videos} new public videos, {total_user_relations} user relations"
+            f"Executing batch write: {total_public_videos} public videos, {total_private_legacy} private/legacy videos, {total_user_relations} user relations"
         )
         batch.commit()
 
@@ -828,8 +774,9 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
             "public_videos": total_public_videos,
             "private_legacy_videos": total_private_legacy,
             "total_liked_videos": len(all_video_items),
-            "new_videos_processed": len(new_videos),
+            "videos_stored_in_collection": total_videos_stored,
             "existing_videos_skipped": len(existing_video_ids),
+            "placeholders_created": private_legacy_count,
         }
 
     except Exception as e:
@@ -884,8 +831,7 @@ def update_embedding_progress(user_id):
 
 @firestore_fn.on_document_written(document="videos/{videoId}")
 def create_video_embedding(
-    event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot]],
-) -> None:
+    event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot]],) -> None:
     """
     Event-driven function to generate embeddings for videos when they are created or updated.
     Triggered by onWrite on /videos/{videoId} documents.
