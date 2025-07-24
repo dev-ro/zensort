@@ -1111,11 +1111,15 @@ def trigger_video_embeddings(req: https_fn.Request) -> https_fn.Response:
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     # Submit all embedding generation tasks
                     future_to_video = {
-                        executor.submit(_generate_embedding, openai_client, video["text"]): video 
+                        executor.submit(
+                            _generate_embedding, openai_client, video["text"]
+                        ): video
                         for video in videos_to_process
                     }
-                    
-                    logger.info(f"Submitted {len(future_to_video)} embedding tasks to thread pool")
+
+                    logger.info(
+                        f"Submitted {len(future_to_video)} embedding tasks to thread pool"
+                    )
 
                     # Process results as they complete
                     for future in as_completed(future_to_video):
@@ -1123,7 +1127,7 @@ def trigger_video_embeddings(req: https_fn.Request) -> https_fn.Response:
                         try:
                             # Get the embedding result
                             embedding_vector = future.result()
-                            
+
                             # Update Firestore batch with successful result
                             firestore_batch.update(
                                 video_info["reference"],
@@ -1135,7 +1139,9 @@ def trigger_video_embeddings(req: https_fn.Request) -> https_fn.Response:
                                 },
                             )
                             successful_embeddings += 1
-                            logger.debug(f"Successfully generated embedding for video {video_info['id']}")
+                            logger.debug(
+                                f"Successfully generated embedding for video {video_info['id']}"
+                            )
 
                         except Exception as e:
                             logger.error(
