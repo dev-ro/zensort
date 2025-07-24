@@ -1127,8 +1127,7 @@ def _generate_embedding(text: str) -> list:
         api_key = _get_openai_api_key()
         client = OpenAI(api_key=api_key)
         response = client.embeddings.create(
-            model="text-embedding-3-small",
-            input=[text]
+            model="text-embedding-3-small", input=[text]
         )
         embedding_vector = response.data[0].embedding
         if len(embedding_vector) != EMBEDDING_DIMENSIONALITY:
