@@ -941,9 +941,18 @@ def create_video_embedding(
         # Update status to processing
         _update_embedding_status(event.params["videoId"], "processing")
 
-        # Generate embedding using the dedicated helper function
+        # Initialize OpenAI client once
         try:
-            embedding_vector = _generate_embedding(combined_text)
+            api_key = _get_openai_api_key()
+            openai_client = OpenAI(api_key=api_key)
+        except Exception as e:
+            logger.error(f"Failed to initialize OpenAI client: {str(e)}")
+            _update_embedding_status(event.params["videoId"], "failed", error=f"OpenAI client initialization failed: {str(e)}")
+            return
+
+        # Generate embedding using the pre-initialized client
+        try:
+            embedding_vector = _generate_embedding(openai_client, combined_text)
         except Exception as e:
             logger.error(
                 f"Error generating embedding for video {event.params['videoId']}: {str(e)}"
@@ -966,8 +975,6 @@ def create_video_embedding(
             f"Successfully generated embedding for video {event.params['videoId']}"
         )
 
-
-
         user_id = video_data.get("user_id")
         if user_id:
             update_embedding_progress(user_id)
@@ -986,10 +993,23 @@ def create_video_embedding(
 def trigger_video_embeddings(req: https_fn.Request) -> https_fn.Response:
     """
     Efficient batch processing function to generate embeddings for videos without valid embeddings.
-    Processes batches of 50 videos per invocation to prevent timeouts.
+    Processes batches of 25 videos per invocation to prevent timeouts.
     Handles all scenarios: new videos, failed embeddings, or invalid embedding dimensions.
     """
     try:
+        # Initialize OpenAI client once at the start to avoid repeated Secret Manager calls
+        try:
+            api_key = _get_openai_api_key()
+            openai_client = OpenAI(api_key=api_key)
+            logger.info("Successfully initialized OpenAI client")
+        except Exception as e:
+            logger.error(f"Failed to initialize OpenAI client: {str(e)}")
+            return https_fn.Response(
+                json.dumps({"success": False, "error": f"Failed to initialize OpenAI client: {str(e)}"}),
+                status=500,
+                headers={"Content-Type": "application/json"}
+            )
+
         # Simple security check - require a secret parameter
         # In production, this should use proper authentication
         secret = req.args.get("secret")
@@ -1008,8 +1028,8 @@ def trigger_video_embeddings(req: https_fn.Request) -> https_fn.Response:
         videos_collection = db.collection("videos")
 
         # Build query with cursor support for pagination
-        # Process 50 videos per batch to prevent timeouts
-        videos_query = videos_collection.order_by("__name__").limit(50)
+        # Process 25 videos per batch to prevent timeouts (reduced from 50)
+        videos_query = videos_collection.order_by("__name__").limit(25)
 
         # Resume from where previous batch left off
         if start_after_id:
@@ -1068,7 +1088,7 @@ def trigger_video_embeddings(req: https_fn.Request) -> https_fn.Response:
             logger.info(f"Processing embeddings for {processed_count} videos")
 
             try:
-                # Process embeddings one by one (gemini-embedding-001 limitation)
+                # Process embeddings one by one using the pre-initialized client
                 logger.info(
                     f"Processing embeddings for {len(videos_to_process)} videos one by one"
                 )
@@ -1078,8 +1098,8 @@ def trigger_video_embeddings(req: https_fn.Request) -> https_fn.Response:
 
                 for video_info in videos_to_process:
                     try:
-                        # Generate embedding using the dedicated helper function
-                        embedding_vector = _generate_embedding(video_info["text"])
+                        # Generate embedding using the pre-initialized client
+                        embedding_vector = _generate_embedding(openai_client, video_info["text"])
 
                         firestore_batch.update(
                             video_info["reference"],
@@ -1091,8 +1111,6 @@ def trigger_video_embeddings(req: https_fn.Request) -> https_fn.Response:
                             },
                         )
                         successful_embeddings += 1
-
-
 
                     except Exception as e:
                         logger.error(
@@ -1127,9 +1145,9 @@ def trigger_video_embeddings(req: https_fn.Request) -> https_fn.Response:
                 processed_count = 0
                 result_message = f"Batch #{batch_number}: Failed to process {failed_count} videos - {str(e)}"
 
-        # Check if we need to continue processing more videos
+        # Check if we need to continue processing more videos (adjusted for new batch size)
         has_more_videos = (
-            len(videos_batch) == 50
+            len(videos_batch) == 25
         )  # If we got a full batch, more likely exist
 
         if failed_count > 0:
@@ -1221,11 +1239,9 @@ def _prepare_embedding_text(title: str, description: str, channel_title: str) ->
     return " | ".join(parts)
 
 
-def _generate_embedding(text: str) -> list:
+def _generate_embedding(client: OpenAI, text: str) -> list:
     """Generate embedding vector using OpenAI's text-embedding-3-small model."""
     try:
-        api_key = _get_openai_api_key()
-        client = OpenAI(api_key=api_key)
         response = client.embeddings.create(
             model="text-embedding-3-small", input=[text]
         )
