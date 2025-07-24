@@ -3,7 +3,7 @@
 # Deploy with `firebase deploy --only functions`
 
 import os
-from google.cloud import secret_manager as secretmanager
+from google.cloud import secretmanager
 from google.cloud import firestore
 from firebase_admin import initialize_app
 from firebase_functions import https_fn, firestore_fn
@@ -25,7 +25,6 @@ from openai import OpenAI
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize Secret Manager clien
 # Constants for embedding configuration
 EMBEDDING_DIMENSIONALITY = 1536
 
@@ -53,16 +52,20 @@ def _get_openai_api_key() -> str:
         if not project_id:
             raise ValueError("GCP_PROJECT environment variable is not set.")
 
-        # LAZY INITIALIZATION: Create the client here, inside the function.
-        secret_client = secretmanager.SecretManagerServiceClient()
+        # Create the Secret Manager client
+        client = secretmanager.SecretManagerServiceClient()
 
+        # Build the resource name
         secret_id = "openai-api-key"
         version_id = "latest"
         name = f"projects/{project_id}/secrets/{secret_id}/versions/{version_id}"
-        response = secret_client.access_secret_version(request={"name": name})
+
+        # Access the secret
+        response = client.access_secret_version(request={"name": name})
         api_key = response.payload.data.decode("UTF-8")
         logger.info("Successfully retrieved OpenAI API key from Secret Manager")
         return api_key
+
     except Exception as e:
         logger.error(f"Error retrieving OpenAI API key: {str(e)}")
         raise ValueError(f"Failed to retrieve OpenAI API key: {str(e)}")
@@ -71,8 +74,8 @@ def _get_openai_api_key() -> str:
 initialize_app()
 
 
-@https_fn.on_call()
-def test_secret_manager(req: https_fn.CallableRequest) -> dict:
+@https_fn.on_request()
+def test_secret_manager(req: https_fn.Request) -> https_fn.Response:
     """
     Debug function to test Secret Manager integration and OpenAI API key retrieval.
     Returns environment information and success/failure status.
@@ -88,30 +91,48 @@ def test_secret_manager(req: https_fn.CallableRequest) -> dict:
         # Only return the first and last 4 chars of the key for verification
         key_preview = f"{api_key[:4]}...{api_key[-4:]}" if api_key else "No key found"
 
-        return {
-            "status": "success",
-            "environment": {
-                "project_id": project_id,
-                "function_region": os.environ.get("FUNCTION_REGION", "Not found"),
-                "function_target": os.environ.get("FUNCTION_TARGET", "Not found"),
-            },
-            "secret_manager": {
-                "key_retrieved": bool(api_key),
-                "key_preview": key_preview,
-            },
-        }
+        return https_fn.Response(
+            json.dumps(
+                {
+                    "status": "success",
+                    "environment": {
+                        "project_id": os.environ.get("GCLOUD_PROJECT", "Not found"),
+                        "function_region": os.environ.get(
+                            "FUNCTION_REGION", "Not found"
+                        ),
+                        "function_target": os.environ.get("K_SERVICE", "Not found"),
+                    },
+                    "secret_manager": {
+                        "key_retrieved": bool(api_key),
+                        "key_preview": key_preview,
+                    },
+                }
+            ),
+            status=200,
+            headers={"Content-Type": "application/json"},
+        )
 
     except Exception as e:
         logger.error(f"Debug function error: {str(e)}")
-        return {
-            "status": "error",
-            "error": str(e),
-            "environment": {
-                "project_id": os.environ.get("GCP_PROJECT", "Not found"),
-                "function_region": os.environ.get("FUNCTION_REGION", "Not found"),
-                "function_target": os.environ.get("FUNCTION_TARGET", "Not found"),
-            },
-        }
+        return https_fn.Response(
+            json.dumps(
+                {
+                    "status": "error",
+                    "error": str(e),
+                    "environment": {
+                        "project_id": os.environ.get("GCP_PROJECT", "Not found"),
+                        "function_region": os.environ.get(
+                            "FUNCTION_REGION", "Not found"
+                        ),
+                        "function_target": os.environ.get(
+                            "FUNCTION_TARGET", "Not found"
+                        ),
+                    },
+                }
+            ),
+            status=500,
+            headers={"Content-Type": "application/json"},
+        )
 
 
 @https_fn.on_call()
@@ -129,7 +150,7 @@ def add_to_waitlist(req: https_fn.CallableRequest) -> dict:
 
     try:
         # 2. Check if the email already exists in the 'waitlist' collection
-        db = firestore.client()
+        db = firestore.Client()
         waitlist_collection = db.collection("waitlist")
         existing_entries = (
             waitlist_collection.where("email", "==", email).limit(1).get()
@@ -586,7 +607,7 @@ def get_existing_video_ids(video_ids: list[str]) -> set[str]:
         return set()
 
     try:
-        db = firestore.client()
+        db = firestore.Client()
         videos_collection = db.collection("videos")
 
         existing_ids = set()
@@ -642,7 +663,7 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
             message="The function must be called with a valid 'user_id'.",
         )
 
-    db = firestore.client()
+    db = firestore.Client()
     sync_job_ref = (
         db.collection("users")
         .document(user_id)
@@ -834,7 +855,7 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
 
 
 def update_embedding_progress(user_id):
-    db = firestore.client()
+    db = firestore.Client()
     videos_ref = db.collection("videos").where("user_id", "==", user_id)
     total = videos_ref.count().get()[0][0]
     completed = (
@@ -931,7 +952,7 @@ def create_video_embedding(
             return
 
         # Update document with embedding and mark as complete
-        db = firestore.client()
+        db = firestore.Client()
         video_ref = db.collection("videos").document(event.params["videoId"])
         video_ref.update(
             {
@@ -945,8 +966,7 @@ def create_video_embedding(
             f"Successfully generated embedding for video {event.params['videoId']}"
         )
 
-        # Add rate limiting delay to prevent overwhelming the API
-        time.sleep(0.2)
+
 
         user_id = video_data.get("user_id")
         if user_id:
@@ -962,12 +982,12 @@ def create_video_embedding(
             update_embedding_progress(user_id)
 
 
-@https_fn.on_request()
+@https_fn.on_request(timeout_sec=300)
 def trigger_video_embeddings(req: https_fn.Request) -> https_fn.Response:
     """
-    Efficient batch processing function to generate embeddings for all videos without embeddings.
-    Uses single batch API calls and Firestore batch updates for maximum efficiency.
-    Processes up to 1000 videos per invocation with auto-continuation for unlimited scalability.
+    Efficient batch processing function to generate embeddings for videos without valid embeddings.
+    Processes batches of 50 videos per invocation to prevent timeouts.
+    Handles all scenarios: new videos, failed embeddings, or invalid embedding dimensions.
     """
     try:
         # Simple security check - require a secret parameter
@@ -984,12 +1004,12 @@ def trigger_video_embeddings(req: https_fn.Request) -> https_fn.Response:
         if start_after_id:
             logger.info(f"Resuming from video ID: {start_after_id}")
 
-        db = firestore.client()
+        db = firestore.Client()
         videos_collection = db.collection("videos")
 
         # Build query with cursor support for pagination
-        # Process 1000 videos per batch (safe for 9-minute Cloud Function timeout)
-        videos_query = videos_collection.order_by("__name__").limit(1000)
+        # Process 50 videos per batch to prevent timeouts
+        videos_query = videos_collection.order_by("__name__").limit(50)
 
         # Resume from where previous batch left off
         if start_after_id:
@@ -1072,8 +1092,7 @@ def trigger_video_embeddings(req: https_fn.Request) -> https_fn.Response:
                         )
                         successful_embeddings += 1
 
-                        # Add rate limiting delay to prevent overwhelming the API
-                        time.sleep(0.2)
+
 
                     except Exception as e:
                         logger.error(
@@ -1110,7 +1129,7 @@ def trigger_video_embeddings(req: https_fn.Request) -> https_fn.Response:
 
         # Check if we need to continue processing more videos
         has_more_videos = (
-            len(videos_batch) == 1000
+            len(videos_batch) == 50
         )  # If we got a full batch, more likely exist
 
         if failed_count > 0:
@@ -1247,7 +1266,7 @@ def _has_valid_embedding(video_data: dict) -> bool:
 def _update_embedding_status(video_id: str, status: str, error: str = None) -> None:
     """Update the embedding status for a video document."""
     try:
-        db = firestore.client()
+        db = firestore.Client()
         video_ref = db.collection("videos").document(video_id)
 
         update_data = {
@@ -1274,7 +1293,7 @@ def retry_failed_embeddings(req: https_fn.CallableRequest) -> dict:
             code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
             message="The function must be called with a valid 'user_id'.",
         )
-    db = firestore.client()
+    db = firestore.Client()
     videos_ref = db.collection("videos")
     failed_videos = (
         videos_ref.where("embedding_status", "==", "failed")
