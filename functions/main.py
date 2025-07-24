@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Generator
 from openai import OpenAI
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -947,7 +948,11 @@ def create_video_embedding(
             openai_client = OpenAI(api_key=api_key)
         except Exception as e:
             logger.error(f"Failed to initialize OpenAI client: {str(e)}")
-            _update_embedding_status(event.params["videoId"], "failed", error=f"OpenAI client initialization failed: {str(e)}")
+            _update_embedding_status(
+                event.params["videoId"],
+                "failed",
+                error=f"OpenAI client initialization failed: {str(e)}",
+            )
             return
 
         # Generate embedding using the pre-initialized client
@@ -1005,9 +1010,14 @@ def trigger_video_embeddings(req: https_fn.Request) -> https_fn.Response:
         except Exception as e:
             logger.error(f"Failed to initialize OpenAI client: {str(e)}")
             return https_fn.Response(
-                json.dumps({"success": False, "error": f"Failed to initialize OpenAI client: {str(e)}"}),
+                json.dumps(
+                    {
+                        "success": False,
+                        "error": f"Failed to initialize OpenAI client: {str(e)}",
+                    }
+                ),
                 status=500,
-                headers={"Content-Type": "application/json"}
+                headers={"Content-Type": "application/json"},
             )
 
         # Simple security check - require a secret parameter
@@ -1088,52 +1098,67 @@ def trigger_video_embeddings(req: https_fn.Request) -> https_fn.Response:
             logger.info(f"Processing embeddings for {processed_count} videos")
 
             try:
-                # Process embeddings one by one using the pre-initialized client
+                # Process embeddings concurrently using ThreadPoolExecutor
                 logger.info(
-                    f"Processing embeddings for {len(videos_to_process)} videos one by one"
+                    f"Processing embeddings for {len(videos_to_process)} videos concurrently"
                 )
                 firestore_batch = db.batch()
                 batch_timestamp = datetime.now(timezone.utc)
                 successful_embeddings = 0
+                failed_count = 0
 
-                for video_info in videos_to_process:
-                    try:
-                        # Generate embedding using the pre-initialized client
-                        embedding_vector = _generate_embedding(openai_client, video_info["text"])
+                # Use ThreadPoolExecutor to process embeddings in parallel
+                with ThreadPoolExecutor(max_workers=10) as executor:
+                    # Submit all embedding generation tasks
+                    future_to_video = {
+                        executor.submit(_generate_embedding, openai_client, video["text"]): video 
+                        for video in videos_to_process
+                    }
+                    
+                    logger.info(f"Submitted {len(future_to_video)} embedding tasks to thread pool")
 
-                        firestore_batch.update(
-                            video_info["reference"],
-                            {
-                                "embedding": embedding_vector,
-                                "embedding_status": "complete",
-                                "embedding_generated_at": batch_timestamp,
-                                "backfill_completed_at": batch_timestamp,
-                            },
-                        )
-                        successful_embeddings += 1
+                    # Process results as they complete
+                    for future in as_completed(future_to_video):
+                        video_info = future_to_video[future]
+                        try:
+                            # Get the embedding result
+                            embedding_vector = future.result()
+                            
+                            # Update Firestore batch with successful result
+                            firestore_batch.update(
+                                video_info["reference"],
+                                {
+                                    "embedding": embedding_vector,
+                                    "embedding_status": "complete",
+                                    "embedding_generated_at": batch_timestamp,
+                                    "backfill_completed_at": batch_timestamp,
+                                },
+                            )
+                            successful_embeddings += 1
+                            logger.debug(f"Successfully generated embedding for video {video_info['id']}")
 
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to generate embedding for video {video_info['id']}: {str(e)}"
-                        )
-                        # Mark video as failed
-                        firestore_batch.update(
-                            video_info["reference"],
-                            {
-                                "embedding_status": "failed",
-                                "embedding_error": str(e),
-                                "embedding_updated_at": batch_timestamp,
-                                "backfill_completed_at": batch_timestamp,
-                            },
-                        )
+                        except Exception as e:
+                            logger.error(
+                                f"Failed to generate embedding for video {video_info['id']}: {str(e)}"
+                            )
+                            # Mark video as failed in Firestore batch
+                            firestore_batch.update(
+                                video_info["reference"],
+                                {
+                                    "embedding_status": "failed",
+                                    "embedding_error": str(e),
+                                    "embedding_updated_at": batch_timestamp,
+                                    "backfill_completed_at": batch_timestamp,
+                                },
+                            )
+                            failed_count += 1
 
-                # Commit all updates in a single batch
+                # Commit all updates in a single batch after all futures complete
                 firestore_batch.commit()
                 logger.info(
-                    f"Successfully processed {successful_embeddings} videos with embeddings"
+                    f"Successfully processed {successful_embeddings} videos with embeddings, {failed_count} failed"
                 )
 
-                failed_count = processed_count - successful_embeddings
                 processed_count = successful_embeddings
                 result_message = f"Batch #{batch_number}: Successfully processed {processed_count} videos, skipped {skipped_count} already processed"
                 if failed_count > 0:
@@ -1141,7 +1166,7 @@ def trigger_video_embeddings(req: https_fn.Request) -> https_fn.Response:
 
             except Exception as e:
                 logger.error(f"Error in batch embedding processing: {str(e)}")
-                failed_count = processed_count
+                failed_count = len(videos_to_process)
                 processed_count = 0
                 result_message = f"Batch #{batch_number}: Failed to process {failed_count} videos - {str(e)}"
 
