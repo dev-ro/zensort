@@ -24,7 +24,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Initialize Vertex AI
-vertexai.init(project=None, location="us-central1")
+vertexai.init(project="zensort-dev", location="us-central1")
 
 # Constants for embedding configuration
 EMBEDDING_DIMENSIONALITY = 1536
