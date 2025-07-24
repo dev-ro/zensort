@@ -870,6 +870,8 @@ def create_video_embedding(
     Event-driven function to generate embeddings for videos when they are created or updated.
     Triggered by onWrite on /videos/{videoId} documents.
     """
+    video_data = None  # Ensure video_data is always defined
+    user_id = None
     try:
         logger.info(f"Processing embedding for video: {event.params['videoId']}")
 
@@ -913,6 +915,9 @@ def create_video_embedding(
             _update_embedding_status(
                 event.params["videoId"], "failed", error="No text content"
             )
+            user_id = video_data.get("user_id")
+            if user_id:
+                update_embedding_progress(user_id)
             return
 
         # Combine text fields for embedding
@@ -933,6 +938,9 @@ def create_video_embedding(
                 "failed",
                 error=f"OpenAI client initialization failed: {str(e)}",
             )
+            user_id = video_data.get("user_id")
+            if user_id:
+                update_embedding_progress(user_id)
             return
 
         # Generate embedding using the pre-initialized client
@@ -943,6 +951,9 @@ def create_video_embedding(
                 f"Error generating embedding for video {event.params['videoId']}: {str(e)}"
             )
             _update_embedding_status(event.params["videoId"], "failed", error=str(e))
+            user_id = video_data.get("user_id")
+            if user_id:
+                update_embedding_progress(user_id)
             return
 
         # Update document with embedding and mark as complete
@@ -961,17 +972,19 @@ def create_video_embedding(
         )
 
         user_id = video_data.get("user_id")
-        if user_id:
-            update_embedding_progress(user_id)
 
     except Exception as e:
         logger.error(
             f"Error processing embedding for video {event.params['videoId']}: {str(e)}"
         )
         _update_embedding_status(event.params["videoId"], "failed", error=str(e))
-        user_id = video_data.get("user_id")
-        if user_id:
-            update_embedding_progress(user_id)
+        # Try to get user_id if possible
+        if video_data and not user_id:
+            user_id = video_data.get("user_id")
+
+    # Update embedding progress if user_id is available
+    if user_id:
+        update_embedding_progress(user_id)
 
 
 @https_fn.on_request(timeout_sec=300)

@@ -106,3 +106,7 @@ The frontend YouTube repository implementation remains fully compatible - it cor
 
 ---
 *Building in public: Follow [@YourHandle] for more ZenSort development updates*
+
+## 2025-07-25: Bugfix - Embedding Progress and Error Handling
+
+A bug was fixed in the `create_video_embedding` function where the `video_data` variable could be undefined in the exception handler, potentially causing a `NameError` if an error occurred before its assignment. Additionally, the call to `update_embedding_progress` was previously duplicated in both the try and except blocks, leading to redundant updates. The function now ensures `video_data` is always initialized and only calls `update_embedding_progress` once per execution, after embedding status is updated. This improves reliability and code clarity for embedding progress tracking and error handling.
