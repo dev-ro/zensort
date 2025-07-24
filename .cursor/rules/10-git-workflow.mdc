@@ -98,8 +98,9 @@ After successful deployment and manual approval, you MUST:
   - Wait for all required checks and reviews
 - **Merge the PR:**
   - Use the GitHub UI to merge the PR (always use a merge commit, not squash or rebase)
-- **Update other active branches:**
-  - After merging, rebase or merge `main` into any other active feature branches to keep them up to date
+- **Update all active feature branches:**
+  - After merging, you MUST rebase or merge `main` into every other active feature branch to keep them up to date.
+  - This process can and should be automated. The assistant can perform this for you on request: just ask to "update all branches with main" and the assistant will handle the merges and pushes for every branch except `main`.
 
 ## 5. Clean Up
 
