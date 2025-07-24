@@ -107,8 +107,3 @@ After successful deployment and manual approval, you MUST:
   `git branch -d <branch-name>`
 - **Delete Remote Branch:** Delete the remote feature branch to keep the repository tidy.
   `git push origin --delete <branch-name>`
-
-- **Delete Local Branch:** After a successful merge, delete the local copy of the feature branch.
-  `git branch -d <branch-name>`
-- **Delete Remote Branch:** Delete the remote feature branch to keep the repository tidy.
-  `git push origin --delete <branch-name>`

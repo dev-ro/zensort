@@ -82,8 +82,10 @@ def test_secret_manager(req: https_fn.Request) -> https_fn.Response:
     Returns environment information and success/failure status.
     """
     try:
-        # Get project ID from environment
+        # Get project ID and function target from environment (use consistent variable names)
         project_id = os.environ.get("GCP_PROJECT", "Not found")
+        function_region = os.environ.get("FUNCTION_REGION", "Not found")
+        function_target = os.environ.get("K_SERVICE", "Not found")
 
         # Try to get the OpenAI API key
         api_key = _get_openai_api_key()
@@ -97,11 +99,9 @@ def test_secret_manager(req: https_fn.Request) -> https_fn.Response:
                 {
                     "status": "success",
                     "environment": {
-                        "project_id": os.environ.get("GCLOUD_PROJECT", "Not found"),
-                        "function_region": os.environ.get(
-                            "FUNCTION_REGION", "Not found"
-                        ),
-                        "function_target": os.environ.get("K_SERVICE", "Not found"),
+                        "project_id": project_id,
+                        "function_region": function_region,
+                        "function_target": function_target,
                     },
                     "secret_manager": {
                         "key_retrieved": bool(api_key),
@@ -115,19 +115,19 @@ def test_secret_manager(req: https_fn.Request) -> https_fn.Response:
 
     except Exception as e:
         logger.error(f"Debug function error: {str(e)}")
+        # Use the same consistent environment variable names in error response
+        project_id = os.environ.get("GCP_PROJECT", "Not found")
+        function_region = os.environ.get("FUNCTION_REGION", "Not found")
+        function_target = os.environ.get("K_SERVICE", "Not found")
         return https_fn.Response(
             json.dumps(
                 {
                     "status": "error",
                     "error": str(e),
                     "environment": {
-                        "project_id": os.environ.get("GCP_PROJECT", "Not found"),
-                        "function_region": os.environ.get(
-                            "FUNCTION_REGION", "Not found"
-                        ),
-                        "function_target": os.environ.get(
-                            "FUNCTION_TARGET", "Not found"
-                        ),
+                        "project_id": project_id,
+                        "function_region": function_region,
+                        "function_target": function_target,
                     },
                 }
             ),
