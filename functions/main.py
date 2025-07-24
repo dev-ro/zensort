@@ -2,12 +2,13 @@
 # To get started, simply uncomment the below code or create your own.
 # Deploy with `firebase deploy --only functions`
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Generator
-from firebase_admin import firestore, initialize_app
-from firebase_functions import https_fn, firestore_fn
-from firebase_functions.options import set_global_options
+import os
+from google.cloud import secretmanager
+from google.cloud import firestore
+from google.cloud import https_fn
+from google.cloud import firestore_fn
+from google.cloud import https_fn
+from google.cloud.functions_v2.options import set_global_options
 import requests
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
@@ -16,15 +17,17 @@ from googleapiclient.errors import HttpError
 import logging
 import json
 import time
-import vertexai
-from vertexai.language_models import TextEmbeddingModel, TextEmbeddingInput
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Generator
+from openai import OpenAI
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize Vertex AI
-vertexai.init(project="zensort-dev", location="us-central1")
+# Initialize Secret Manager client
+secret_client = secretmanager.SecretManagerServiceClient()
 
 # Constants for embedding configuration
 EMBEDDING_DIMENSIONALITY = 1536
@@ -35,6 +38,32 @@ EMBEDDING_DIMENSIONALITY = 1536
 # limit. You can override the limit for each function using the max_instances
 # parameter in the decorator, e.g. @https_fn.on_request(max_instances=5).
 set_global_options(max_instances=10)
+
+
+def _get_openai_api_key() -> str:
+    """
+    Securely retrieve the OpenAI API key from Google Cloud Secret Manager.
+    Returns the API key as a string.
+    """
+    try:
+        # For local development, check environment variable first
+        local_key = os.environ.get("OPENAI_API_KEY")
+        if local_key:
+            logger.info("Using OpenAI API key from local environment variable")
+            return local_key
+        # For production, fetch from Secret Manager
+        project_id = "zensort-dev"  # Your Firebase project ID
+        secret_id = "openai-api-key"
+        version_id = "latest"
+        name = f"projects/{project_id}/secrets/{secret_id}/versions/{version_id}"
+        response = secret_client.access_secret_version(request={"name": name})
+        api_key = response.payload.data.decode("UTF-8")
+        logger.info("Successfully retrieved OpenAI API key from Secret Manager")
+        return api_key
+    except Exception as e:
+        logger.error(f"Error retrieving OpenAI API key: {str(e)}")
+        raise ValueError(f"Failed to retrieve OpenAI API key: {str(e)}")
+
 
 initialize_app()
 
@@ -1093,35 +1122,22 @@ def _prepare_embedding_text(title: str, description: str, channel_title: str) ->
 
 
 def _generate_embedding(text: str) -> list:
-    """Generate embedding vector using Vertex AI TextEmbeddingModel with proper TextEmbeddingInput."""
+    """Generate embedding vector using OpenAI's text-embedding-3-small model."""
     try:
-        # Initialize the text embedding model
-        model = TextEmbeddingModel.from_pretrained("gemini-embedding-001")
-
-        # Create TextEmbeddingInput with CLUSTERING task type
-        embedding_input = TextEmbeddingInput(text, task_type="CLUSTERING")
-
-        # Generate embedding using the correct API
-        # gemini-embedding-001 accepts only a single input per request
-        embedding_result = model.get_embeddings(
-            [embedding_input], output_dimensionality=EMBEDDING_DIMENSIONALITY
+        api_key = _get_openai_api_key()
+        client = OpenAI(api_key=api_key)
+        response = client.embeddings.create(
+            model="text-embedding-3-small",
+            input=[text]
         )
-
-        # Extract the embedding values
-        embedding_vector = list(embedding_result[0].values)
-
-        # Ensure we have the expected dimensionality
+        embedding_vector = response.data[0].embedding
         if len(embedding_vector) != EMBEDDING_DIMENSIONALITY:
             logger.warning(
                 f"Expected {EMBEDDING_DIMENSIONALITY} dimensions, got {len(embedding_vector)}"
             )
-
         return embedding_vector
-
     except Exception as e:
-        logger.error(
-            f"Error generating embedding with vertexai TextEmbeddingModel: {e}"
-        )
+        logger.error(f"Error generating embedding with OpenAI: {e}")
         raise ValueError(f"Embedding generation failed: {e}")
 
 
