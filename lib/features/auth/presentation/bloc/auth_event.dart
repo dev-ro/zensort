@@ -22,4 +22,6 @@ class _AuthenticationUserChanged extends AuthEvent {
 
 class SignInWithGoogleRequested extends AuthEvent {}
 
+class RefreshTokenRequested extends AuthEvent {}
+
 class SignOutRequested extends AuthEvent {}

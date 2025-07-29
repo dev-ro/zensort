@@ -6,14 +6,30 @@ import 'package:zensort/features/youtube/presentation/widgets/video_list_item.da
 import 'package:zensort/theme.dart';
 import 'package:zensort/widgets/gradient_loader.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  bool _isWaitingForTokenRefresh = false;
 
   @override
   Widget build(BuildContext context) {
     bool isSyncing = context.watch<YouTubeBloc>().state is YoutubeSyncProgress;
 
-    return Scaffold(
+    return BlocListener<AuthBloc, AuthState>(
+      listener: (context, state) {
+        // If we were waiting for token refresh and now have a token, trigger sync
+        if (_isWaitingForTokenRefresh && state is Authenticated && state.accessToken != null) {
+          _isWaitingForTokenRefresh = false;
+          print('Token refreshed! Automatically triggering sync...');
+          context.read<YouTubeBloc>().add(SyncLikedVideos());
+        }
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: const Text('Liked Videos'),
         actions: [
@@ -42,7 +58,23 @@ class HomeScreen extends StatelessWidget {
                           );
                           context.read<YouTubeBloc>().add(SyncLikedVideos());
                         } else {
-                          print('No access token available.');
+                          print('No access token available. Attempting silent refresh...');
+                          
+                          // Set flag to automatically sync after token refresh
+                          setState(() {
+                            _isWaitingForTokenRefresh = true;
+                          });
+                          
+                          // Show loading feedback to user
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Refreshing YouTube authorization...'),
+                              duration: Duration(seconds: 3),
+                            ),
+                          );
+                          
+                          // Trigger a silent token refresh
+                          context.read<AuthBloc>().add(RefreshTokenRequested());
                         }
                       } else {
                         print('User is not authenticated. Cannot sync.');
@@ -117,6 +149,7 @@ class HomeScreen extends StatelessWidget {
           return const Center(child: Text('Welcome! Please sync your videos.'));
         },
       ),
+    ),
     );
   }
 }

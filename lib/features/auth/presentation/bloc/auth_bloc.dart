@@ -19,6 +19,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       super(const AuthInitial()) {
     on<AuthStarted>(_onAuthStarted);
     on<SignInWithGoogleRequested>(_onSignInWithGoogleRequested);
+    on<RefreshTokenRequested>(_onRefreshTokenRequested);
     on<SignOutRequested>(_onSignOutRequested);
     on<_AuthenticationUserChanged>(_onAuthenticationUserChanged);
 
@@ -70,6 +71,35 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       // Repository stream will trigger _AuthenticationUserChanged event
     } catch (e) {
       emit(AuthError('Sign-in failed: ${e.toString()}'));
+    }
+  }
+
+  /// Attempt to refresh access token silently without user interaction
+  /// Used when access token is null but user is still authenticated
+  Future<void> _onRefreshTokenRequested(
+    RefreshTokenRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    try {
+      // Attempt silent sign-in to refresh token
+      final accessToken = await _authRepository.signInSilentlyWithGoogle();
+      
+      if (accessToken != null) {
+        // If we got a token, trigger the auth state update
+        // This will cause _onAuthenticationUserChanged to be called with the fresh token
+        final currentUser = _authRepository.authStateChanges.take(1);
+        await for (final user in currentUser) {
+          if (user != null) {
+            emit(Authenticated(user: user, accessToken: accessToken));
+          }
+          break;
+        }
+      } else {
+        // Silent refresh failed, user needs to sign in again
+        emit(const AuthError('Session expired. Please sign in again.'));
+      }
+    } catch (e) {
+      emit(AuthError('Token refresh failed: ${e.toString()}'));
     }
   }
 
