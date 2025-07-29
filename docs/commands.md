@@ -6,6 +6,20 @@
 flutter run -d chrome --web-hostname localhost --web-port 7357 --dart-define=FLAVOR=dev
 ```
 
+## Configure Firebase for web platform
+
+If you encounter Firebase configuration errors on the web (e.g., `[firebase_auth/configuration-not-found]`), reconfigure Firebase for the web platform:
+
+```bash
+# For dev environment
+flutterfire configure --project=zensort-dev --platforms=web
+
+# For production environment  
+flutterfire configure --project=zensort-prod --platforms=web
+```
+
+This will update `lib/firebase_options.dart` and `firebase.json` with the correct configuration.
+
 ## Deploy the cloud functions to dev environment
 
 ```bash

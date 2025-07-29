@@ -47,13 +47,12 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyAynTNZ4zzsbGTATrx7dkr7zCUL48f8AlY',
-    appId: '1:286608244703:web:1c85d3c2c53fcbcfe00e6a',
-    messagingSenderId: '286608244703',
-    projectId: 'zensort-a7b47',
-    authDomain: 'zensort-a7b47.firebaseapp.com',
-    storageBucket: 'zensort-a7b47.firebasestorage.app',
-    measurementId: 'G-5GHN9MNM6B',
+    apiKey: 'AIzaSyBcNFnEsh5kMfglSPYfrHY1r07XoJeezoE',
+    appId: '1:630957314497:web:bcd0ebcaf0c12273379f40',
+    messagingSenderId: '630957314497',
+    projectId: 'zensort-dev',
+    authDomain: 'zensort-dev.firebaseapp.com',
+    storageBucket: 'zensort-dev.firebasestorage.app',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
