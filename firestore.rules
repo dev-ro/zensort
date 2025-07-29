@@ -23,6 +23,13 @@ service cloud.firestore {
       allow delete: if request.auth != null;
     }
     
+    // User documents - allow authenticated users to manage their own profile
+    match /users/{userId} {
+      allow read, write: if request.auth != null 
+        && request.auth.uid == userId
+        && validateUserData(request.resource.data);
+    }
+    
     // User's liked videos subcollection
     match /users/{userId}/likedVideos/{videoId} {
       allow read, write: if request.auth != null 
@@ -148,5 +155,22 @@ function validateUnlikedVideoData(data) {
     && data.reason is string
     && data.reason in ['user_unliked', 'video_deleted', 'account_deleted']
     && data.keys().size() == 4; // Only allow these four fields
+}
+
+function validateUserData(data) {
+  // Validate user document structure
+  let hasRequiredFields = data.keys().hasAll(['uid', 'lastLogin']);
+  let validUid = data.uid is string && data.uid.size() > 0;
+  let validTimestamp = data.lastLogin is timestamp;
+  
+  // Optional fields validation
+  let validOptionalFields = (!data.keys().hasAny(['email']) || data.email is string)
+    && (!data.keys().hasAny(['displayName']) || data.displayName is string)
+    && (!data.keys().hasAny(['photoURL']) || data.photoURL is string);
+  
+  // Only allow expected fields
+  let allowedFields = data.keys().hasOnly(['uid', 'email', 'displayName', 'photoURL', 'lastLogin']);
+  
+  return hasRequiredFields && validUid && validTimestamp && validOptionalFields && allowedFields;
 }
 
