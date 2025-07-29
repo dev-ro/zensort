@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:zensort/features/youtube/domain/entities/liked_video.dart';
+import 'package:zensort/widgets/thumbnail_placeholder.dart';
 
 class VideoListItem extends StatelessWidget {
   final LikedVideo video;
@@ -40,19 +41,7 @@ class VideoListItem extends StatelessWidget {
                         height: 90,
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            width: 120,
-                            height: 90,
-                            decoration: BoxDecoration(
-                              color: Colors.grey[300],
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(
-                              Icons.broken_image,
-                              color: Colors.grey,
-                              size: 40,
-                            ),
-                          );
+                          return const ThumbnailPlaceholder();
                         },
                         loadingBuilder: (context, child, loadingProgress) {
                           if (loadingProgress == null) return child;
@@ -69,19 +58,7 @@ class VideoListItem extends StatelessWidget {
                           );
                         },
                       )
-                    : Container(
-                        width: 120,
-                        height: 90,
-                        decoration: BoxDecoration(
-                          color: Colors.grey[300],
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(
-                          Icons.video_library,
-                          color: Colors.grey,
-                          size: 40,
-                        ),
-                      ),
+                    : const ThumbnailPlaceholder(),
               ),
               const SizedBox(width: 16),
               Expanded(

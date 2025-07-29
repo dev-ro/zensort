@@ -554,19 +554,25 @@ def get_existing_video_ids(video_ids: list[str]) -> set[str]:
 def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
     """
     A scalable callable Cloud Function to sync a user's liked YouTube videos to Firestore.
-    Uses the correct merge pattern to handle private and deleted videos with proper placeholders.
-    Now includes real-time progress reporting and video categorization.
+    Uses differential sync to handle liked/unliked videos and merge pattern for private/deleted videos.
+    Includes real-time progress reporting, video categorization, and historical unlike tracking.
 
-    This function implements the efficient merge pattern algorithm:
+    This function implements the differential sync algorithm:
     - Step 0: Create sync job document for progress tracking
     - Step A: Fetch all liked video items (public + private/deleted) with correct timestamps
     - Step B: Fetch video details for ALL liked videos using merge pattern
     - Step C: Create lookup map and merge liked items with details, creating placeholders for private/deleted videos
-    - Step D: Atomic batch write for all videos (real + placeholders) with category fields
-    - Step E: Update sync job completion status
+    - Step D: Differential analysis - detect newly liked vs newly unliked videos
+    - Step E: Differential batch write with unlike handling (moves unliked videos to unlikedVideos subcollection)
+    - Step F: Update sync job completion status
+
+    Key Features:
+    - Detects when users unlike videos on YouTube and moves them to unlikedVideos subcollection
+    - Preserves historical data for unliked videos (originalLikedAt, unlikedAt, reason)
+    - Maintains complete data integrity with proper placeholder handling
 
     Expects: access_token and user_id in the request data.
-    Returns: dict with sync statistics including placeholder count.
+    Returns: dict with comprehensive sync statistics including differential sync counts.
     """
     access_token = req.data.get("access_token")
     user_id = req.data.get("user_id")
@@ -731,8 +737,35 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
             f"Total placeholders created for private/deleted videos: {private_legacy_count}"
         )
 
-        # Step D: Atomic Batch Write with Category Fields
-        logger.info("Step D: Executing atomic batch write with categorization")
+        # Step D: Differential Analysis - Detect newly liked vs unliked videos
+        logger.info("Step D: Performing differential sync analysis")
+        
+        # Get current YouTube video IDs 
+        current_youtube_video_ids = set(item["videoId"] for item in all_video_items)
+        logger.info(f"Current YouTube liked videos: {len(current_youtube_video_ids)}")
+        
+        # Get existing liked videos from Firestore
+        existing_liked_docs = (
+            db.collection("users")
+            .document(user_id) 
+            .collection("likedVideos")
+            .stream()
+        )
+        existing_firestore_video_ids = set(doc.id for doc in existing_liked_docs)
+        logger.info(f"Existing Firestore liked videos: {len(existing_firestore_video_ids)}")
+        
+        # Calculate differences
+        newly_liked = current_youtube_video_ids - existing_firestore_video_ids
+        still_liked = current_youtube_video_ids & existing_firestore_video_ids  
+        newly_unliked = existing_firestore_video_ids - current_youtube_video_ids
+        
+        logger.info(
+            f"Differential analysis complete: {len(newly_liked)} newly liked, "
+            f"{len(still_liked)} still liked, {len(newly_unliked)} newly unliked"
+        )
+
+        # Step E: Differential Batch Write with Category Fields and Unlike Handling
+        logger.info("Step E: Executing differential batch write with unlike handling")
         batch = db.batch()
 
         sync_timestamp = datetime.now(timezone.utc)
@@ -759,24 +792,62 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
 
             batch.set(video_doc_ref, video_data)
 
-        # Add ALL videos (public + private/legacy) to user's liked videos subcollection
+        # Add currently liked videos (newly liked + still liked) to user's liked videos subcollection
         # Using the correct likedAt timestamps from Step A
         for video_item in all_video_items:
-            liked_video_doc_ref = (
+            video_id = video_item["videoId"]
+            
+            # Only process videos that are currently liked on YouTube
+            if video_id in newly_liked or video_id in still_liked:
+                liked_video_doc_ref = (
+                    db.collection("users")
+                    .document(user_id)
+                    .collection("likedVideos")
+                    .document(video_id)
+                )
+                batch.set(
+                    liked_video_doc_ref,
+                    {
+                        "likedAt": video_item["likedAt"],  # Correct timestamp from playlist API
+                        "syncedAt": sync_timestamp,
+                    },
+                )
+        
+        # Handle newly unliked videos - move to unlikedVideos subcollection
+        for unliked_video_id in newly_unliked:
+            # Get original liked data to preserve historical information
+            original_liked_doc_ref = (
                 db.collection("users")
                 .document(user_id)
                 .collection("likedVideos")
-                .document(video_item["videoId"])
+                .document(unliked_video_id)
             )
-            batch.set(
-                liked_video_doc_ref,
-                {
-                    "likedAt": video_item[
-                        "likedAt"
-                    ],  # Correct timestamp from playlist API
-                    "syncedAt": sync_timestamp,
-                },
-            )
+            original_liked_doc = original_liked_doc_ref.get()
+            
+            if original_liked_doc.exists:
+                original_data = original_liked_doc.to_dict()
+                
+                # Add to unlikedVideos subcollection with historical data
+                unliked_video_doc_ref = (
+                    db.collection("users")
+                    .document(user_id)
+                    .collection("unlikedVideos")
+                    .document(unliked_video_id)
+                )
+                batch.set(
+                    unliked_video_doc_ref,
+                    {
+                        "originalLikedAt": original_data["likedAt"],
+                        "unlikedAt": sync_timestamp,
+                        "syncedAt": sync_timestamp,
+                        "reason": "user_unliked"
+                    },
+                )
+                
+                # Remove from likedVideos subcollection
+                batch.delete(original_liked_doc_ref)
+                
+                logger.info(f"Moving unliked video {unliked_video_id} to unlikedVideos collection")
 
         # Execute the atomic batch write
         total_public_videos = len(public_videos)
@@ -785,12 +856,14 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
         total_videos_stored = len(videos_to_store)
 
         logger.info(
-            f"Executing batch write: {total_public_videos} public videos, {total_private_legacy} private/legacy videos, {total_user_relations} user relations"
+            f"Executing differential batch write: {total_public_videos} public videos, "
+            f"{total_private_legacy} private/legacy videos, {len(newly_liked)} newly liked, "
+            f"{len(still_liked)} still liked, {len(newly_unliked)} newly unliked"
         )
         batch.commit()
 
-        # Step E: Update Sync Job Completion Status
-        logger.info("Step E: Updating sync job completion status")
+        # Step F: Update Sync Job Completion Status
+        logger.info("Step F: Updating sync job completion status")
         sync_job_ref.update(
             {
                 "status": "completed",
@@ -809,6 +882,11 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
             "videos_stored_in_collection": total_videos_stored,
             "existing_videos_skipped": len(existing_video_ids),
             "placeholders_created": private_legacy_count,
+            # Differential sync statistics
+            "newly_liked": len(newly_liked),
+            "still_liked": len(still_liked),
+            "newly_unliked": len(newly_unliked),
+            "differential_sync_enabled": True,
         }
 
     except Exception as e:

@@ -30,6 +30,15 @@ service cloud.firestore {
         && validateLikedVideoData(request.resource.data);
     }
     
+    // User's unliked videos subcollection (for videos they previously liked but have now unliked)
+    match /users/{userId}/unlikedVideos/{videoId} {
+      allow read: if request.auth != null 
+        && request.auth.uid == userId;
+      
+      // Only Cloud Functions should write to this collection (users don't directly unlike in our UI)
+      allow write: if false;
+    }
+    
     // User's sync jobs subcollection
     match /users/{userId}/syncJobs/{jobId} {
       allow read, write: if request.auth != null 
@@ -128,5 +137,16 @@ function validateSyncJobData(data) {
     && (!data.keys().hasAny(['error']) || data.error is string);
     
   return hasRequiredFields && validStatus && validTimestamps && validOptionalFields;
+}
+
+function validateUnlikedVideoData(data) {
+  // Validate unliked video structure
+  return data.keys().hasAll(['originalLikedAt', 'unlikedAt', 'syncedAt', 'reason'])
+    && data.originalLikedAt is timestamp
+    && data.unlikedAt is timestamp  
+    && data.syncedAt is timestamp
+    && data.reason is string
+    && data.reason in ['user_unliked', 'video_deleted', 'account_deleted']
+    && data.keys().size() == 4; // Only allow these four fields
 }
 
