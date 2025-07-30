@@ -12,7 +12,12 @@
           "package_name": "com.example.zensort"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "630957314497-52e7nhm73i52je3j0uqdfb2lsq5956q9.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCHEg2rU9hD-5XPnbLGPFoabkz7lD4ZidA"
@@ -20,7 +25,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "630957314497-207c3si5q3oh7techd9hkm3j52oqgp38.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "630957314497-3skd8s19cr3f1juv26sduvnp4i8crtdm.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.zensort"
+              }
+            }
+          ]
         }
       }
     }

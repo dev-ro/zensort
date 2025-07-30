@@ -69,6 +69,8 @@ class DefaultFirebaseOptions {
     messagingSenderId: '630957314497',
     projectId: 'zensort-dev',
     storageBucket: 'zensort-dev.firebasestorage.app',
+    iosClientId: '630957314497-3skd8s19cr3f1juv26sduvnp4i8crtdm.apps.googleusercontent.com',
     iosBundleId: 'com.example.zensort',
   );
+
 }
