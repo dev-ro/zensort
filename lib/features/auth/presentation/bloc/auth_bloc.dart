@@ -83,7 +83,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     try {
       // Attempt silent sign-in to refresh token
       final accessToken = await _authRepository.signInSilentlyWithGoogle();
-      
+
       if (accessToken == null) {
         // Silent refresh failed, user needs to sign in again
         emit(const AuthError('Session expired. Please sign in again.'));

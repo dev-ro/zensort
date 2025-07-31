@@ -49,3 +49,8 @@ app.*.map.json
 # IDE specific files
 .idea/
 .vscode/
+
+# Pyton related
+__pycache__/
+.venv/
+venv/

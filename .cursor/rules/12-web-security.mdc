@@ -1,7 +1,7 @@
 ---
-title: Web Security: Authentication & Browser Storage
+description: Web Security: Authentication & Browser Storage
+alwaysApply: false
 ---
-
 # Web Security: Authentication & Browser Storage
 
 ZenSort's web-first architecture requires strict security practices to protect user data and prevent common web vulnerabilities.

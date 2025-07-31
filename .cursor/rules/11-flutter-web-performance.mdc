@@ -1,7 +1,7 @@
 ---
-title: Flutter Web Performance & State Persistence
+description: Flutter Web Performance & State Persistence
+alwaysApply: false
 ---
-
 # Flutter Web Performance & State Persistence
 
 ZenSort is a web-first application. All development must prioritize web performance, state persistence across browser refreshes, and web-specific optimization techniques.
