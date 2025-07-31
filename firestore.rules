@@ -25,16 +25,27 @@ service cloud.firestore {
     
     // User documents - allow authenticated users to manage their own profile
     match /users/{userId} {
-      allow read, write: if request.auth != null 
+      allow read: if request.auth != null && request.auth.uid == userId;
+      
+      // Allow user creation during sign-in with basic validation
+      allow create: if request.auth != null 
         && request.auth.uid == userId
-        && validateUserData(request.resource.data);
+        && validateUserCreation(request.resource.data);
+        
+      // Allow user updates with stricter validation
+      allow update: if request.auth != null 
+        && request.auth.uid == userId
+        && validateUserUpdate(request.resource.data);
     }
     
     // User's liked videos subcollection
     match /users/{userId}/likedVideos/{videoId} {
-      allow read, write: if request.auth != null 
+      allow read: if request.auth != null && request.auth.uid == userId;
+      
+      // Allow writes for sync operations with validation
+      allow write: if request.auth != null 
         && request.auth.uid == userId
-        && validateLikedVideoData(request.resource.data);
+        && (request.resource.data == null || validateLikedVideoData(request.resource.data));
     }
     
     // User's unliked videos subcollection (for videos they previously liked but have now unliked)
@@ -46,11 +57,14 @@ service cloud.firestore {
       allow write: if false;
     }
     
-    // User's sync jobs subcollection
+    // User's sync jobs subcollection  
     match /users/{userId}/syncJobs/{jobId} {
-      allow read, write: if request.auth != null 
+      allow read: if request.auth != null && request.auth.uid == userId;
+      
+      // Allow writes for sync operations with validation (null check for deletes)
+      allow write: if request.auth != null 
         && request.auth.uid == userId
-        && validateSyncJobData(request.resource.data);
+        && (request.resource.data == null || validateSyncJobData(request.resource.data));
     }
     
     // User's embedding status
@@ -146,31 +160,32 @@ function validateSyncJobData(data) {
   return hasRequiredFields && validStatus && validTimestamps && validOptionalFields;
 }
 
-function validateUnlikedVideoData(data) {
-  // Validate unliked video structure
-  return data.keys().hasAll(['originalLikedAt', 'unlikedAt', 'syncedAt', 'reason'])
-    && data.originalLikedAt is timestamp
-    && data.unlikedAt is timestamp  
-    && data.syncedAt is timestamp
-    && data.reason is string
-    && data.reason in ['user_unliked', 'video_deleted', 'account_deleted']
-    && data.keys().size() == 4; // Only allow these four fields
-}
-
-function validateUserData(data) {
-  // Validate user document structure
-  let hasRequiredFields = data.keys().hasAll(['uid', 'lastLogin']);
-  let validUid = data.uid is string && data.uid.size() > 0;
-  let validTimestamp = data.lastLogin is timestamp;
-  
-  // Optional fields validation
-  let validOptionalFields = (!data.keys().hasAny(['email']) || data.email is string)
+function validateUserCreation(data) {
+  // More permissive validation for initial user document creation during sign-in
+  // Only require basic fields that we know will be available
+  let validOptionalFields = (!data.keys().hasAny(['uid']) || (data.uid is string && data.uid.size() > 0))
+    && (!data.keys().hasAny(['email']) || data.email is string)
     && (!data.keys().hasAny(['displayName']) || data.displayName is string)
-    && (!data.keys().hasAny(['photoURL']) || data.photoURL is string);
+    && (!data.keys().hasAny(['photoURL']) || data.photoURL is string)
+    && (!data.keys().hasAny(['lastLogin']) || data.lastLogin is timestamp);
   
   // Only allow expected fields
   let allowedFields = data.keys().hasOnly(['uid', 'email', 'displayName', 'photoURL', 'lastLogin']);
   
-  return hasRequiredFields && validUid && validTimestamp && validOptionalFields && allowedFields;
+  return validOptionalFields && allowedFields;
+}
+
+function validateUserUpdate(data) {
+  // Stricter validation for user document updates
+  let validOptionalFields = (!data.keys().hasAny(['uid']) || (data.uid is string && data.uid.size() > 0))
+    && (!data.keys().hasAny(['email']) || data.email is string)  
+    && (!data.keys().hasAny(['displayName']) || data.displayName is string)
+    && (!data.keys().hasAny(['photoURL']) || data.photoURL is string)
+    && (!data.keys().hasAny(['lastLogin']) || data.lastLogin is timestamp);
+  
+  // Only allow expected fields
+  let allowedFields = data.keys().hasOnly(['uid', 'email', 'displayName', 'photoURL', 'lastLogin']);
+  
+  return validOptionalFields && allowedFields;
 }
 

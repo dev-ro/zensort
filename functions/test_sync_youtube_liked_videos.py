@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch, Mock, ANY
+from unittest.mock import patch, Mock, ANY, call
 from firebase_functions import https_fn
 from google.oauth2.credentials import Credentials
 from datetime import datetime, timezone
@@ -21,13 +21,19 @@ class TestYouTubeSyncFunctions(unittest.TestCase):
     Test suite for the scalable YouTube sync functions.
     """
 
+    @patch("google.oauth2.credentials.Credentials")
     @patch("main.build")
-    def test_fetch_liked_video_items_creates_proper_credentials(self, mock_build):
+    def test_fetch_liked_video_items_creates_proper_credentials(
+        self, mock_build, mock_credentials_class
+    ):
         """
         Tests that fetch_liked_video_items correctly constructs the Credentials object
         and fetches from the correct playlist endpoint with timestamps.
         """
-        # Arrange: Set up a mock for the YouTube API client
+        # Arrange: Set up mocks for credentials and YouTube API client
+        mock_credentials_instance = Mock()
+        mock_credentials_class.return_value = mock_credentials_instance
+
         mock_youtube_service = Mock()
         mock_playlist_items = Mock()
         mock_playlist_items.execute.return_value = {
@@ -36,14 +42,14 @@ class TestYouTubeSyncFunctions(unittest.TestCase):
                     "snippet": {
                         "resourceId": {"videoId": "video1"},
                         "publishedAt": "2023-01-01T12:00:00Z",
-                        "title": "Test Video 1"
+                        "title": "Test Video 1",
                     }
                 },
                 {
                     "snippet": {
                         "resourceId": {"videoId": "video2"},
                         "publishedAt": "2023-01-02T12:00:00Z",
-                        "title": "Private video"
+                        "title": "Private video",
                     }
                 },
             ],
@@ -59,16 +65,18 @@ class TestYouTubeSyncFunctions(unittest.TestCase):
         # Act: Call the function
         result = fetch_liked_video_items(test_token)
 
-        # Assert: Verify that 'build' was called with a Credentials object
-        mock_build.assert_called_once()
-        args, kwargs = mock_build.call_args
-        actual_credentials = kwargs.get("credentials")
+        # Assert: Verify that Credentials was created with correct parameters
+        mock_credentials_class.assert_called_once_with(
+            token=test_token,
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id="unused",
+            client_secret="unused",
+            scopes=["https://www.googleapis.com/auth/youtube.readonly"],
+        )
 
-        self.assertIsNotNone(actual_credentials)
-        self.assertIsInstance(actual_credentials, Credentials)
-        self.assertEqual(actual_credentials.token, test_token)
-        self.assertEqual(
-            actual_credentials.token_uri, "https://oauth2.googleapis.com/token"
+        # Verify that 'build' was called with the mock credentials
+        mock_build.assert_called_once_with(
+            "youtube", "v3", credentials=mock_credentials_instance
         )
 
         # Verify the API call was made with correct parameters (playlist endpoint)
@@ -104,21 +112,40 @@ class TestYouTubeSyncFunctions(unittest.TestCase):
         self.assertFalse(is_private_legacy_video("Private Video"))  # Case sensitive
         self.assertFalse(is_private_legacy_video("private video"))  # Case sensitive
 
-    @patch("main.firestore")
-    def test_get_existing_video_ids(self, mock_firestore):
+    @patch("google.cloud.firestore.Client")
+    def test_get_existing_video_ids(self, mock_firestore_client):
         """
         Tests the function that checks which video IDs already exist in Firestore.
+        Tests the new optimized implementation using get_all().
         """
-        # Arrange: Mock Firestore client and query response
+        # Arrange: Mock Firestore client and get_all response
         mock_db = Mock()
         mock_collection = Mock()
-        mock_firestore.client.return_value = mock_db
+        mock_firestore_client.return_value = mock_db
         mock_db.collection.return_value = mock_collection
 
-        # Mock query response - simulate finding one existing video
-        mock_doc = Mock()
-        mock_doc.get.return_value = "existing_video_1"
-        mock_collection.where.return_value.get.return_value = [mock_doc]
+        # Mock document references and get_all response
+        mock_doc_refs = [Mock(), Mock(), Mock()]
+        mock_collection.document.side_effect = mock_doc_refs
+
+        # Mock get_all response - simulate finding one existing video
+        mock_existing_doc = Mock()
+        mock_existing_doc.exists = True
+        mock_existing_doc.id = "existing_video_1"
+
+        mock_nonexistent_doc1 = Mock()
+        mock_nonexistent_doc1.exists = False
+        mock_nonexistent_doc1.id = "new_video_1"
+
+        mock_nonexistent_doc2 = Mock()
+        mock_nonexistent_doc2.exists = False
+        mock_nonexistent_doc2.id = "new_video_2"
+
+        mock_db.get_all.return_value = [
+            mock_existing_doc,
+            mock_nonexistent_doc1,
+            mock_nonexistent_doc2,
+        ]
 
         video_ids = ["existing_video_1", "new_video_1", "new_video_2"]
 
@@ -128,14 +155,26 @@ class TestYouTubeSyncFunctions(unittest.TestCase):
         # Assert
         self.assertEqual(result, {"existing_video_1"})
         mock_db.collection.assert_called_with("videos")
-        mock_collection.where.assert_called()
+        # Verify document references were created for each video ID
+        expected_calls = [
+            call("existing_video_1"),
+            call("new_video_1"),
+            call("new_video_2"),
+        ]
+        mock_collection.document.assert_has_calls(expected_calls, any_order=True)
+        # Verify get_all was called with the document references
+        mock_db.get_all.assert_called_once_with(mock_doc_refs)
 
+    @patch("google.oauth2.credentials.Credentials")
     @patch("main.build")
-    def test_fetch_video_details(self, mock_build):
+    def test_fetch_video_details(self, mock_build, mock_credentials_class):
         """
         Tests that fetch_video_details correctly fetches metadata for specific video IDs.
         """
-        # Arrange: Mock YouTube API response with video details
+        # Arrange: Set up mocks for credentials and YouTube API client
+        mock_credentials_instance = Mock()
+        mock_credentials_class.return_value = mock_credentials_instance
+
         mock_youtube_service = Mock()
         mock_videos_list = Mock()
         mock_videos_list.execute.return_value = {

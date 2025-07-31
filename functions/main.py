@@ -522,6 +522,7 @@ def get_existing_video_ids(video_ids: list[str]) -> set[str]:
     """
     Check which video IDs already exist in the root /videos collection.
     Returns a set of existing video IDs.
+    Uses efficient batch reading with get_all() for better performance.
     """
     if not video_ids:
         return set()
@@ -530,15 +531,17 @@ def get_existing_video_ids(video_ids: list[str]) -> set[str]:
         db = firestore.Client()
         videos_collection = db.collection("videos")
 
+        # Create document references for all video IDs
+        doc_refs = [videos_collection.document(video_id) for video_id in video_ids]
+
+        # Use get_all() to fetch all documents in a single batch operation
+        docs = db.get_all(doc_refs)
+
+        # Extract video IDs from existing documents
         existing_ids = set()
-
-        # Firestore 'in' queries are limited to 10 items, so we batch
-        for i in range(0, len(video_ids), 10):
-            batch_ids = video_ids[i : i + 10]
-            docs = videos_collection.where("videoId", "in", batch_ids).get()
-
-            for doc in docs:
-                existing_ids.add(doc.get("videoId"))
+        for doc in docs:
+            if doc.exists:
+                existing_ids.add(doc.id)
 
         logger.info(
             f"Found {len(existing_ids)} existing videos out of {len(video_ids)} checked"
@@ -550,7 +553,7 @@ def get_existing_video_ids(video_ids: list[str]) -> set[str]:
         return set()  # Fail safe - assume none exist to avoid data loss
 
 
-@https_fn.on_call()
+@https_fn.on_call(timeout_sec=540)  # 9 minutes timeout for large syncs
 def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
     """
     A scalable callable Cloud Function to sync a user's liked YouTube videos to Firestore.
@@ -630,22 +633,32 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
             )
             return {"synced": 0, "public_videos": 0, "private_legacy_videos": 0}
 
-        # Step B: Fetch Video Details Using Merge Pattern for Private/Deleted Videos
-        logger.info(
-            "Step B: Fetching video details with merge pattern for private/deleted videos"
-        )
+        # Step B: Check Existing Videos First (Performance Optimization)
+        logger.info("Step B: Checking which videos already exist in database")
 
         # Extract all video IDs from liked items
         all_video_ids = [item["videoId"] for item in all_video_items]
         logger.info(f"Total video IDs to process: {len(all_video_ids)}")
 
-        # Step C: Batch Fetch Details for ALL Videos (not just new ones)
-        logger.info("Step C: Batch fetching details for all liked videos")
+        # Check which videos already exist in the root /videos collection FIRST
+        existing_video_ids = get_existing_video_ids(all_video_ids)
+        logger.info(
+            f"Found {len(existing_video_ids)} videos already in public collection"
+        )
+
+        # Only fetch details for NEW videos (major performance optimization)
+        new_video_ids = [
+            vid_id for vid_id in all_video_ids if vid_id not in existing_video_ids
+        ]
+        logger.info(f"Need to fetch details for {len(new_video_ids)} new videos only")
+
+        # Step C: Batch Fetch Details for NEW Videos Only (not all videos)
+        logger.info("Step C: Batch fetching details for new videos only")
         video_details = []
-        if all_video_ids:
-            video_details = fetch_video_details(access_token, all_video_ids)
+        if new_video_ids:
+            video_details = fetch_video_details(access_token, new_video_ids)
             logger.info(
-                f"Successfully fetched details for {len(video_details)} out of {len(all_video_ids)} videos"
+                f"Successfully fetched details for {len(video_details)} out of {len(new_video_ids)} new videos"
             )
 
             # Update progress after fetching video details
@@ -656,15 +669,8 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
         video_details_map = {video.videoId: video for video in video_details}
         logger.info(f"Created lookup map with {len(video_details_map)} video details")
 
-        # Check which videos already exist in the root /videos collection
-        existing_video_ids = get_existing_video_ids(all_video_ids)
-        logger.info(
-            f"Found {len(existing_video_ids)} videos already in public collection"
-        )
-
         # Merge liked items with video details, creating placeholders for private/deleted videos
-        videos_to_store = []
-        videos_to_update = []  # For existing videos that need updates
+        videos_to_store = []  # Only new videos need to be stored
         private_legacy_count = 0
 
         for video_item in all_video_items:
@@ -674,17 +680,19 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
                 "title"
             ]  # Title from playlist API (includes "Private video", "Deleted video", etc.)
 
+            # Skip existing videos - they don't need processing in videos collection
+            if video_id in existing_video_ids:
+                logger.debug(f"Skipping existing video {video_id}")
+                continue
+
+            # Process only NEW videos
             if video_id in video_details_map:
-                # Use actual video details from videos.list API
+                # New video with actual details from videos.list API
                 video = video_details_map[video_id]
-                if video_id in existing_video_ids:
-                    videos_to_update.append(video)
-                    logger.debug(f"Updating existing video {video_id}: {video.title}")
-                else:
-                    videos_to_store.append(video)
-                    logger.debug(f"Storing new video {video_id}: {video.title}")
+                videos_to_store.append(video)
+                logger.debug(f"Storing new video {video_id}: {video.title}")
             else:
-                # Create placeholder using the title from playlist API
+                # New video without details - create placeholder using playlist API title
                 # YouTube API provides accurate titles like "Private video", "Deleted video", etc.
                 placeholder_title = (
                     playlist_title if playlist_title else "Private video"
@@ -715,22 +723,18 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
                     platform="YouTube",
                     addedToZensortAt=datetime.now(timezone.utc),
                 )
-                
-                if video_id in existing_video_ids:
-                    videos_to_update.append(placeholder_video)
-                    logger.info(f"Updating existing video {video_id} to placeholder: '{placeholder_title}'")
-                else:
-                    videos_to_store.append(placeholder_video)
-                    logger.info(f"Creating new placeholder for video {video_id}: '{placeholder_title}'")
-                
+
+                videos_to_store.append(placeholder_video)
+                logger.info(
+                    f"Creating new placeholder for video {video_id}: '{placeholder_title}'"
+                )
                 private_legacy_count += 1
 
-        # Categorize videos into public and private/legacy (both new and updated)
-        all_videos = videos_to_store + videos_to_update
+        # Categorize NEW videos into public and private/legacy
         public_videos = []
         private_legacy_video_ids = set()
 
-        for video in all_videos:
+        for video in videos_to_store:
             if is_private_legacy_video(video.title):
                 private_legacy_video_ids.add(video.videoId)
             else:
@@ -740,7 +744,7 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
             f"Categorization complete: {len(public_videos)} public videos, {len(private_legacy_video_ids)} private/legacy videos"
         )
         logger.info(
-            f"New videos to store: {len(videos_to_store)}, Existing videos to update: {len(videos_to_update)}"
+            f"New videos to store: {len(videos_to_store)}, Existing videos skipped: {len(existing_video_ids)}"
         )
         logger.info(
             f"Total placeholders created for private/deleted videos: {private_legacy_count}"
@@ -748,26 +752,32 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
 
         # Step D: Differential Analysis - Detect newly liked vs unliked videos
         logger.info("Step D: Performing differential sync analysis")
-        
-        # Get current YouTube video IDs 
+
+        # Get current YouTube video IDs
         current_youtube_video_ids = set(item["videoId"] for item in all_video_items)
         logger.info(f"Current YouTube liked videos: {len(current_youtube_video_ids)}")
-        
-        # Get existing liked videos from Firestore
+
+        # Get existing liked videos from Firestore with their data (for efficient unliked processing)
+        # Using .get() instead of .stream() for better performance when processing all documents
         existing_liked_docs = (
-            db.collection("users")
-            .document(user_id) 
-            .collection("likedVideos")
-            .stream()
+            db.collection("users").document(user_id).collection("likedVideos").get()
         )
-        existing_firestore_video_ids = set(doc.id for doc in existing_liked_docs)
-        logger.info(f"Existing Firestore liked videos: {len(existing_firestore_video_ids)}")
-        
+        existing_liked_data = {}  # Store document data for efficient access
+        existing_firestore_video_ids = set()
+
+        for doc in existing_liked_docs:
+            existing_firestore_video_ids.add(doc.id)
+            existing_liked_data[doc.id] = doc.to_dict()  # Cache document data
+
+        logger.info(
+            f"Existing Firestore liked videos: {len(existing_firestore_video_ids)}"
+        )
+
         # Calculate differences
         newly_liked = current_youtube_video_ids - existing_firestore_video_ids
-        still_liked = current_youtube_video_ids & existing_firestore_video_ids  
+        still_liked = current_youtube_video_ids & existing_firestore_video_ids
         newly_unliked = existing_firestore_video_ids - current_youtube_video_ids
-        
+
         logger.info(
             f"Differential analysis complete: {len(newly_liked)} newly liked, "
             f"{len(still_liked)} still liked, {len(newly_unliked)} newly unliked"
@@ -801,33 +811,13 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
 
             batch.set(video_doc_ref, video_data)
 
-        # Update existing videos that may have changed (public->private, private->public, etc.)
-        for video in videos_to_update:
-            video_doc_ref = db.collection("videos").document(video.videoId)
-            category = get_video_category(video.title, video.channelTitle)
-
-            video_data = {
-                "platform": video.platform,
-                "videoId": video.videoId,
-                "title": video.title,
-                "description": video.description,
-                "channelTitle": video.channelTitle,
-                "thumbnailUrl": video.thumbnailUrl,
-                "publishedAt": video.publishedAt,
-                # Keep original addedToZensortAt for existing videos
-            }
-
-            # Only add category field if it's not None (to avoid unnecessary null fields)
-            if category is not None:
-                video_data["category"] = category
-
-            batch.update(video_doc_ref, video_data)
+        # Note: Existing videos are skipped for performance - no updates needed
 
         # Add currently liked videos (newly liked + still liked) to user's liked videos subcollection
         # Using the correct likedAt timestamps from Step A
         for video_item in all_video_items:
             video_id = video_item["videoId"]
-            
+
             # Only process videos that are currently liked on YouTube
             if video_id in newly_liked or video_id in still_liked:
                 liked_video_doc_ref = (
@@ -839,25 +829,19 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
                 batch.set(
                     liked_video_doc_ref,
                     {
-                        "likedAt": video_item["likedAt"],  # Correct timestamp from playlist API
+                        "likedAt": video_item[
+                            "likedAt"
+                        ],  # Correct timestamp from playlist API
                         "syncedAt": sync_timestamp,
                     },
                 )
-        
+
         # Handle newly unliked videos - move to unlikedVideos subcollection
         for unliked_video_id in newly_unliked:
-            # Get original liked data to preserve historical information
-            original_liked_doc_ref = (
-                db.collection("users")
-                .document(user_id)
-                .collection("likedVideos")
-                .document(unliked_video_id)
-            )
-            original_liked_doc = original_liked_doc_ref.get()
-            
-            if original_liked_doc.exists:
-                original_data = original_liked_doc.to_dict()
-                
+            # Use cached liked data (no individual Firestore reads needed)
+            original_data = existing_liked_data.get(unliked_video_id)
+
+            if original_data:
                 # Add to unlikedVideos subcollection with historical data
                 unliked_video_doc_ref = (
                     db.collection("users")
@@ -871,25 +855,37 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
                         "originalLikedAt": original_data["likedAt"],
                         "unlikedAt": sync_timestamp,
                         "syncedAt": sync_timestamp,
-                        "reason": "user_unliked"
+                        "reason": "user_unliked",
                     },
                 )
-                
+
                 # Remove from likedVideos subcollection
+                original_liked_doc_ref = (
+                    db.collection("users")
+                    .document(user_id)
+                    .collection("likedVideos")
+                    .document(unliked_video_id)
+                )
                 batch.delete(original_liked_doc_ref)
-                
-                logger.info(f"Moving unliked video {unliked_video_id} to unlikedVideos collection")
+
+                logger.info(
+                    f"Moving unliked video {unliked_video_id} to unlikedVideos collection"
+                )
+            else:
+                logger.warning(
+                    f"No original data found for unliked video {unliked_video_id}"
+                )
 
         # Execute the atomic batch write
         total_public_videos = len(public_videos)
         total_private_legacy = len(private_legacy_video_ids)
         total_user_relations = len(all_video_items)
-        total_videos_processed = len(videos_to_store) + len(videos_to_update)
+        total_videos_processed = len(videos_to_store)  # Only new videos processed
 
         logger.info(
-            f"Executing differential batch write: {total_public_videos} public videos, "
-            f"{total_private_legacy} private/legacy videos, {len(videos_to_store)} new, "
-            f"{len(videos_to_update)} updated, {len(newly_liked)} newly liked, "
+            f"Executing optimized differential batch write: {total_public_videos} public videos, "
+            f"{total_private_legacy} private/legacy videos, {len(videos_to_store)} new videos, "
+            f"{len(existing_video_ids)} existing skipped, {len(newly_liked)} newly liked, "
             f"{len(still_liked)} still liked, {len(newly_unliked)} newly unliked"
         )
         batch.commit()
@@ -913,13 +909,14 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
             "total_liked_videos": len(all_video_items),
             "videos_processed": total_videos_processed,
             "videos_stored_new": len(videos_to_store),
-            "videos_updated_existing": len(videos_to_update),
+            "videos_skipped_existing": len(existing_video_ids),
             "placeholders_created": private_legacy_count,
             # Differential sync statistics
             "newly_liked": len(newly_liked),
             "still_liked": len(still_liked),
             "newly_unliked": len(newly_unliked),
             "differential_sync_enabled": True,
+            "performance_optimized": True,
         }
 
     except Exception as e:
@@ -948,10 +945,11 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
 def update_embedding_progress(user_id):
     db = firestore.Client()
     # Get all videoIds liked by this user
+    # Using .get() instead of .stream() for better performance when processing all documents
     liked_videos_ref = (
         db.collection("users").document(user_id).collection("likedVideos")
     )
-    liked_video_docs = liked_videos_ref.stream()
+    liked_video_docs = liked_videos_ref.get()
     video_ids = [doc.id for doc in liked_video_docs]
     total = len(video_ids)
     completed = 0
@@ -1460,10 +1458,11 @@ def retry_failed_embeddings(req: https_fn.CallableRequest) -> dict:
         )
     db = firestore.Client()
     # Get all videoIds liked by this user
+    # Using .get() instead of .stream() for better performance when processing all documents
     liked_videos_ref = (
         db.collection("users").document(user_id).collection("likedVideos")
     )
-    liked_video_docs = liked_videos_ref.stream()
+    liked_video_docs = liked_videos_ref.get()
     retried = 0
     for doc in liked_video_docs:
         video_id = doc.id
