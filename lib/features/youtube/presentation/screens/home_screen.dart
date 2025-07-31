@@ -22,11 +22,28 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return BlocListener<AuthBloc, AuthState>(
       listener: (context, state) {
-        // If we were waiting for token refresh and now have a token, trigger sync
-        if (_isWaitingForTokenRefresh && state is Authenticated && state.accessToken != null) {
-          _isWaitingForTokenRefresh = false;
-          print('Token refreshed! Automatically triggering sync...');
-          context.read<YouTubeBloc>().add(SyncLikedVideos());
+        if (_isWaitingForTokenRefresh) {
+          if (state is Authenticated && state.accessToken != null) {
+            // Token refresh successful - reset flag and trigger sync
+            _isWaitingForTokenRefresh = false;
+            print('Token refreshed! Automatically triggering sync...');
+            context.read<YouTubeBloc>().add(SyncLikedVideos());
+          } else if (state is AuthError) {
+            // Token refresh failed - reset flag and show error
+            _isWaitingForTokenRefresh = false;
+            print('Token refresh failed: ${state.message}');
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to refresh YouTube authorization: ${state.message}'),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 5),
+              ),
+            );
+          } else if (state is AuthUnauthenticated) {
+            // User became unauthenticated during refresh - reset flag
+            _isWaitingForTokenRefresh = false;
+            print('User became unauthenticated during token refresh');
+          }
         }
       },
       child: Scaffold(
