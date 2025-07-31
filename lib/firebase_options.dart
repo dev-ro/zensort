@@ -56,19 +56,21 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyB2m4TEWflZ7R0-j0YFHrOf7tvco0wv27I',
-    appId: '1:286608244703:android:4e77ab474f343297e00e6a',
-    messagingSenderId: '286608244703',
-    projectId: 'zensort-a7b47',
-    storageBucket: 'zensort-a7b47.firebasestorage.app',
+    apiKey: 'AIzaSyCHEg2rU9hD-5XPnbLGPFoabkz7lD4ZidA',
+    appId: '1:630957314497:android:776ec6b0c1f499a1379f40',
+    messagingSenderId: '630957314497',
+    projectId: 'zensort-dev',
+    storageBucket: 'zensort-dev.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyD0OwGSoqAh-JUcnu8dkfjFDf6Cxy2iFKk',
-    appId: '1:286608244703:ios:fe3522dc0e715717e00e6a',
-    messagingSenderId: '286608244703',
-    projectId: 'zensort-a7b47',
-    storageBucket: 'zensort-a7b47.firebasestorage.app',
+    apiKey: 'AIzaSyBefGApkKryIAOgP1s_GL0-TdpPN4dGXE0',
+    appId: '1:630957314497:ios:f7218e0a3f92f066379f40',
+    messagingSenderId: '630957314497',
+    projectId: 'zensort-dev',
+    storageBucket: 'zensort-dev.firebasestorage.app',
+    iosClientId:
+        '630957314497-3skd8s19cr3f1juv26sduvnp4i8crtdm.apps.googleusercontent.com',
     iosBundleId: 'com.example.zensort',
   );
 }
