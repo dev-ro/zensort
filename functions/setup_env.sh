@@ -11,9 +11,10 @@ cd "$(dirname "$0")"
 
 # Check if Python 3.12 is available
 echo "Checking Python 3.12 availability..."
-if ! "/c/Users/kyle0/AppData/Local/Programs/Python/Python312/python.exe" --version &>/dev/null; then
-    echo "ERROR: Python 3.12 is not available at expected location"
-    echo "Expected: /c/Users/kyle0/AppData/Local/Programs/Python/Python312/python.exe"
+if ! py -3.12 --version &>/dev/null; then
+    echo "ERROR: Python 3.12 is not available"
+    echo "Please install Python 3.12 from https://python.org/downloads/"
+    echo "Make sure to check 'Add Python to PATH' during installation"
     exit 1
 fi
 
@@ -27,7 +28,7 @@ fi
 
 # Create new virtual environment with Python 3.12
 echo "Creating Python 3.12 virtual environment..."
-"/c/Users/kyle0/AppData/Local/Programs/Python/Python312/python.exe" -m venv venv
+py -3.12 -m venv venv
 
 echo "✅ Virtual environment created"
 

@@ -53,11 +53,8 @@ If you prefer to understand each step or need to troubleshoot:
 
 4. **Create Python 3.12 virtual environment:**
    ```bash
-   # Using Python Launcher (PowerShell/CMD)
+   # Using Python Launcher (works in all terminals)
    py -3.12 -m venv venv
-   
-   # Using full path (Git Bash)
-   "/c/Users/kyle0/AppData/Local/Programs/Python/Python312/python.exe" -m venv venv
    ```
 
 5. **Activate virtual environment:**
@@ -164,10 +161,8 @@ Configuration is defined in `firebase.json`:
 
 **Solution:**
 1. Remove existing venv: `rm -rf venv`
-2. Try using the full Python path:
-   ```bash
-   "/c/Users/kyle0/AppData/Local/Programs/Python/Python312/python.exe" -m venv venv
-   ```
+2. Ensure Python 3.12 is in PATH: `py -3.12 --version`
+3. Try creating the venv again: `py -3.12 -m venv venv`
 
 ### Dependency Installation Fails
 
