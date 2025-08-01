@@ -17,9 +17,12 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
   StreamSubscription<SyncProgress>? _syncProgressSubscription;
   StreamSubscription<AuthState>? _authStateSubscription;
   StreamSubscription<List<LikedVideo>>? _likedVideosSubscription;
-  
+
   // Boolean latch to prevent race conditions from rapid auth state emissions
   bool _isInitialLoadDispatched = false;
+
+  // Flag to track if we need to check for empty videos and auto-sync
+  bool _shouldCheckForAutoSync = false;
 
   YouTubeBloc(this._youtubeRepository, this._authBloc)
     : super(YoutubeInitial()) {
@@ -35,7 +38,7 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     _authStateSubscription = _authBloc.stream.listen((authState) {
       add(_AuthStatusChanged(authState));
     });
-    
+
     // Check current auth state immediately when BLoC starts
     add(_AuthStatusChanged(_authBloc.state));
   }
@@ -49,9 +52,15 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     print('Auth state: ${authState.runtimeType}');
     print('Initial load dispatched: $_isInitialLoadDispatched');
 
-    if (authState is Authenticated && authState.accessToken != null && !_isInitialLoadDispatched) {
-      print('User authenticated with access token - setting up streams and triggering initial load');
+    if (authState is Authenticated &&
+        authState.accessToken != null &&
+        !_isInitialLoadDispatched) {
+      print(
+        'User authenticated with access token - setting up streams and triggering initial load',
+      );
       _isInitialLoadDispatched = true;
+      _shouldCheckForAutoSync =
+          true; // Flag to check for auto-sync on first stream emission
 
       emit(YoutubeLoading());
 
@@ -71,6 +80,8 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
           );
 
       // Set up reactive liked videos stream
+      // The _onLikedVideosUpdated handler will check _shouldCheckForAutoSync flag
+      // and trigger sync if videos are empty on first emission
       _likedVideosSubscription = _youtubeRepository.watchLikedVideos().listen(
         (videos) {
           print('watchLikedVideos stream emitted ${videos.length} videos');
@@ -81,26 +92,12 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
           add(_LikedVideosError(error.toString()));
         },
       );
-
-      // Check if user has existing videos, if not trigger automatic sync
-      try {
-        print('Checking for existing videos...');
-        final existingVideos = await _youtubeRepository.watchLikedVideos().first;
-        print('Found ${existingVideos.length} existing videos');
-        
-        if (existingVideos.isEmpty) {
-          print('No existing videos found, triggering automatic sync...');
-          add(SyncLikedVideos());
-        }
-      } catch (e) {
-        print('Error checking existing videos, triggering sync anyway: $e');
-        add(SyncLikedVideos());
-      }
     } else if (authState is AuthUnauthenticated) {
       print('User unauthenticated - clearing state and resetting latch');
-      // Reset the latch when user becomes unauthenticated
+      // Reset the latches when user becomes unauthenticated
       _isInitialLoadDispatched = false;
-      
+      _shouldCheckForAutoSync = false;
+
       // Clear state and cancel subscriptions
       _syncProgressSubscription?.cancel();
       _likedVideosSubscription?.cancel();
@@ -145,7 +142,7 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     print('=== YouTubeBloc._onYoutubeSyncProgressUpdated ===');
     print('Progress status: ${progress.status}');
     print('Synced: ${progress.syncedCount}, Total: ${progress.totalCount}');
-    
+
     if (progress.status == SyncStatus.in_progress) {
       emit(YoutubeSyncProgress(progress.syncedCount, progress.totalCount));
     } else if (progress.status == SyncStatus.completed) {
@@ -165,9 +162,28 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
   ) {
     print('=== YouTubeBloc._onLikedVideosUpdated ===');
     print('Received ${event.videos.length} videos from stream');
+    print('Should check for auto-sync: $_shouldCheckForAutoSync');
+
     if (event.videos.isNotEmpty) {
       print('First video: ${event.videos.first.title}');
     }
+
+    // Check if this is the first stream emission and we need to auto-sync
+    if (_shouldCheckForAutoSync) {
+      _shouldCheckForAutoSync = false; // Reset flag after first check
+
+      if (event.videos.isEmpty) {
+        print(
+          'No existing videos found on first stream emission, triggering automatic sync...',
+        );
+        add(SyncLikedVideos());
+      } else {
+        print(
+          'Found ${event.videos.length} existing videos, skipping auto-sync',
+        );
+      }
+    }
+
     emit(YoutubeLoaded(videos: event.videos));
   }
 
@@ -209,10 +225,7 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
   @override
   Map<String, dynamic>? toJson(YoutubeState state) {
     if (state is YoutubeLoaded) {
-      return {
-        'stateType': 'YoutubeLoaded',
-        ...state.toJson(),
-      };
+      return {'stateType': 'YoutubeLoaded', ...state.toJson()};
     }
     // Only persist YoutubeLoaded states, ignore others
     return null;
