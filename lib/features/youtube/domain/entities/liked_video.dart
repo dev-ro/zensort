@@ -32,6 +32,16 @@ class LikedVideo extends Equatable {
     };
   }
 
+  /// Determines if thumbnail loading should be skipped for this video.
+  /// Returns true for private, deleted, and music library uploads that
+  /// are known to have broken thumbnail URLs.
+  bool shouldSkipThumbnailLoad() {
+    return title == 'Private video' ||
+           title == 'Deleted video' ||
+           title == 'Music Library Uploads' ||
+           channelName == 'Music Library Uploads';
+  }
+
   @override
   List<Object?> get props => [id, title, channelName, thumbnailUrl];
 }

@@ -34,8 +34,9 @@ class VideoListItem extends StatelessWidget {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: video.thumbnailUrl.isNotEmpty
-                    ? Image.network(
+                child: video.shouldSkipThumbnailLoad() || video.thumbnailUrl.isEmpty
+                    ? const ThumbnailPlaceholder()
+                    : Image.network(
                         video.thumbnailUrl,
                         width: 120,
                         height: 90,
@@ -57,8 +58,7 @@ class VideoListItem extends StatelessWidget {
                             ),
                           );
                         },
-                      )
-                    : const ThumbnailPlaceholder(),
+                      ),
               ),
               const SizedBox(width: 16),
               Expanded(
