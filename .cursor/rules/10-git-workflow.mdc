@@ -1,286 +1,136 @@
 ---
-description: any github command
-alwaysApply: false
+description: A clear and concise guide to our Git workflow, including commit standards, branch management, and GitHub integration.
+alwaysApply: true
 ---
-# Git Workflow: Commit Standards, Branch Management, and GitHub Integration
+# Git & GitHub Workflow Guide
 
-## Commit Standards
+## 1\. Commit Standards
 
-### MANDATORY: Commit After Every Tested Change
+Each commit is a snapshot of a single, logical change. Adhering to these standards is mandatory for all contributions.
 
-- **ALWAYS commit immediately after every tested and successful update.**
-- Never accumulate multiple changes in a single commit.
-- Each commit should represent one logical, complete, and tested change.
+### Guiding Principles
 
-### Commit Message Format
-
-Follow conventional commit standards with this exact format:
-
-    <type>(<scope>): <description>
-
-    [optional body]
-
-    [optional footer(s)]
-
-### Required Types
-
-- **feat**: New feature or functionality
-- **fix**: Bug fixes
-- **docs**: Documentation changes
-- **style**: Code style changes (formatting, missing semi-colons, etc.)
-- **refactor**: Code changes that neither fix bugs nor add features
-- **perf**: Performance improvements
-- **test**: Adding or updating tests
-- **chore**: Build process, dependency updates, tooling changes
-- **ci**: Continuous integration changes
-
-### Commit Message Rules
-
-- **NO emojis** in commit messages.
-- Use imperative mood: "add feature" not "added feature".
-- Keep subject line under 72 characters.
-- Capitalize the first letter of the description.
-- No period at the end of the subject line.
-- Use the body to explain what and why, not how.
-
-### Examples of Good Commits
-
-    feat(auth): Add Google OAuth integration
-
-    refactor(youtube): Extract video categorization logic into separate function
-
-    fix(sync): Correct field mapping between frontend and backend schemas
-
-    docs(readme): Update installation instructions for Firebase setup
-
-    test(youtube): Add unit tests for sync progress tracking
-
-### Examples of Bad Commits
-
-    ❌ 🚀 Added cool new feature!
-    ❌ fixes stuff
-    ❌ WIP
-    ❌ Updated files
-    ❌ feat: added some changes and also fixed a bug and updated docs
-
-## GitHub Integration: Issues and Comments
-
-### MANDATORY: Create an Issue for Every Feature and Fix
-
-- **Immediately after creating a commit with the type `feat` or `fix`, you MUST create a corresponding GitHub issue.** This ensures all work is tracked, documented, and linked back to the codebase.
-- Use the `gh` CLI to create the issue.
-- The issue title MUST be the subject line of the commit.
-- The issue body MUST contain the full body of the commit message.
-
-#### Example Workflow
-
-1. A bug is fixed with the following commit:
-
-        git commit -m "fix(sync): Correct field mapping between frontend and backend schemas" -m "The user object was missing the 'last_updated' field during the sync process. This commit adds the correct mapping and ensures data integrity."
-
-2. Immediately after, create the GitHub issue:
-
-        gh issue create --title "fix(sync): Correct field mapping between frontend and backend schemas" --body "The user object was missing the 'last_updated' field during the sync process. This commit adds the correct mapping and ensures data integrity."
-
-3. When you later create a Pull Request for this fix, reference this newly created issue in the PR description (e.g., `Closes #123`) to automatically link and close the issue upon merging.
-
-### MANDATORY: Correctly Format Newlines in GitHub Comments
-
-- **Problem:** When posting multiline comments to GitHub Pull Requests or Issues via the CLI, newlines can render incorrectly as literal `\\n` characters.
-- **Rule:** To prevent this, you MUST pipe multiline content into the `gh` command and use the `--body-file -` flag. This ensures newlines are interpreted correctly by the shell and the GitHub API.
-
-#### Example Usage
-
-- **CORRECT:** This method properly renders line breaks.
-
-        printf "This is the first line.\\nThis is the second line." | gh pr comment 123 --body-file -
-
-- **INCORRECT:** This method will fail and display `\\n` in the comment.
-
-        gh pr comment 123 --body "This is the first line.\\\\nThis is the second line."
-
-## Branch Workflow: Merging a Feature Branch
-
-When instructed to "merge a branch", you MUST follow this exact sequence of commands to ensure a safe and clean merge.
-
-### 1. Prepare the `main` Branch
-
-- **Switch to `main`:**
-    `git checkout main`
-- **Pull Latest Changes:** Ensure `main` is up-to-date with the remote repository.
-    `git pull origin main`
-
-### 2. Merge the Feature Branch
-
-- **Merge with a Merge Commit:** Use the `--no-ff` flag to create a merge commit, which preserves the history of the feature as a distinct unit of work. Replace `<branch-name>` with the actual feature branch name.
-    `git merge --no-ff <branch-name>`
-
-### 3. Push the Changes
-
-- **Push `main`:** Push the newly merged `main` branch to the remote.
-    `git push origin main`
-
-### 4. Publish and Merge Workflow (MANDATORY)
-
-After successful deployment and manual approval, you MUST:
-
-- **Publish the feature branch to the remote:**
-    `git push origin <branch-name>`
-- **Create a Pull Request (PR):**
-  - Open a PR from `<branch-name>` into `main` on GitHub.
-  - Ensure the PR includes a summary of changes and links to the relevant issue (e.g., `Closes #<issue-number>`).
-  - Adhere to the newline formatting rules when adding comments or descriptions.
-  - Wait for all required checks and reviews.
-- **Merge the PR:**
-  - Use the GitHub UI to merge the PR (always use a merge commit, not squash or rebase).
-- **Update all active feature branches:**
-  - After merging, you MUST rebase or merge `main` into every other active feature branch to keep them up to date.
-  - This process can and should be automated. The assistant can perform this for you on request: just ask to "update all branches with main" and the assistant will handle the merges and pushes for every branch except `main`.
-
-### 5. Clean Up
-
-- **Delete Local Branch:** After a successful merge, delete the local copy of the feature branch.
-    `git branch -d <branch-name>`
-- **Delete Remote Branch:** Delete the remote feature branch to keep the repository tidy.
-    `git push origin --delete <branch-name>`
-# Git Workflow: Commit Standards, Branch Management, and GitHub Integration
-
-## Commit Standards
-
-### MANDATORY: Commit After Every Tested Change
-
-- **ALWAYS commit immediately after every tested and successful update.**
-- Never accumulate multiple changes in a single commit.
-- Each commit should represent one logical, complete, and tested change.
+- **Commit frequently.** Make a new commit immediately after each logical, tested, and successful change.
+- **One change per commit.** Never bundle unrelated changes (e.g., a feature and a bug fix) into one commit.
 
 ### Commit Message Format
 
-Follow conventional commit standards with this exact format:
+All commit messages **must** follow the Conventional Commits specification. This structure is not optional.
 
-    <type>(<scope>): <description>
+\<type\>(\<scope\>): \<short description\>
 
-    [optional body]
+[optional longer body explaining the why and what]
 
-    [optional footer(s)]
+[optional footer(s) for things like Closes \#123]
 
 ### Required Types
 
-- **feat**: New feature or functionality
-- **fix**: Bug fixes
-- **docs**: Documentation changes
-- **style**: Code style changes (formatting, missing semi-colons, etc.)
-- **refactor**: Code changes that neither fix bugs nor add features
-- **perf**: Performance improvements
-- **test**: Adding or updating tests
-- **chore**: Build process, dependency updates, tooling changes
-- **ci**: Continuous integration changes
+- **feat**: A new feature for the user.
+- **fix**: A bug fix for the user.
+- **docs**: Changes to documentation only.
+- **style**: Formatting, whitespace, missing semicolons, etc. No production code changes.
+- **refactor**: Rewriting code without changing its external behavior.
+- **perf**: A code change that improves performance.
+- **test**: Adding or correcting tests.
+- **chore**: Updating build tasks, package manager configs, etc.
+- **ci**: Changes to our CI configuration files and scripts.
 
-### Commit Message Rules
+### Message Rules
 
-- **NO emojis** in commit messages.
-- Use imperative mood: "add feature" not "added feature".
-- Keep subject line under 72 characters.
-- Capitalize the first letter of the description.
-- No period at the end of the subject line.
-- Use the body to explain what and why, not how.
+- **Imperative Mood**: Write messages as if giving a command (e.g., Add feature, not Added feature).
+- **Capitalization**: Capitalize the first letter of the short description.
+- **No Period**: Do not end the short description with a period.
+- **Length**: Keep the short description under 72 characters.
+- **No Emojis**: Do not use emojis in commit messages.
 
-### Examples of Good Commits
+### Example Commits
 
-    feat(auth): Add Google OAuth integration
+- **Good**: feat(auth): Add Google OAuth2 integration
+- **Good**: refactor(api): Extract user validation into a separate service
+- **Bad**: fixes stuff
+- **Bad**: feat: added a new button and also fixed a bug
 
-    refactor(youtube): Extract video categorization logic into separate function
+-----
 
-    fix(sync): Correct field mapping between frontend and backend schemas
+## 2\. Branch & Pull Request (PR) Workflow
 
-    docs(readme): Update installation instructions for Firebase setup
+Follow this process for all features and fixes to ensure code is properly reviewed and integrated.
 
-    test(youtube): Add unit tests for sync progress tracking
+### Step 1: Create a Branch
 
-### Examples of Bad Commits
+Start all new work on a new branch created from the most up-to-date version of main.
 
-    ❌ 🚀 Added cool new feature!
-    ❌ fixes stuff
-    ❌ WIP
-    ❌ Updated files
-    ❌ feat: added some changes and also fixed a bug and updated docs
+### Ensure main is up to date
 
-## GitHub Integration: Issues and Comments
+git checkout main
+git pull origin main
 
-### MANDATORY: Create an Issue for Every Feature and Fix
+### Create and switch to your new branch
 
-- **Immediately after creating a commit with the type `feat` or `fix`, you MUST create a corresponding GitHub issue.** This ensures all work is tracked, documented, and linked back to the codebase.
-- Use the `gh` CLI to create the issue.
-- The issue title MUST be the subject line of the commit.
-- The issue body MUST contain the full body of the commit message.
+git checkout -b \<branch-name\>
 
-#### Example Workflow
+### Step 2: Commit Your Work
 
-1. A bug is fixed with the following commit:
+As you work, make small, logical commits using the standards defined above.
 
-        git commit -m "fix(sync): Correct field mapping between frontend and backend schemas" -m "The user object was missing the 'last_updated' field during the sync process. This commit adds the correct mapping and ensures data integrity."
+### Step 3: Create an Issue (For feat and fix only)
 
-2. Immediately after, create the GitHub issue:
+This workflow requires creating an issue *after* the work is committed. This links the code change to a trackable work item on GitHub.
 
-        gh issue create --title "fix(sync): Correct field mapping between frontend and backend schemas" --body "The user object was missing the 'last_updated' field during the sync process. This commit adds the correct mapping and ensures data integrity."
+- **Rule**: If your commit is a feat or fix, you **must** create a corresponding GitHub issue immediately after the commit.
+- Use the gh CLI. The issue title **must** be the commit subject, and the body **must** be the commit body.
 
-3. When you later create a Pull Request for this fix, reference this newly created issue in the PR description (e.g., `Closes #123`) to automatically link and close the issue upon merging.
+**Example:**
+After committing git commit -m "fix(sync): Correct field mapping" -m "The 'last\_updated' field was missing.", create the issue:
 
-### MANDATORY: Correctly Format Newlines in GitHub Comments
+gh issue create --title "fix(sync): Correct field mapping" --body "The 'last\_updated' field was missing."
 
-- **Problem:** When posting multiline comments to GitHub Pull Requests or Issues via the CLI, newlines can render incorrectly as literal `\\n` characters.
-- **Rule:** To prevent this, you MUST pipe multiline content into the `gh` command and use the `--body-file -` flag. This ensures newlines are interpreted correctly by the shell and the GitHub API.
+### Step 4: Create a Pull Request
 
-#### Example Usage
+Once your work is ready for review, push your branch and open a PR.
 
-- **CORRECT:** This method properly renders line breaks.
+### Push your new branch to the remote repository
 
-        printf "This is the first line.\\nThis is the second line." | gh pr comment 123 --body-file -
+git push origin \<branch-name\>
 
-- **INCORRECT:** This method will fail and display `\\n` in the comment.
+Now, go to GitHub to create a Pull Request from your branch into main. In the PR description, link the issue it resolves using a keyword like Closes \#123.
 
-        gh pr comment 123 --body "This is the first line.\\\\nThis is the second line."
+### Step 5: Merge the Pull Request
 
-## Branch Workflow: Merging a Feature Branch
+After the PR is approved and all checks have passed, merge it on GitHub using the **"Create a merge commit"** option. Do not squash or rebase from the GitHub UI.
 
-When instructed to "merge a branch", you MUST follow this exact sequence of commands to ensure a safe and clean merge.
+### Step 6: Post-Merge Cleanup
 
-### 1. Prepare the `main` Branch
+To keep the repository tidy, delete the branch after it has been successfully merged.
 
-- **Switch to `main`:**
-    `git checkout main`
-- **Pull Latest Changes:** Ensure `main` is up-to-date with the remote repository.
-    `git pull origin main`
+### Switch back to the main branch
 
-### 2. Merge the Feature Branch
+git checkout main
 
-- **Merge with a Merge Commit:** Use the `--no-ff` flag to create a merge commit, which preserves the history of the feature as a distinct unit of work. Replace `<branch-name>` with the actual feature branch name.
-    `git merge --no-ff <branch-name>`
+### Delete the local branch
 
-### 3. Push the Changes
+git branch -d \<branch-name\>
 
-- **Push `main`:** Push the newly merged `main` branch to the remote.
-    `git push origin main`
+### Delete the remote branch
 
-### 4. Publish and Merge Workflow (MANDATORY)
+git push origin --delete \<branch-name\>
 
-After successful deployment and manual approval, you MUST:
+### Step 7: Keep Branches Updated
 
-- **Publish the feature branch to the remote:**
-    `git push origin <branch-name>`
-- **Create a Pull Request (PR):**
-  - Open a PR from `<branch-name>` into `main` on GitHub.
-  - Ensure the PR includes a summary of changes and links to the relevant issue (e.g., `Closes #<issue-number>`).
-  - Adhere to the newline formatting rules when adding comments or descriptions.
-  - Wait for all required checks and reviews.
-- **Merge the PR:**
-  - Use the GitHub UI to merge the PR (always use a merge commit, not squash or rebase).
-- **Update all active feature branches:**
-  - After merging, you MUST rebase or merge `main` into every other active feature branch to keep them up to date.
-  - This process can and should be automated. The assistant can perform this for you on request: just ask to "update all branches with main" and the assistant will handle the merges and pushes for every branch except `main`.
+While working, your feature branch can become out of date as main evolves. You **must** keep your branches in sync. This can be automated.
 
-### 5. Clean Up
+- **To request an update**, ask the assistant to "update all branches with main." The assistant will handle merging main into all active feature branches.
 
-- **Delete Local Branch:** After a successful merge, delete the local copy of the feature branch.
-    `git branch -d <branch-name>`
-- **Delete Remote Branch:** Delete the remote feature branch to keep the repository tidy.
-    `git push origin --delete <branch-name>`
+-----
+
+## 3\. GitHub CLI Usage
+
+### Formatting Multiline Comments
+
+When adding a multiline comment to a PR or issue via the gh CLI, you **must** pipe the content to avoid rendering issues with newline characters (\\n).
+
+- **CORRECT**: Renders newlines properly.
+    printf "First line.\\nSecond line." | gh pr comment 123 --body-file -
+
+- **INCORRECT**: Will literally print \\n in the comment.
+    gh pr comment 123 --body "First line.\\nSecond line."
