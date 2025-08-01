@@ -17,6 +17,15 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isWaitingForTokenRefresh = false;
 
   @override
+  void initState() {
+    super.initState();
+    // Trigger initial load when home screen loads
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<YouTubeBloc>().add(LoadInitialVideos());
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     bool isSyncing = context.watch<YouTubeBloc>().state is YoutubeSyncProgress;
 

@@ -9,6 +9,8 @@ abstract class YoutubeEvent extends Equatable {
 
 class SyncLikedVideos extends YoutubeEvent {}
 
+class LoadInitialVideos extends YoutubeEvent {}
+
 class _YoutubeSyncProgressUpdated extends YoutubeEvent {
   final SyncProgress progress;
 

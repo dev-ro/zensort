@@ -17,10 +17,14 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
   StreamSubscription<SyncProgress>? _syncProgressSubscription;
   StreamSubscription<AuthState>? _authStateSubscription;
   StreamSubscription<List<LikedVideo>>? _likedVideosSubscription;
+  
+  // Boolean latch to prevent race conditions from rapid auth state emissions
+  bool _isInitialLoadDispatched = false;
 
   YouTubeBloc(this._youtubeRepository, this._authBloc)
     : super(YoutubeInitial()) {
     on<SyncLikedVideos>(_onSyncLikedVideos);
+    on<LoadInitialVideos>(_onLoadInitialVideos);
     on<_YoutubeSyncProgressUpdated>(_onYoutubeSyncProgressUpdated);
     on<_AuthStatusChanged>(_onAuthStatusChanged, transformer: restartable());
     on<_LikedVideosUpdated>(_onLikedVideosUpdated);
@@ -31,6 +35,9 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     _authStateSubscription = _authBloc.stream.listen((authState) {
       add(_AuthStatusChanged(authState));
     });
+    
+    // Check current auth state immediately when BLoC starts
+    add(_AuthStatusChanged(_authBloc.state));
   }
 
   void _onAuthStatusChanged(
@@ -38,8 +45,13 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     Emitter<YoutubeState> emit,
   ) async {
     final authState = event.authState;
+    print('=== YouTubeBloc._onAuthStatusChanged ===');
+    print('Auth state: ${authState.runtimeType}');
+    print('Initial load dispatched: $_isInitialLoadDispatched');
 
-    if (authState is Authenticated) {
+    if (authState is Authenticated && authState.accessToken != null && !_isInitialLoadDispatched) {
+      print('User authenticated with access token - setting up streams and triggering initial load');
+      _isInitialLoadDispatched = true;
 
       emit(YoutubeLoading());
 
@@ -52,20 +64,44 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
           .getSyncProgressStream()
           .listen(
             (progress) => add(_YoutubeSyncProgressUpdated(progress)),
-            onError: (error) => emit(YoutubeFailure(error.toString())),
+            onError: (error) {
+              print('Sync progress stream error: $error');
+              emit(YoutubeFailure(error.toString()));
+            },
           );
 
       // Set up reactive liked videos stream
       _likedVideosSubscription = _youtubeRepository.watchLikedVideos().listen(
         (videos) {
+          print('watchLikedVideos stream emitted ${videos.length} videos');
           add(_LikedVideosUpdated(videos));
         },
         onError: (error) {
+          print('Liked videos stream error: $error');
           add(_LikedVideosError(error.toString()));
         },
       );
+
+      // Check if user has existing videos, if not trigger automatic sync
+      try {
+        print('Checking for existing videos...');
+        final existingVideos = await _youtubeRepository.watchLikedVideos().first;
+        print('Found ${existingVideos.length} existing videos');
+        
+        if (existingVideos.isEmpty) {
+          print('No existing videos found, triggering automatic sync...');
+          add(SyncLikedVideos());
+        }
+      } catch (e) {
+        print('Error checking existing videos, triggering sync anyway: $e');
+        add(SyncLikedVideos());
+      }
     } else if (authState is AuthUnauthenticated) {
-      // User is not authenticated - clear state and cancel subscriptions
+      print('User unauthenticated - clearing state and resetting latch');
+      // Reset the latch when user becomes unauthenticated
+      _isInitialLoadDispatched = false;
+      
+      // Clear state and cancel subscriptions
       _syncProgressSubscription?.cancel();
       _likedVideosSubscription?.cancel();
       _syncProgressSubscription = null;
@@ -92,16 +128,31 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     }
   }
 
+  Future<void> _onLoadInitialVideos(
+    LoadInitialVideos event,
+    Emitter<YoutubeState> emit,
+  ) async {
+    print('=== YouTubeBloc._onLoadInitialVideos() called ===');
+    // Trigger auth state check which will set up streams and sync if needed
+    add(_AuthStatusChanged(_authBloc.state));
+  }
+
   void _onYoutubeSyncProgressUpdated(
     _YoutubeSyncProgressUpdated event,
     Emitter<YoutubeState> emit,
   ) {
     final progress = event.progress;
+    print('=== YouTubeBloc._onYoutubeSyncProgressUpdated ===');
+    print('Progress status: ${progress.status}');
+    print('Synced: ${progress.syncedCount}, Total: ${progress.totalCount}');
+    
     if (progress.status == SyncStatus.in_progress) {
       emit(YoutubeSyncProgress(progress.syncedCount, progress.totalCount));
     } else if (progress.status == SyncStatus.completed) {
+      print('Sync completed! Emitting YoutubeSyncSuccess');
       emit(YoutubeSyncSuccess());
     } else if (progress.status == SyncStatus.failed) {
+      print('Sync failed! Emitting YoutubeFailure');
       emit(const YoutubeFailure('Video sync failed.'));
     }
   }
@@ -112,6 +163,11 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     _LikedVideosUpdated event,
     Emitter<YoutubeState> emit,
   ) {
+    print('=== YouTubeBloc._onLikedVideosUpdated ===');
+    print('Received ${event.videos.length} videos from stream');
+    if (event.videos.isNotEmpty) {
+      print('First video: ${event.videos.first.title}');
+    }
     emit(YoutubeLoaded(videos: event.videos));
   }
 
@@ -121,6 +177,8 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     _LikedVideosError event,
     Emitter<YoutubeState> emit,
   ) {
+    print('=== YouTubeBloc._onLikedVideosError ===');
+    print('Error: ${event.message}');
     emit(YoutubeFailure(event.message));
   }
 
