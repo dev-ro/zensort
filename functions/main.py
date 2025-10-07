@@ -58,7 +58,7 @@ def _get_openai_api_key() -> str:
 
         # Build the resource name
         secret_id = "openai-api-key"
-        version_id = "latest"
+        version_id = "3"
         name = f"projects/{project_id}/secrets/{secret_id}/versions/{version_id}"
 
         # Access the secret
