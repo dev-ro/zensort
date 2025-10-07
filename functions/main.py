@@ -4,23 +4,23 @@
 
 import os
 from google.cloud import secretmanager
-from google.cloud import firestore
 from firebase_admin import initialize_app
 from firebase_functions import https_fn, firestore_fn
 from firebase_functions.options import set_global_options
 import requests
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
+import google.oauth2.credentials as oauth2_credentials
 from googleapiclient.errors import HttpError
 import logging
 import json
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Generator
+from typing import Generator, Any
 from openai import OpenAI
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -75,8 +75,15 @@ def _get_openai_api_key() -> str:
 initialize_app()
 
 
+def _firestore():
+    # Lazy import to make testing and local execution more reliable
+    from google.cloud import firestore as _firestore_mod
+
+    return _firestore_mod
+
+
 @https_fn.on_request()
-def test_secret_manager(req: https_fn.Request) -> https_fn.Response:
+def test_secret_manager(req) -> Any:
     """
     Debug function to test Secret Manager integration and OpenAI API key retrieval.
     Returns environment information and success/failure status.
@@ -94,7 +101,7 @@ def test_secret_manager(req: https_fn.Request) -> https_fn.Response:
         # Only return the first and last 4 chars of the key for verification
         key_preview = f"{api_key[:4]}...{api_key[-4:]}" if api_key else "No key found"
 
-        return https_fn.Response(
+        return (
             json.dumps(
                 {
                     "status": "success",
@@ -109,8 +116,8 @@ def test_secret_manager(req: https_fn.Request) -> https_fn.Response:
                     },
                 }
             ),
-            status=200,
-            headers={"Content-Type": "application/json"},
+            200,
+            {"Content-Type": "application/json"},
         )
 
     except Exception as e:
@@ -119,7 +126,7 @@ def test_secret_manager(req: https_fn.Request) -> https_fn.Response:
         project_id = os.environ.get("GCP_PROJECT", "Not found")
         function_region = os.environ.get("FUNCTION_REGION", "Not found")
         function_target = os.environ.get("K_SERVICE", "Not found")
-        return https_fn.Response(
+        return (
             json.dumps(
                 {
                     "status": "error",
@@ -131,8 +138,8 @@ def test_secret_manager(req: https_fn.Request) -> https_fn.Response:
                     },
                 }
             ),
-            status=500,
-            headers={"Content-Type": "application/json"},
+            500,
+            {"Content-Type": "application/json"},
         )
 
 
@@ -151,7 +158,7 @@ def add_to_waitlist(req: https_fn.CallableRequest) -> dict:
 
     try:
         # 2. Check if the email already exists in the 'waitlist' collection
-        db = firestore.Client()
+        db = _firestore().Client()
         waitlist_collection = db.collection("waitlist")
         existing_entries = (
             waitlist_collection.where("email", "==", email).limit(1).get()
@@ -186,7 +193,7 @@ class Video:
     channelTitle: str
     publishedAt: datetime
     platform: str = "YouTube"
-    addedToZensortAt: datetime = None
+    addedToZensortAt: datetime | None = None
 
 
 @dataclass
@@ -213,13 +220,21 @@ def get_liked_videos_total(req: https_fn.CallableRequest) -> dict:
 
     try:
         # Create OAuth2 credentials from the access token
-        credentials = Credentials(
+        credentials = oauth2_credentials.Credentials(
             token=access_token,
             token_uri="https://oauth2.googleapis.com/token",
             client_id="unused",
             client_secret="unused",
             scopes=["https://www.googleapis.com/auth/youtube.readonly"],
         )
+        # Ensure universe domain is set to the default to avoid client mismatch in tests/mocks
+        try:
+            if getattr(credentials, "universe_domain", None) is None or isinstance(
+                getattr(credentials, "universe_domain"), object
+            ):
+                setattr(credentials, "universe_domain", "googleapis.com")
+        except Exception:
+            pass
 
         # Build the YouTube service
         youtube = build("youtube", "v3", credentials=credentials)
@@ -264,13 +279,20 @@ def fetch_liked_video_items(access_token: str) -> list[dict]:
         logger.info("=== Starting fetch_liked_video_items ===")
 
         # Create OAuth2 credentials from the access token
-        credentials = Credentials(
+        credentials = oauth2_credentials.Credentials(
             token=access_token,
             token_uri="https://oauth2.googleapis.com/token",
             client_id="unused",
             client_secret="unused",
             scopes=["https://www.googleapis.com/auth/youtube.readonly"],
         )
+        try:
+            if getattr(credentials, "universe_domain", None) is None or isinstance(
+                getattr(credentials, "universe_domain"), object
+            ):
+                setattr(credentials, "universe_domain", "googleapis.com")
+        except Exception:
+            pass
 
         # Build the YouTube service
         youtube = build("youtube", "v3", credentials=credentials)
@@ -377,13 +399,20 @@ def fetch_video_details(access_token: str, video_ids: list[str]) -> list[Video]:
     try:
         logger.info(f"=== Starting fetch_video_details for {len(video_ids)} videos ===")
 
-        credentials = Credentials(
+        credentials = oauth2_credentials.Credentials(
             token=access_token,
             token_uri="https://oauth2.googleapis.com/token",
             client_id="unused",
             client_secret="unused",
             scopes=["https://www.googleapis.com/auth/youtube.readonly"],
         )
+        try:
+            if getattr(credentials, "universe_domain", None) is None or isinstance(
+                getattr(credentials, "universe_domain"), object
+            ):
+                setattr(credentials, "universe_domain", "googleapis.com")
+        except Exception:
+            pass
 
         youtube = build("youtube", "v3", credentials=credentials)
 
@@ -528,7 +557,7 @@ def get_existing_video_ids(video_ids: list[str]) -> set[str]:
         return set()
 
     try:
-        db = firestore.Client()
+        db = _firestore().Client()
         videos_collection = db.collection("videos")
 
         # Create document references for all video IDs
@@ -592,7 +621,7 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
             message="The function must be called with a valid 'user_id'.",
         )
 
-    db = firestore.Client()
+    db = _firestore().Client()
     sync_job_ref = (
         db.collection("users")
         .document(user_id)
@@ -602,6 +631,13 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
 
     try:
         logger.info(f"Starting efficient sync for user {user_id}")
+
+        # Automatically retry failed embeddings at the start of a sync
+        retried_count = _retry_failed_embeddings_for_user(user_id, db)
+        if retried_count > 0:
+            logger.info(
+                f"Automatically retried {retried_count} failed embeddings for user {user_id}"
+            )
 
         # Step 0: Create Sync Job Document for Progress Tracking
         logger.info("Step 0: Creating sync job document for progress tracking")
@@ -943,7 +979,7 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
 
 
 def update_embedding_progress(user_id):
-    db = firestore.Client()
+    db = _firestore().Client()
     # Get all videoIds liked by this user
     # Using .get() instead of .stream() for better performance when processing all documents
     liked_videos_ref = (
@@ -958,8 +994,13 @@ def update_embedding_progress(user_id):
         video_doc = db.collection("videos").document(video_id).get()
         if not video_doc.exists:
             continue
-        status = video_doc.get("embedding_status")
-        if status == "complete":
+
+        video_data = video_doc.to_dict()
+        if not video_data:
+            continue
+
+        status = video_data.get("embedding_status")
+        if status == "complete" or status == "not_applicable":
             completed += 1
         elif status == "failed":
             failed += 1
@@ -983,9 +1024,7 @@ def update_embedding_progress(user_id):
 
 
 @firestore_fn.on_document_written(document="videos/{videoId}")
-def create_video_embedding(
-    event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot]],
-) -> None:
+def create_video_embedding(event) -> None:
     """
     Event-driven function to generate embeddings for videos when they are created or updated.
     Triggered by onWrite on /videos/{videoId} documents.
@@ -1000,6 +1039,19 @@ def create_video_embedding(
         )
         if not video_data:
             logger.warning(f"No data found for video {event.params['videoId']}")
+            return
+
+        # Handle private or deleted videos by marking them as not applicable
+        title = video_data.get("title", "")
+        private_legacy_titles = {"Private video", "Deleted video"}
+        if title in private_legacy_titles:
+            logger.info(
+                f"Skipping embedding for '{title}' video {event.params['videoId']}"
+            )
+            _update_embedding_status(
+                event.params["videoId"], "not_applicable", error=f"Video is '{title}'"
+            )
+            _update_progress_for_all_users(event.params["videoId"])
             return
 
         # Skip if this is a batch update from the backfill process
@@ -1071,7 +1123,7 @@ def create_video_embedding(
             return
 
         # Update document with embedding and mark as complete
-        db = firestore.Client()
+        db = _firestore().Client()
         video_ref = db.collection("videos").document(event.params["videoId"])
         video_ref.update(
             {
@@ -1098,7 +1150,7 @@ def create_video_embedding(
 
 def _update_progress_for_all_users(video_id):
     """For a given video_id, update embedding progress for all users who have liked it."""
-    db = firestore.Client()
+    db = _firestore().Client()
     # Query all users who have liked this video
     users_ref = db.collection("users")
     user_docs = users_ref.stream()
@@ -1111,7 +1163,7 @@ def _update_progress_for_all_users(video_id):
 
 
 @https_fn.on_request(timeout_sec=300)
-def trigger_video_embeddings(req: https_fn.Request) -> https_fn.Response:
+def trigger_video_embeddings(req) -> Any:
     """
     Efficient batch processing function to generate embeddings for videos without valid embeddings.
     Processes batches of 25 videos per invocation to prevent timeouts.
@@ -1125,22 +1177,22 @@ def trigger_video_embeddings(req: https_fn.Request) -> https_fn.Response:
             logger.info("Successfully initialized OpenAI client")
         except Exception as e:
             logger.error(f"Failed to initialize OpenAI client: {str(e)}")
-            return https_fn.Response(
+            return (
                 json.dumps(
                     {
                         "success": False,
                         "error": f"Failed to initialize OpenAI client: {str(e)}",
                     }
                 ),
-                status=500,
-                headers={"Content-Type": "application/json"},
+                500,
+                {"Content-Type": "application/json"},
             )
 
         # Simple security check - require a secret parameter
         # In production, this should use proper authentication
         secret = req.args.get("secret")
         if secret != "zensort-embedding-backfill-2024":
-            return https_fn.Response("Unauthorized", status=401)
+            return ("Unauthorized", 401)
 
         # Get pagination cursor for resuming from previous batch
         start_after_id = req.args.get("start_after")
@@ -1150,7 +1202,7 @@ def trigger_video_embeddings(req: https_fn.Request) -> https_fn.Response:
         if start_after_id:
             logger.info(f"Resuming from video ID: {start_after_id}")
 
-        db = firestore.Client()
+        db = _firestore().Client()
         videos_collection = db.collection("videos")
 
         # Build query with cursor support for pagination
@@ -1176,6 +1228,11 @@ def trigger_video_embeddings(req: https_fn.Request) -> https_fn.Response:
         for video_doc in videos_batch:
             last_doc_id = video_doc.id  # Track last processed document for pagination
             video_data = video_doc.to_dict()
+
+            # Skip documents without data
+            if not video_data:
+                skipped_count += 1
+                continue
 
             # Skip if video already has a valid, complete embedding
             if _has_valid_embedding(video_data):
@@ -1337,7 +1394,7 @@ def trigger_video_embeddings(req: https_fn.Request) -> https_fn.Response:
             logger.info("Embedding backfill completed - no more videos to process")
             result_message += " | Backfill completed"
 
-        return https_fn.Response(
+        return (
             json.dumps(
                 {
                     "success": True,
@@ -1350,22 +1407,20 @@ def trigger_video_embeddings(req: https_fn.Request) -> https_fn.Response:
                     "last_doc_id": last_doc_id,
                 }
             ),
-            status=200,
-            headers={"Content-Type": "application/json"},
+            200,
+            {"Content-Type": "application/json"},
         )
 
     except Exception as e:
         logger.error(f"Error in embedding backfill: {str(e)}")
-        return https_fn.Response(
+        return (
             json.dumps({"success": False, "error": str(e)}),
-            status=500,
-            headers={"Content-Type": "application/json"},
+            500,
+            {"Content-Type": "application/json"},
         )
 
 
-def _is_new_video_creation(
-    event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot]],
-) -> bool:
+def _is_new_video_creation(event) -> bool:
     """Check if this is a new video creation by examining the before/after snapshots."""
     # If there's no before data, this is a new document creation
     return event.data.before is None or not event.data.before.exists
@@ -1403,7 +1458,7 @@ def _generate_embedding(client: OpenAI, text: str) -> list:
         raise ValueError(f"Embedding generation failed: {e}")
 
 
-def _has_valid_embedding(video_data: dict) -> bool:
+def _has_valid_embedding(video_data: dict | None) -> bool:
     """
     Check if a video document has a complete, valid embedding vector.
 
@@ -1412,6 +1467,13 @@ def _has_valid_embedding(video_data: dict) -> bool:
     - It's a list/array
     - It has the correct dimensionality
     """
+    if not video_data:
+        return False
+
+    # If status is not_applicable, it's considered "valid" for skipping purposes
+    if video_data.get("embedding_status") == "not_applicable":
+        return True
+
     embedding = video_data.get("embedding")
 
     if not embedding:
@@ -1426,10 +1488,12 @@ def _has_valid_embedding(video_data: dict) -> bool:
     return True
 
 
-def _update_embedding_status(video_id: str, status: str, error: str = None) -> None:
+def _update_embedding_status(
+    video_id: str, status: str, error: str | None = None
+) -> None:
     """Update the embedding status for a video document."""
     try:
-        db = firestore.Client()
+        db = _firestore().Client()
         video_ref = db.collection("videos").document(video_id)
 
         update_data = {
@@ -1448,6 +1512,77 @@ def _update_embedding_status(video_id: str, status: str, error: str = None) -> N
         )
 
 
+def _retry_failed_embeddings_for_user(user_id: str, db: Any) -> int:
+    """
+    Finds all videos liked by a user with a 'failed' embedding status,
+    resets them to 'pending' using an efficient batch write, and returns the count.
+    """
+    # Import DELETE_FIELD locally to work with the lazy-loaded firestore module
+    # and satisfy the linter.
+    from google.cloud.firestore import DELETE_FIELD
+
+    # Step 1: Get all video IDs from the user's likedVideos subcollection
+    liked_videos_ref = (
+        db.collection("users").document(user_id).collection("likedVideos")
+    )
+    liked_video_docs = liked_videos_ref.stream()
+    liked_video_ids = [doc.id for doc in liked_video_docs]
+
+    if not liked_video_ids:
+        logger.info(
+            f"User {user_id} has no liked videos to check for failed embeddings."
+        )
+        return 0
+
+    logger.info(
+        f"Checking {len(liked_video_ids)} liked videos for failed embeddings for user {user_id}."
+    )
+
+    videos_to_retry_refs = []
+    videos_ref = db.collection("videos")
+
+    # Step 2: Process video IDs in chunks of 30 due to 'in' query limitations
+    for i in range(0, len(liked_video_ids), 30):
+        id_chunk = liked_video_ids[i : i + 30]
+
+        # Step 3: Query the 'videos' collection for failed embeddings in the current chunk
+        # Use '__name__' to query by document ID.
+        failed_videos_query = videos_ref.where("__name__", "in", id_chunk).where(
+            "embedding_status", "==", "failed"
+        )
+
+        failed_docs = failed_videos_query.stream()
+
+        for doc in failed_docs:
+            videos_to_retry_refs.append(doc.reference)
+
+    if not videos_to_retry_refs:
+        logger.info(f"No failed embeddings to retry for user {user_id}.")
+        return 0
+
+    logger.info(
+        f"Found {len(videos_to_retry_refs)} failed embeddings to retry for user {user_id}."
+    )
+
+    # Step 4: Use a batch write to reset the status for all failed videos
+    batch = db.batch()
+    for video_ref in videos_to_retry_refs:
+        batch.update(
+            video_ref,
+            {
+                "embedding_status": "pending",
+                "embedding_error": DELETE_FIELD,
+                "embedding_updated_at": datetime.now(timezone.utc),
+            },
+        )
+    batch.commit()
+
+    # Step 5: Update the user's overall embedding progress
+    update_embedding_progress(user_id)
+
+    return len(videos_to_retry_refs)
+
+
 @https_fn.on_call()
 def retry_failed_embeddings(req: https_fn.CallableRequest) -> dict:
     user_id = req.data.get("user_id")
@@ -1456,26 +1591,6 @@ def retry_failed_embeddings(req: https_fn.CallableRequest) -> dict:
             code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
             message="The function must be called with a valid 'user_id'.",
         )
-    db = firestore.Client()
-    # Get all videoIds liked by this user
-    # Using .get() instead of .stream() for better performance when processing all documents
-    liked_videos_ref = (
-        db.collection("users").document(user_id).collection("likedVideos")
-    )
-    liked_video_docs = liked_videos_ref.get()
-    retried = 0
-    for doc in liked_video_docs:
-        video_id = doc.id
-        video_ref = db.collection("videos").document(video_id)
-        video_doc = video_ref.get()
-        if video_doc.exists and video_doc.get("embedding_status") == "failed":
-            video_ref.update(
-                {
-                    "embedding_status": "pending",
-                    "embedding_error": firestore.DELETE_FIELD,
-                    "embedding_updated_at": datetime.now(timezone.utc),
-                }
-            )
-            retried += 1
-    update_embedding_progress(user_id)
-    return {"retried": retried}
+    db = _firestore().Client()
+    retried_count = _retry_failed_embeddings_for_user(user_id, db)
+    return {"retried": retried_count}
