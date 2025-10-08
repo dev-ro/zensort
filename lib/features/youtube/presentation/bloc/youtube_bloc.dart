@@ -7,6 +7,7 @@ import 'package:zensort/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:zensort/features/youtube/domain/entities/liked_video.dart';
 import 'package:zensort/features/youtube/domain/entities/sync_progress.dart';
 import 'package:zensort/features/youtube/domain/repositories/youtube_repository.dart';
+import 'package:zensort/features/youtube/domain/entities/video_shelf.dart';
 
 part 'youtube_event.dart';
 part 'youtube_state.dart';
@@ -177,6 +178,8 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
           'No existing videos found on first stream emission, triggering automatic sync...',
         );
         add(SyncLikedVideos());
+        // Don't emit a loaded state here, wait for sync to provide videos
+        return;
       } else {
         print(
           'Found ${event.videos.length} existing videos, skipping auto-sync',
@@ -184,7 +187,29 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
       }
     }
 
-    emit(YoutubeLoaded(videos: event.videos));
+    // Process videos into shelves
+    final allVideos = event.videos;
+    final unavailableVideos = allVideos
+        .where((v) => v.title == 'Private video' || v.title == 'Deleted video')
+        .toList();
+    final legacyMusic = allVideos
+        .where((v) => v.channelName == 'Music Library Uploads')
+        .toList();
+
+    final shelves = <VideoShelf>[];
+    if (allVideos.isNotEmpty) {
+      shelves.add(VideoShelf(title: 'All Videos', videos: allVideos));
+    }
+    if (unavailableVideos.isNotEmpty) {
+      shelves.add(VideoShelf(
+          title: 'Unavailable Videos', videos: unavailableVideos));
+    }
+    if (legacyMusic.isNotEmpty) {
+      shelves.add(
+          VideoShelf(title: 'Legacy Music Uploads', videos: legacyMusic));
+    }
+
+    emit(YoutubeLoaded(shelves: shelves));
   }
 
   /// Handles stream errors from repository

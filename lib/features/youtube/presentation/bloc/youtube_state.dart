@@ -24,25 +24,26 @@ class YoutubeSyncProgress extends YoutubeState {
 class YoutubeSyncSuccess extends YoutubeState {}
 
 class YoutubeLoaded extends YoutubeState {
-  final List<LikedVideo> videos;
+  final List<VideoShelf> shelves;
 
-  const YoutubeLoaded({required this.videos});
+  const YoutubeLoaded({required this.shelves});
 
   // Serialization methods for hydrated_bloc
   factory YoutubeLoaded.fromJson(Map<String, dynamic> json) {
-    return YoutubeLoaded(
-      videos: (json['videos'] as List<dynamic>)
-          .map((item) => LikedVideo.fromJson(item as Map<String, dynamic>))
-          .toList(),
-    );
+    // This will need to be adjusted if you intend to persist shelves.
+    // For now, we'll deserialize to an empty list of shelves as a placeholder,
+    // because the primary goal is UI structure, not state persistence of shelves.
+    return const YoutubeLoaded(shelves: []);
   }
 
   Map<String, dynamic> toJson() {
-    return {'videos': videos.map((video) => video.toJson()).toList()};
+    // This will need to be adjusted if you intend to persist shelves.
+    // For now, returning an empty map as we are not persisting shelves yet.
+    return {'shelves': []};
   }
 
   @override
-  List<Object?> get props => [videos];
+  List<Object?> get props => [shelves];
 }
 
 class YoutubeFailure extends YoutubeState {

@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:zensort/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:zensort/features/youtube/presentation/bloc/youtube_bloc.dart';
-import 'package:zensort/features/youtube/presentation/widgets/video_list_item.dart';
+import 'package:zensort/features/youtube/presentation/widgets/video_search_bar.dart';
+import 'package:zensort/features/youtube/presentation/widgets/video_shelf_view.dart';
 import 'package:zensort/theme.dart';
 import 'package:zensort/widgets/gradient_loader.dart';
 
@@ -168,16 +169,23 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             }
             if (state is YoutubeLoaded) {
-              if (state.videos.isEmpty) {
+              if (state.shelves.isEmpty) {
                 return const Center(
                   child: Text('No liked videos found. Try syncing!'),
                 );
               }
-              return ListView.builder(
-                itemCount: state.videos.length,
-                itemBuilder: (context, index) {
-                  return VideoListItem(video: state.videos[index]);
-                },
+              return Column(
+                children: [
+                  const VideoSearchBar(),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: state.shelves.length,
+                      itemBuilder: (context, index) {
+                        return VideoShelfView(shelf: state.shelves[index]);
+                      },
+                    ),
+                  ),
+                ],
               );
             }
             return const Center(
