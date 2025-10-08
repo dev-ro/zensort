@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:equatable/equatable.dart';
 import 'package:hydrated_bloc/hydrated_bloc.dart';
+import 'package:rxdart/rxdart.dart';
 import 'package:zensort/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:zensort/features/youtube/domain/entities/liked_video.dart';
 import 'package:zensort/features/youtube/domain/entities/sync_progress.dart';
@@ -11,6 +12,12 @@ import 'package:zensort/features/youtube/domain/entities/video_shelf.dart';
 
 part 'youtube_event.dart';
 part 'youtube_state.dart';
+
+EventTransformer<E> _debounceRestartable<E>(Duration duration) {
+  return (events, mapper) {
+    return events.debounceTime(duration).switchMap(mapper);
+  };
+}
 
 class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
   final YoutubeRepository _youtubeRepository;
@@ -33,6 +40,8 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     on<_AuthStatusChanged>(_onAuthStatusChanged, transformer: restartable());
     on<_LikedVideosUpdated>(_onLikedVideosUpdated);
     on<_LikedVideosError>(_onLikedVideosError);
+    on<SearchQueryChanged>(_onSearchQueryChanged,
+        transformer: _debounceRestartable(const Duration(milliseconds: 250)));
 
     // Listen to AuthBloc's stable authentication state (hierarchical flow)
     // Repository -> AuthBloc -> YouTubeBloc
@@ -155,8 +164,35 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     }
   }
 
-  /// Handles liked videos data from repository stream
-  /// SAFE: emit() called within event handler context - follows reactive repository pattern
+  List<VideoShelf> _buildBaseShelves(List<LikedVideo> allVideos) {
+    final unavailableVideos = allVideos
+        .where((v) => v.title == 'Private video' || v.title == 'Deleted video')
+        .toList();
+    final legacyMusic = allVideos
+        .where((v) => v.channelName == 'Music Library Uploads')
+        .toList();
+
+    final shelves = <VideoShelf>[];
+    if (allVideos.isNotEmpty) {
+      shelves.add(VideoShelf(title: 'All Videos', videos: allVideos));
+    }
+    if (unavailableVideos.isNotEmpty) {
+      shelves.add(VideoShelf(title: 'Unavailable Videos', videos: unavailableVideos));
+    }
+    if (legacyMusic.isNotEmpty) {
+      shelves.add(VideoShelf(title: 'Legacy Music Uploads', videos: legacyMusic));
+    }
+    return shelves;
+  }
+
+  List<LikedVideo> _filterVideos(List<LikedVideo> allVideos, String query) {
+    if (query.trim().isEmpty) return allVideos;
+    final q = query.toLowerCase();
+    return allVideos
+        .where((v) => v.title.toLowerCase().contains(q) || v.channelName.toLowerCase().contains(q))
+        .toList();
+  }
+
   void _onLikedVideosUpdated(
     _LikedVideosUpdated event,
     Emitter<YoutubeState> emit,
@@ -187,29 +223,35 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
       }
     }
 
-    // Process videos into shelves
+    final currentQuery = state is YoutubeLoaded ? (state as YoutubeLoaded).searchQuery : '';
     final allVideos = event.videos;
-    final unavailableVideos = allVideos
-        .where((v) => v.title == 'Private video' || v.title == 'Deleted video')
-        .toList();
-    final legacyMusic = allVideos
-        .where((v) => v.channelName == 'Music Library Uploads')
-        .toList();
 
-    final shelves = <VideoShelf>[];
-    if (allVideos.isNotEmpty) {
-      shelves.add(VideoShelf(title: 'All Videos', videos: allVideos));
+    if (currentQuery.isEmpty) {
+      final shelves = _buildBaseShelves(allVideos);
+      emit(YoutubeLoaded(shelves: shelves, allVideos: allVideos, searchQuery: ''));
+    } else {
+      final filtered = _filterVideos(allVideos, currentQuery);
+      final shelves = <VideoShelf>[VideoShelf(title: 'Search Results', videos: filtered)];
+      emit(YoutubeLoaded(shelves: shelves, allVideos: allVideos, searchQuery: currentQuery));
     }
-    if (unavailableVideos.isNotEmpty) {
-      shelves.add(VideoShelf(
-          title: 'Unavailable Videos', videos: unavailableVideos));
-    }
-    if (legacyMusic.isNotEmpty) {
-      shelves.add(
-          VideoShelf(title: 'Legacy Music Uploads', videos: legacyMusic));
-    }
+  }
 
-    emit(YoutubeLoaded(shelves: shelves));
+  void _onSearchQueryChanged(
+    SearchQueryChanged event,
+    Emitter<YoutubeState> emit,
+  ) {
+    final query = event.query;
+    final currentLoaded = state is YoutubeLoaded ? state as YoutubeLoaded : YoutubeLoaded.initial();
+    final allVideos = currentLoaded.allVideos;
+
+    if (query.isEmpty) {
+      final shelves = _buildBaseShelves(allVideos);
+      emit(currentLoaded.copyWith(shelves: shelves, searchQuery: ''));
+    } else {
+      final filtered = _filterVideos(allVideos, query);
+      final shelves = <VideoShelf>[VideoShelf(title: 'Search Results', videos: filtered)];
+      emit(currentLoaded.copyWith(shelves: shelves, searchQuery: query));
+    }
   }
 
   /// Handles stream errors from repository

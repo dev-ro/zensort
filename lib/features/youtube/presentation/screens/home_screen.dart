@@ -3,7 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:zensort/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:zensort/features/youtube/presentation/bloc/youtube_bloc.dart';
 import 'package:zensort/features/youtube/presentation/widgets/video_search_bar.dart';
-import 'package:zensort/features/youtube/presentation/widgets/video_shelf_view.dart';
+import 'package:zensort/features/youtube/presentation/widgets/expandable_video_shelf.dart';
 import 'package:zensort/theme.dart';
 import 'package:zensort/widgets/gradient_loader.dart';
 
@@ -169,21 +169,24 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             }
             if (state is YoutubeLoaded) {
-              if (state.shelves.isEmpty) {
-                return const Center(
-                  child: Text('No liked videos found. Try syncing!'),
-                );
-              }
               return Column(
                 children: [
                   const VideoSearchBar(),
                   Expanded(
-                    child: ListView.builder(
-                      itemCount: state.shelves.length,
-                      itemBuilder: (context, index) {
-                        return VideoShelfView(shelf: state.shelves[index]);
-                      },
-                    ),
+                    child: state.shelves.isEmpty
+                        ? const Center(child: Text('No liked videos found. Try syncing!'))
+                        : ListView.builder(
+                            itemCount: state.shelves.length,
+                            itemBuilder: (context, index) {
+                              final shelf = state.shelves[index];
+                              final expand = state.searchQuery.isNotEmpty; // expand search results
+                              return ExpandableVideoShelf(
+                                title: shelf.title,
+                                videos: shelf.videos,
+                                initiallyExpanded: expand,
+                              );
+                            },
+                          ),
                   ),
                 ],
               );

@@ -11,6 +11,14 @@ class SyncLikedVideos extends YoutubeEvent {}
 
 class LoadInitialVideos extends YoutubeEvent {}
 
+class SearchQueryChanged extends YoutubeEvent {
+  final String query;
+  const SearchQueryChanged(this.query);
+
+  @override
+  List<Object> get props => [query];
+}
+
 class _YoutubeSyncProgressUpdated extends YoutubeEvent {
   final SyncProgress progress;
 

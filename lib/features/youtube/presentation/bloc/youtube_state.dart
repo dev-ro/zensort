@@ -25,25 +25,46 @@ class YoutubeSyncSuccess extends YoutubeState {}
 
 class YoutubeLoaded extends YoutubeState {
   final List<VideoShelf> shelves;
+  final List<LikedVideo> allVideos;
+  final String searchQuery;
 
-  const YoutubeLoaded({required this.shelves});
+  const YoutubeLoaded({
+    required this.shelves,
+    required this.allVideos,
+    required this.searchQuery,
+  });
+
+  factory YoutubeLoaded.initial() => const YoutubeLoaded(
+        shelves: [],
+        allVideos: [],
+        searchQuery: '',
+      );
 
   // Serialization methods for hydrated_bloc
   factory YoutubeLoaded.fromJson(Map<String, dynamic> json) {
-    // This will need to be adjusted if you intend to persist shelves.
-    // For now, we'll deserialize to an empty list of shelves as a placeholder,
-    // because the primary goal is UI structure, not state persistence of shelves.
-    return const YoutubeLoaded(shelves: []);
+    // Persist only searchQuery to restore UI intent; videos come from repository stream.
+    final query = (json['searchQuery'] as String?) ?? '';
+    return YoutubeLoaded(shelves: const [], allVideos: const [], searchQuery: query);
   }
 
   Map<String, dynamic> toJson() {
-    // This will need to be adjusted if you intend to persist shelves.
-    // For now, returning an empty map as we are not persisting shelves yet.
-    return {'shelves': []};
+    return {'searchQuery': searchQuery};
+  }
+
+  YoutubeLoaded copyWith({
+    List<VideoShelf>? shelves,
+    List<LikedVideo>? allVideos,
+    String? searchQuery,
+  }) {
+    return YoutubeLoaded(
+      shelves: shelves ?? this.shelves,
+      allVideos: allVideos ?? this.allVideos,
+      searchQuery: searchQuery ?? this.searchQuery,
+    );
   }
 
   @override
-  List<Object?> get props => [shelves];
+  List<Object?> get props => [shelves, allVideos, searchQuery];
 }
 
 class YoutubeFailure extends YoutubeState {
