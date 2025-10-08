@@ -26,16 +26,19 @@ class _VideoSearchBarState extends State<VideoSearchBar> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: TextField(
         controller: _controller,
         onChanged: (value) => context.read<YouTubeBloc>().add(SearchQueryChanged(value)),
+        style: TextStyle(color: colorScheme.onSurface),
         decoration: InputDecoration(
           hintText: 'Search liked videos...',
-          prefixIcon: const Icon(Icons.search),
+          hintStyle: TextStyle(color: colorScheme.onSurfaceVariant),
+          prefixIcon: Icon(Icons.search, color: colorScheme.onSurfaceVariant),
           suffixIcon: IconButton(
-            icon: const Icon(Icons.clear),
+            icon: Icon(Icons.clear, color: colorScheme.onSurfaceVariant),
             onPressed: () {
               if (_controller.text.isEmpty) return;
               _controller.clear();
@@ -43,12 +46,21 @@ class _VideoSearchBarState extends State<VideoSearchBar> {
               context.read<YouTubeBloc>().add(const SearchQueryChanged(''));
             },
           ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(30.0),
-            borderSide: BorderSide.none,
-          ),
           filled: true,
-          fillColor: Colors.grey[200],
+          fillColor: colorScheme.surfaceVariant,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12.0),
+            borderSide: BorderSide(color: colorScheme.outlineVariant, width: 1),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12.0),
+            borderSide: BorderSide(color: colorScheme.outlineVariant, width: 1),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12.0),
+            borderSide: BorderSide(color: colorScheme.primary, width: 1.5),
+          ),
         ),
       ),
     );
