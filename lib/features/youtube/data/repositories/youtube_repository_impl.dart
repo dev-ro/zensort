@@ -5,6 +5,7 @@ import 'package:zensort/features/auth/domain/repositories/auth_repository.dart';
 import 'package:zensort/features/youtube/domain/entities/liked_video.dart';
 import 'package:zensort/features/youtube/domain/entities/liked_videos_page.dart';
 import 'package:zensort/features/youtube/domain/entities/sync_progress.dart';
+import 'package:zensort/features/youtube/domain/entities/embedding_progress.dart';
 import 'package:zensort/features/youtube/domain/repositories/youtube_repository.dart';
 
 class YoutubeRepositoryImpl implements YoutubeRepository {
@@ -101,6 +102,27 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
           } else {
             return const SyncProgress(status: SyncStatus.none);
           }
+        });
+  }
+
+  @override
+  Stream<EmbeddingProgress> watchEmbeddingProgress() {
+    final user = _auth.currentUser;
+    if (user == null) {
+      return Stream.value(const EmbeddingProgress());
+    }
+    return _firestore
+        .collection('users')
+        .doc(user.uid)
+        .collection('embeddingProgress')
+        .doc('current')
+        .snapshots()
+        .map((snapshot) {
+          final data = snapshot.data();
+          if (snapshot.exists && data != null) {
+            return EmbeddingProgress.fromMap(data);
+          }
+          return const EmbeddingProgress();
         });
   }
 
