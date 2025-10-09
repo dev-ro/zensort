@@ -8,8 +8,7 @@ class EmbeddingProgressCubit extends Cubit<EmbeddingProgress> {
   final YoutubeRepository _repository;
   StreamSubscription<EmbeddingProgress>? _sub;
 
-  EmbeddingProgressCubit(this._repository)
-      : super(const EmbeddingProgress()) {
+  EmbeddingProgressCubit(this._repository) : super(const EmbeddingProgress()) {
     _sub = _repository.watchEmbeddingProgress().listen(emit);
   }
 
@@ -19,5 +18,3 @@ class EmbeddingProgressCubit extends Cubit<EmbeddingProgress> {
     return super.close();
   }
 }
-
-

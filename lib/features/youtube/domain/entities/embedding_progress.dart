@@ -22,7 +22,8 @@ class EmbeddingProgress extends Equatable {
 
   double get percentComplete {
     if (total == 0) return 1.0;
-    final ratio = completed / total;
+    final processed = completed + failed;
+    final ratio = processed / total;
     if (ratio < 0) return 0.0;
     if (ratio > 1) return 1.0;
     return ratio;
@@ -58,8 +59,12 @@ class EmbeddingProgress extends Equatable {
         }
       } else {
         // Support Firestore Timestamp without importing it in domain layer
-        final tsSecs = (raw is Map && raw['seconds'] is int) ? raw['seconds'] as int : null;
-        final tsNanos = (raw is Map && raw['nanoseconds'] is int) ? raw['nanoseconds'] as int : null;
+        final tsSecs = (raw is Map && raw['seconds'] is int)
+            ? raw['seconds'] as int
+            : null;
+        final tsNanos = (raw is Map && raw['nanoseconds'] is int)
+            ? raw['nanoseconds'] as int
+            : null;
         if (tsSecs != null) {
           parsed = DateTime.fromMillisecondsSinceEpoch(
             (tsSecs * 1000) + ((tsNanos ?? 0) ~/ 1000000),
@@ -72,7 +77,9 @@ class EmbeddingProgress extends Equatable {
     final total = (map['total'] as num?)?.toInt() ?? 0;
     final completed = (map['completed'] as num?)?.toInt() ?? 0;
     final failed = (map['failed'] as num?)?.toInt() ?? 0;
-    final pending = (map['pending'] as num?)?.toInt() ?? (total - completed - failed).clamp(0, total);
+    final pending =
+        (map['pending'] as num?)?.toInt() ??
+        (total - completed - failed).clamp(0, total);
 
     return EmbeddingProgress(
       total: total,
@@ -96,5 +103,3 @@ class EmbeddingProgress extends Equatable {
   @override
   List<Object?> get props => [total, completed, failed, pending, lastUpdated];
 }
-
-

@@ -19,7 +19,7 @@ void main() {
       expect(p.failed, 5);
       expect(p.pending, 65);
       expect(p.isComplete, false);
-      expect(p.percentComplete, closeTo(0.30, 0.0001));
+      expect(p.percentComplete, closeTo(0.35, 0.0001));
     });
 
     test('handles missing fields with sensible defaults', () {
@@ -44,5 +44,3 @@ void main() {
     });
   });
 }
-
-

@@ -23,10 +23,7 @@ class EmbeddingStatusSheet extends StatelessWidget {
               children: [
                 Icon(Icons.insights, color: theme.colorScheme.primary),
                 const SizedBox(width: 12),
-                Text(
-                  'Embeddings Status',
-                  style: theme.textTheme.titleLarge,
-                ),
+                Text('Embeddings Status', style: theme.textTheme.titleLarge),
                 const Spacer(),
                 IconButton(
                   tooltip: 'Close',
@@ -53,7 +50,10 @@ class EmbeddingStatusSheet extends StatelessWidget {
               children: [
                 _InfoChip(label: 'Total', value: progress.total.toString()),
                 const SizedBox(width: 8),
-                _InfoChip(label: 'Completed', value: progress.completed.toString()),
+                _InfoChip(
+                  label: 'Completed',
+                  value: progress.completed.toString(),
+                ),
                 const SizedBox(width: 8),
                 _InfoChip(label: 'Failed', value: progress.failed.toString()),
                 const SizedBox(width: 8),
@@ -120,5 +120,3 @@ class _InfoChip extends StatelessWidget {
     );
   }
 }
-
-

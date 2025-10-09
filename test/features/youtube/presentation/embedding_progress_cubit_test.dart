@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:bloc_test/bloc_test.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mockito/mockito.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:zensort/features/youtube/domain/entities/embedding_progress.dart';
 import 'package:zensort/features/youtube/domain/repositories/youtube_repository.dart';
 import 'package:zensort/features/youtube/presentation/bloc/embedding_progress_cubit.dart';
@@ -17,7 +17,9 @@ void main() {
     setUp(() {
       repo = _MockYoutubeRepository();
       controller = StreamController<EmbeddingProgress>.broadcast();
-      when(repo.watchEmbeddingProgress()).thenAnswer((_) => controller.stream);
+      when(
+        () => repo.watchEmbeddingProgress(),
+      ).thenAnswer((_) => controller.stream);
     });
 
     tearDown(() async {
@@ -29,7 +31,9 @@ void main() {
       build: () => EmbeddingProgressCubit(repo),
       act: (cubit) async {
         controller.add(const EmbeddingProgress());
-        controller.add(const EmbeddingProgress(total: 10, completed: 5, pending: 4));
+        controller.add(
+          const EmbeddingProgress(total: 10, completed: 5, pending: 4),
+        );
       },
       expect: () => [
         const EmbeddingProgress(),
@@ -38,5 +42,3 @@ void main() {
     );
   });
 }
-
-

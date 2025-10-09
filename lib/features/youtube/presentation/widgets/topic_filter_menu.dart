@@ -150,10 +150,7 @@ class _DesktopTopicMenuState extends State<_DesktopTopicMenu> {
                           return RadioListTile<String>(
                             value: topic,
                             groupValue: group,
-                            title: Text(
-                              topic,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                            title: Text(topic, overflow: TextOverflow.ellipsis),
                             onChanged: (_) {
                               if (group == topic) {
                                 widget.onSelect(null);
