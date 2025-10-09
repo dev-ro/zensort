@@ -58,6 +58,7 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
       transformer: _debounceRestartable(const Duration(milliseconds: 150)),
     );
     on<LoadUnlikedVideos>(_onLoadUnlikedVideos, transformer: droppable());
+    on<LoadAllVideosEager>(_onLoadAllVideosEager, transformer: droppable());
 
     // Listen to AuthBloc's stable authentication state (hierarchical flow)
     // Repository -> AuthBloc -> YouTubeBloc
@@ -122,6 +123,9 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
           add(_LikedVideosError(error.toString()));
         },
       );
+
+      // Trigger eager full load for shelves and search
+      add(LoadAllVideosEager());
     } else if (authState is AuthUnauthenticated) {
       print('User unauthenticated - clearing state and resetting latch');
       // Reset the latches when user becomes unauthenticated
@@ -184,6 +188,8 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     } else if (progress.status == SyncStatus.completed) {
       print('Sync completed! Emitting YoutubeSyncSuccess');
       emit(YoutubeSyncSuccess());
+      // After sync, reload everything eagerly so shelves/search are complete
+      add(LoadAllVideosEager());
     } else if (progress.status == SyncStatus.failed) {
       print('Sync failed! Emitting YoutubeFailure but preserving UI');
       final lastLoaded = state is YoutubeLoaded ? state as YoutubeLoaded : null;
@@ -437,6 +443,56 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
       },
       onError: (_, __) => current,
     );
+  }
+
+  Future<void> _onLoadAllVideosEager(
+    LoadAllVideosEager event,
+    Emitter<YoutubeState> emit,
+  ) async {
+    int loaded = 0;
+    int? total;
+    try {
+      // Try to fetch total; ignore failures and use indeterminate mode
+      try {
+        total = await _youtubeRepository.fetchRemoteLikedVideosTotal();
+      } catch (_) {
+        total = null;
+      }
+
+      await emit.forEach<List<LikedVideo>>(
+        _youtubeRepository.fetchAllLikedVideosBatched(pageSize: 200),
+        onData: (videos) {
+          loaded = videos.length;
+          // Emit progress state
+          return YoutubeAllLoading(loadedCount: loaded, totalCount: total);
+        },
+        onError: (_, __) => YoutubeAllLoading(loadedCount: loaded, totalCount: total),
+      );
+
+      // After stream completes, set fully loaded state while preserving query/filters
+      final current = state is YoutubeLoaded ? state as YoutubeLoaded : YoutubeLoaded.initial();
+      final allVideos = await _youtubeRepository
+          .fetchAllLikedVideosBatched(pageSize: 200)
+          .last;
+      final query = current.searchQuery;
+      final filtered = query.isEmpty ? allVideos : _filterVideos(allVideos, query);
+      final shelves = <VideoShelf>[
+        if (query.isNotEmpty)
+          VideoShelf(title: 'Search Results', videos: filtered)
+        else
+          ..._buildBaseShelves(allVideos),
+      ];
+      emit(current.copyWith(
+        allVideos: allVideos,
+        shelves: shelves,
+        isFullyLoaded: true,
+        availableTopics: _deriveAvailableTopics(allVideos),
+      ));
+    } catch (e) {
+      // On error, fall back to current state
+      final current = state is YoutubeLoaded ? state as YoutubeLoaded : null;
+      if (current != null) emit(current);
+    }
   }
 
   void _onShelfExpansionChanged(
