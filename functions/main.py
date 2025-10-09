@@ -18,6 +18,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Generator, Any
+from urllib.parse import unquote
 from openai import OpenAI
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -115,6 +116,49 @@ def _get_user_locale(db, user_id: str) -> str:
     except Exception:
         pass
     return "en-US"
+
+
+def _normalize_topic_from_url(url: str) -> str | None:
+    """Extract terminal path segment from a Wikipedia URL, decode,
+    replace underscores with spaces, and title-case it.
+    Returns None if input invalid or segment empty.
+    """
+    try:
+        if not isinstance(url, str) or not url:
+            return None
+        # Take last segment after '/'
+        segment = url.rsplit("/", 1)[-1]
+        if not segment:
+            return None
+        # Decode percent-encoding and transform
+        decoded = unquote(segment)
+        cleaned = decoded.replace("_", " ").strip()
+        if not cleaned:
+            return None
+        return cleaned.title()
+    except Exception:
+        return None
+
+
+def _slugify(value: str) -> str:
+    """Produce a URL-safe slug from a topic name: lowercase, hyphen-separated."""
+    try:
+        v = value.strip().lower()
+        # Replace non-alphanum with hyphens
+        out = []
+        prev_dash = False
+        for ch in v:
+            if ch.isalnum():
+                out.append(ch)
+                prev_dash = False
+            else:
+                if not prev_dash:
+                    out.append('-')
+                    prev_dash = True
+        slug = ''.join(out).strip('-')
+        return slug or 'topic'
+    except Exception:
+        return 'topic'
 
 
 def _build_youtube_service(access_token: str):
@@ -1017,10 +1061,8 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
 
         sync_timestamp = datetime.now(timezone.utc)
 
-        # Resolve user locale and category title map
-        user_locale = _get_user_locale(db, user_id)
-        region_code, hl = _parse_locale_to_region_hl(user_locale)
-        category_map = _get_category_map_for_locale(access_token, region_code, hl, db)
+        # Resolve US category title map (standardized across users)
+        category_map_us = _get_category_map_for_locale(access_token, 'US', 'en', db)
 
         # Add new videos (public + placeholders) to the root /videos collection
         for video in videos_to_store:
@@ -1041,8 +1083,33 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
             # Include authoritative YouTube classification fields when available
             if getattr(video, "categoryId", None) is not None:
                 video_data["categoryId"] = video.categoryId
+
+            # Compute US category title (standardized)
+            try:
+                cid_str = str(getattr(video, "categoryId", "") or "").strip()
+                if cid_str:
+                    video_data["categoryTitleUS"] = category_map_us.get(cid_str)
+            except Exception:
+                pass
+
+            # Persist raw topicCategories for provenance
             if getattr(video, "topicCategories", None) is not None:
-                video_data["topicCategories"] = video.topicCategories
+                topics_raw = list(getattr(video, "topicCategories") or [])
+                video_data["topicCategories"] = topics_raw
+                # Derive cleaned topicTags (Title Case short names)
+                cleaned = []
+                seen = set()
+                for t in topics_raw:
+                    norm = _normalize_topic_from_url(t)
+                    if not norm:
+                        continue
+                    if norm in seen:
+                        continue
+                    seen.add(norm)
+                    cleaned.append(norm)
+                # Truncate to top 5 to keep documents lean
+                if cleaned:
+                    video_data["topicTags"] = cleaned[:5]
 
             # Only add category field if it's not None (to avoid unnecessary null fields)
             if category is not None:
@@ -1060,9 +1127,25 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
                 video_doc_ref = db.collection("videos").document(video.videoId)
                 update_data = {}
                 if getattr(video, "categoryId", None) is not None:
+                    cid_str = str(getattr(video, "categoryId", "") or "").strip()
                     update_data["categoryId"] = video.categoryId
+                    if cid_str:
+                        update_data["categoryTitleUS"] = category_map_us.get(cid_str)
                 if getattr(video, "topicCategories", None) is not None:
-                    update_data["topicCategories"] = video.topicCategories
+                    topics_raw = list(getattr(video, "topicCategories") or [])
+                    update_data["topicCategories"] = topics_raw
+                    cleaned = []
+                    seen = set()
+                    for t in topics_raw:
+                        norm = _normalize_topic_from_url(t)
+                        if not norm:
+                            continue
+                        if norm in seen:
+                            continue
+                        seen.add(norm)
+                        cleaned.append(norm)
+                    if cleaned:
+                        update_data["topicTags"] = cleaned[:5]
                 if getattr(video, "thumbnailUrl", None):
                     update_data["thumbnailUrl"] = video.thumbnailUrl
 
@@ -1075,7 +1158,7 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
             )
 
         # Add currently liked videos (newly liked + still liked) to user's liked videos subcollection
-        # Using the correct likedAt timestamps from Step A
+        # Using the correct likedAt timestamps from Step A. Keep link docs minimal.
         for video_item in all_video_items:
             video_id = video_item["videoId"]
 
@@ -1087,52 +1170,29 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
                     .collection("likedVideos")
                     .document(video_id)
                 )
-                # Resolve categoryId and localized categoryTitle if available
-                category_id = None
-                category_title = None
-                # Prefer details map for new videos fetched this run
-                video_detail = video_details_map.get(video_id)
-                if video_detail and getattr(video_detail, "categoryId", None):
-                    category_id = video_detail.categoryId
-                else:
-                    # Fallback: read from existing /videos if present
-                    try:
-                        vdoc = db.collection("videos").document(video_id).get()
-                        if vdoc.exists:
-                            vdata = vdoc.to_dict() or {}
-                            cid = vdata.get("categoryId")
-                            if isinstance(cid, str) and cid:
-                                category_id = cid
-                    except Exception:
-                        pass
-
-                if category_id:
-                    category_title = category_map.get(str(category_id))
-                # Prepare relation payload with guarded access to detail fields
+                # Prepare minimal relation payload (link-only)
                 relation_data = {
                     "likedAt": video_item["likedAt"],
                     "syncedAt": sync_timestamp,
                 }
-                vdet = video_details_map.get(video_id)
-                if vdet is not None:
-                    try:
-                        title_val = getattr(vdet, "title", None)
-                        if title_val:
-                            relation_data["title"] = title_val
-                        channel_val = getattr(vdet, "channelTitle", None)
-                        if channel_val:
-                            relation_data["channelTitle"] = channel_val
-                        thumb_val = getattr(vdet, "thumbnailUrl", None)
-                        if thumb_val:
-                            relation_data["thumbnailUrl"] = thumb_val
-                    except Exception:
-                        pass
-                if category_id:
-                    relation_data["categoryId"] = category_id
-                if category_title:
-                    relation_data["categoryTitle"] = category_title
-
                 batch.set(liked_video_doc_ref, relation_data)
+
+                # Maintain topics reverse references under /topics/{slug}/videos/{videoId}
+                try:
+                    vdoc = db.collection("videos").document(video_id).get()
+                    if vdoc.exists:
+                        vdata = vdoc.to_dict() or {}
+                        topic_tags = vdata.get("topicTags") or []
+                        for tag in topic_tags[:10]:  # cap fan-out per video
+                            if not isinstance(tag, str) or not tag:
+                                continue
+                            slug = _slugify(tag)
+                            topic_ref = db.collection("topics").document(slug)
+                            batch.set(topic_ref, {"name": tag, "slug": slug, "createdAt": sync_timestamp}, merge=True)
+                            topic_video_ref = topic_ref.collection("videos").document(video_id)
+                            batch.set(topic_video_ref, {"createdAt": sync_timestamp}, merge=True)
+                except Exception as _:
+                    pass
 
         # Handle newly unliked videos - move to unlikedVideos subcollection
         for unliked_video_id in newly_unliked:
@@ -1352,8 +1412,10 @@ def create_video_embedding(event) -> None:
             _update_progress_for_all_users(event.params["videoId"])
             return
 
-        # Combine text fields for embedding
-        combined_text = _prepare_embedding_text(title, description, channel_title)
+        # Combine text fields for embedding including category and topics
+        category_us = video_data.get("categoryTitleUS") or None
+        topic_tags = video_data.get("topicTags") or None
+        combined_text = _prepare_embedding_text(title, description, channel_title, category_us, topic_tags)
         logger.info(f"Prepared text for embedding (length: {len(combined_text)})")
 
         # Update status to processing
@@ -1521,8 +1583,10 @@ def trigger_video_embeddings(req) -> Any:
                 skipped_count += 1
                 continue
 
-            # Combine text fields for embedding
-            combined_text = _prepare_embedding_text(title, description, channel_title)
+            # Combine text fields for embedding including category and topics
+            category_us = video_data.get("categoryTitleUS") or None
+            topic_tags = video_data.get("topicTags") or None
+            combined_text = _prepare_embedding_text(title, description, channel_title, category_us, topic_tags)
 
             videos_to_process.append(
                 {
@@ -1681,9 +1745,24 @@ def _is_new_video_creation(event) -> bool:
     return event.data.before is None or not event.data.before.exists
 
 
-def _prepare_embedding_text(title: str, description: str, channel_title: str) -> str:
-    """Combine video fields into embedding-optimized text."""
+def _prepare_embedding_text(title: str, description: str, channel_title: str, category_us: str | None = None, topic_tags: list[str] | None = None) -> str:
+    """Combine video fields into embedding-optimized text including category and topics."""
     # Create structured text for better embedding quality
+    parts = []
+    if title:
+        parts.append(f"Title: {title}")
+    if channel_title:
+        parts.append(f"Channel: {channel_title}")
+    if category_us:
+        parts.append(f"Category (US): {category_us}")
+    if topic_tags:
+        # join unique topic tags
+        tags = ", ".join(sorted(set([t for t in topic_tags if isinstance(t, str) and t]))[:8])
+        if tags:
+            parts.append(f"Topics: {tags}")
+    if description:
+        parts.append(f"Description: {description}")
+    return "\n".join(parts)
     # Let the API handle truncation automatically (no manual truncation)
     parts = []
     if title:
