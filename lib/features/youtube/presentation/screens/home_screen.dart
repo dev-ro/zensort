@@ -8,6 +8,8 @@ import 'package:zensort/features/youtube/presentation/widgets/responsive_video_g
 import 'package:zensort/features/youtube/presentation/widgets/topic_filter_menu.dart';
 import 'package:zensort/theme.dart';
 import 'package:zensort/widgets/gradient_loader.dart';
+import 'package:zensort/features/youtube/presentation/widgets/embedding_status_sheet.dart';
+import 'package:zensort/features/youtube/presentation/bloc/embedding_progress_cubit.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -18,6 +20,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool _isWaitingForTokenRefresh = false;
+  bool _embeddingStatusShownThisSession = false;
 
   @override
   void initState() {
@@ -64,6 +67,21 @@ class _HomeScreenState extends State<HomeScreen> {
         appBar: AppBar(
           title: const Text('Liked Videos'),
           actions: [
+            Tooltip(
+              message: 'Embeddings Status',
+              child: FilledButton.tonalIcon(
+                onPressed: () async {
+                  await showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    showDragHandle: true,
+                    builder: (_) => const EmbeddingStatusSheet(),
+                  );
+                },
+                icon: const Icon(Icons.insights),
+                label: const Text('Status'),
+              ),
+            ),
             IconButton(
               icon: const Icon(Icons.sync),
               onPressed: isSyncing
@@ -145,6 +163,22 @@ class _HomeScreenState extends State<HomeScreen> {
             }
           },
           builder: (context, state) {
+            // Auto-open embeddings status once after login if incomplete
+            if (!_embeddingStatusShownThisSession) {
+              final p = context.watch<EmbeddingProgressCubit>().state;
+              if (!p.isComplete && (p.total > 0 || p.pending > 0)) {
+                _embeddingStatusShownThisSession = true;
+                // Open non-blocking after current frame
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    showDragHandle: true,
+                    builder: (_) => const EmbeddingStatusSheet(),
+                  );
+                });
+              }
+            }
             if (state is YoutubeLoading || state is YoutubeInitial) {
               return const Center(child: GradientLoader());
             }
@@ -184,9 +218,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: TopicFilterMenu(
                         availableTopics: state.availableTopics,
                         selectedTopic: state.selectedTopic,
-                        onSelected: (value) => context
-                            .read<YouTubeBloc>()
-                            .add(TopicFilterChanged(value)),
+                        onSelected: (value) => context.read<YouTubeBloc>().add(
+                          TopicFilterChanged(value),
+                        ),
                       ),
                     ),
                   Expanded(
