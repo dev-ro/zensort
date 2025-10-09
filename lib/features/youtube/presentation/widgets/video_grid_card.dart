@@ -21,6 +21,11 @@ class VideoGridCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
 
+    final shouldSkip = video.shouldSkipThumbnailLoad();
+    final networkUrl = video.thumbnailUrl.isNotEmpty
+        ? video.thumbnailUrl
+        : buildHighQualityThumbnailUrl(video.id);
+
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: InkWell(
@@ -34,7 +39,7 @@ class VideoGridCard extends StatelessWidget {
             children: [
               AspectRatio(
                 aspectRatio: 16 / 9,
-                child: video.shouldSkipThumbnailLoad()
+                child: shouldSkip
                     ? Container(
                         color: Theme.of(context).colorScheme.surfaceVariant,
                         alignment: Alignment.center,
@@ -43,7 +48,7 @@ class VideoGridCard extends StatelessWidget {
                           fit: BoxFit.contain,
                         ),
                       )
-                    : _NetworkThumbnail(url: buildHighQualityThumbnailUrl(video.id)),
+                    : _NetworkThumbnail(url: networkUrl),
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(
