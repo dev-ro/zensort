@@ -73,6 +73,20 @@ service cloud.firestore {
       	&& request.auth.uid == userId;
       allow write: if false;
     }
+
+    // Topics collection and reverse references
+    match /topics/{topicSlug} {
+      // Allow authenticated users to read topics index
+      allow read: if request.auth != null;
+      // Writes restricted to server-side (Cloud Functions/Admin SDK)
+      allow write: if false;
+
+      // Reverse references: videos in a subcollection
+      match /videos/{videoId} {
+        allow read: if request.auth != null;
+        allow write: if false;
+      }
+    }
   }
 }
 
