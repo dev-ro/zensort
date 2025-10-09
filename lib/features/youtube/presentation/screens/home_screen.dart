@@ -169,36 +169,84 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             }
             if (state is YoutubeLoaded) {
+              final isSearching = state.searchQuery.isNotEmpty || (state.selectedTopic != null && state.selectedTopic!.isNotEmpty);
               return Column(
                 children: [
                   const VideoSearchBar(),
+                  if (state.availableTopics.isNotEmpty)
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: Row(
+                        children: [
+                          for (final topic in state.availableTopics)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8.0),
+                              child: FilterChip(
+                                selected: state.selectedTopic == topic,
+                                label: Text(topic),
+                                onSelected: (sel) => context.read<YouTubeBloc>().add(
+                                  TopicFilterChanged(sel ? topic : null),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   Expanded(
-                    child: state.shelves.isEmpty
-                        ? const Center(
-                            child: Text('No liked videos found. Try syncing!'),
+                    child: isSearching
+                        ? ListView(
+                            children: [
+                              // In search mode, show a single grid of filtered results without shelves
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                                child: Text(
+                                  state.selectedTopic != null && state.selectedTopic!.isNotEmpty
+                                      ? 'Filtered by ${state.selectedTopic}'
+                                      : 'Search Results',
+                                  style: Theme.of(context).textTheme.titleLarge,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                                child: state.shelves.isNotEmpty
+                                    ? ResponsiveVideoGrid(videos: state.shelves.first.videos)
+                                    : const SizedBox.shrink(),
+                              ),
+                              if (state.loadingMore)
+                                const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 12.0),
+                                  child: Center(child: LinearProgressIndicator()),
+                                ),
+                            ],
                           )
-                        : ListView.builder(
-                            itemCount: state.shelves.length,
-                            itemBuilder: (context, index) {
-                              final shelf = state.shelves[index];
-                              final isExpanded = shelf.title == state.expandedShelfKey || state.searchQuery.isNotEmpty;
-                              return ExpandableVideoShelf(
-                                title: shelf.title,
-                                videos: shelf.videos,
-                                isExpanded: isExpanded,
-                                hasMore: state.hasMore,
-                                isLoading: state.loadingMore,
-                                onExpansionChanged: (expanded) {
-                                  context
-                                      .read<YouTubeBloc>()
-                                      .add(ShelfExpansionChanged(expanded ? shelf.title : null));
+                        : (state.shelves.isEmpty
+                            ? const Center(
+                                child: Text('No liked videos found. Try syncing!'),
+                              )
+                            : ListView.builder(
+                                itemCount: state.shelves.length,
+                                itemBuilder: (context, index) {
+                                  final shelf = state.shelves[index];
+                                  final isExpanded = shelf.title == state.expandedShelfKey;
+                                  return ExpandableVideoShelf(
+                                    title: shelf.title,
+                                    videos: shelf.videos,
+                                    isExpanded: isExpanded,
+                                    hasMore: state.hasMore,
+                                    isLoading: state.loadingMore,
+                                    onExpansionChanged: (expanded) {
+                                      context
+                                          .read<YouTubeBloc>()
+                                          .add(ShelfExpansionChanged(expanded ? shelf.title : null));
+                                    },
+                                    onEndReached: () => context
+                                        .read<YouTubeBloc>()
+                                        .add(LoadMoreAllVideos()),
+                                  );
                                 },
-                                onEndReached: () => context
-                                    .read<YouTubeBloc>()
-                                    .add(LoadMoreAllVideos()),
-                              );
-                            },
-                          ),
+                              )),
                   ),
                 ],
               );
