@@ -195,6 +195,9 @@ class Video:
     platform: str = "YouTube"
     addedToZensortAt: datetime | None = None
     isMusic: bool = False
+    # Authoritative classification fields from YouTube Data API v3
+    categoryId: str | None = None
+    topicCategories: list[str] | None = None
 
 
 @dataclass
@@ -441,7 +444,8 @@ def fetch_video_details(access_token: str, video_ids: list[str]) -> list[Video]:
             # Make API request for this batch
             try:
                 request = youtube.videos().list(
-                    part="id,snippet,topicDetails", id=",".join(batch_ids)
+                    part="id,snippet,contentDetails,topicDetails",
+                    id=",".join(batch_ids),
                 )
                 response = request.execute()
 
@@ -470,8 +474,7 @@ def fetch_video_details(access_token: str, video_ids: list[str]) -> list[Video]:
                         thumbs.get("maxres", {}).get("url")
                         or thumbs.get("standard", {}).get("url")
                         or thumbs.get("high", {}).get("url")
-                        or thumbs.get("medium", {}).get("url")
-                        or thumbs.get("default", {}).get("url", "")
+                        or f"https://i.ytimg.com/vi/{item['id']}/hqdefault.jpg"
                     )
 
                     # Determine music classification
@@ -479,9 +482,8 @@ def fetch_video_details(access_token: str, video_ids: list[str]) -> list[Video]:
                     topics = topic_details.get("topicCategories", []) or []
                     is_music = False
                     try:
-                        is_music = (
-                            category_id == "10"
-                            or any(str(t).endswith("/Music") for t in topics)
+                        is_music = category_id == "10" or any(
+                            str(t).endswith("/Music") for t in topics
                         )
                     except Exception:
                         is_music = category_id == "10"
@@ -496,6 +498,8 @@ def fetch_video_details(access_token: str, video_ids: list[str]) -> list[Video]:
                         platform="YouTube",
                         addedToZensortAt=datetime.now(timezone.utc),
                         isMusic=is_music,
+                        categoryId=category_id,
+                        topicCategories=topics,
                     )
                     batch_videos.append(video)
 
@@ -576,6 +580,56 @@ def get_existing_video_ids(video_ids: list[str]) -> set[str]:
     except Exception as e:
         logger.error(f"Error checking existing videos: {type(e).__name__}: {str(e)}")
         return set()  # Fail safe - assume none exist to avoid data loss
+
+
+def get_videos_missing_enrichment(video_ids: list[str]) -> list[str]:
+    """
+    From a list of existing video IDs, return the subset that is missing
+    the authoritative enrichment fields (categoryId, topicCategories, isMusic).
+
+    Skips private/deleted placeholder videos.
+    """
+    if not video_ids:
+        return []
+
+    try:
+        db = _firestore().Client()
+        videos_collection = db.collection("videos")
+
+        doc_refs = [videos_collection.document(video_id) for video_id in video_ids]
+        docs = db.get_all(doc_refs)
+
+        missing_ids: list[str] = []
+        for doc in docs:
+            if not getattr(doc, "exists", False):
+                continue
+            data = doc.to_dict() or {}
+            title = (data.get("title") or "").strip()
+            if is_private_legacy_video(title):
+                # Do not attempt to enrich placeholders for private/deleted videos
+                continue
+
+            has_category_id = isinstance(data.get("categoryId"), str) and bool(
+                (data.get("categoryId") or "").strip()
+            )
+            topics = data.get("topicCategories")
+            has_topics = isinstance(topics, list) and len(topics) > 0
+            has_is_music_field = "isMusic" in data
+
+            if not (has_category_id and has_topics and has_is_music_field):
+                missing_ids.append(doc.id)
+
+        logger.info(
+            f"Detected {len(missing_ids)} existing videos needing enrichment out of {len(video_ids)} checked"
+        )
+        return missing_ids
+
+    except Exception as e:
+        logger.error(
+            f"Error determining videos missing enrichment: {type(e).__name__}: {str(e)}"
+        )
+        # Fail safe: if detection fails, don't enrich to avoid excessive API calls
+        return []
 
 
 @https_fn.on_call(timeout_sec=540)  # 9 minutes timeout for large syncs
@@ -678,19 +732,29 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
             f"Found {len(existing_video_ids)} videos already in public collection"
         )
 
-        # Only fetch details for NEW videos (major performance optimization)
+        # Only fetch details for NEW videos by default (performance optimization)
         new_video_ids = [
             vid_id for vid_id in all_video_ids if vid_id not in existing_video_ids
         ]
-        logger.info(f"Need to fetch details for {len(new_video_ids)} new videos only")
 
-        # Step C: Batch Fetch Details for NEW Videos Only (not all videos)
-        logger.info("Step C: Batch fetching details for new videos only")
-        video_details = []
-        if new_video_ids:
-            video_details = fetch_video_details(access_token, new_video_ids)
+        # Additionally, detect existing videos missing enrichment and fetch details for them too
+        logger.info("Checking existing videos for missing enrichment fields")
+        existing_ids_list = list(existing_video_ids)
+        enrichment_candidates = get_videos_missing_enrichment(existing_ids_list)
+        logger.info(
+            f"Found {len(enrichment_candidates)} existing videos needing enrichment"
+        )
+
+        # Step C: Batch fetch details for NEW videos and enrichment candidates
+        logger.info(
+            "Step C: Batch fetching details for new videos and enrichment candidates"
+        )
+        ids_to_fetch = new_video_ids + enrichment_candidates
+        video_details: list[Video] = []
+        if ids_to_fetch:
+            video_details = fetch_video_details(access_token, ids_to_fetch)
             logger.info(
-                f"Successfully fetched details for {len(video_details)} out of {len(new_video_ids)} new videos"
+                f"Fetched details for {len(video_details)} of {len(ids_to_fetch)} requested videos"
             )
 
             # Update progress after fetching video details
@@ -838,13 +902,43 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
                 "isMusic": getattr(video, "isMusic", False),
             }
 
+            # Include authoritative YouTube classification fields when available
+            if getattr(video, "categoryId", None) is not None:
+                video_data["categoryId"] = video.categoryId
+            if getattr(video, "topicCategories", None) is not None:
+                video_data["topicCategories"] = video.topicCategories
+
             # Only add category field if it's not None (to avoid unnecessary null fields)
             if category is not None:
                 video_data["category"] = category
 
             batch.set(video_doc_ref, video_data)
 
-        # Note: Existing videos are skipped for performance - no updates needed
+        # Enrich existing videos that were missing authoritative fields (merge-only updates)
+        if enrichment_candidates:
+            enriched_count = 0
+            for vid in enrichment_candidates:
+                video = video_details_map.get(vid)
+                if not video:
+                    continue
+                video_doc_ref = db.collection("videos").document(video.videoId)
+                update_data = {
+                    "isMusic": getattr(video, "isMusic", False),
+                }
+                if getattr(video, "categoryId", None) is not None:
+                    update_data["categoryId"] = video.categoryId
+                if getattr(video, "topicCategories", None) is not None:
+                    update_data["topicCategories"] = video.topicCategories
+                if getattr(video, "thumbnailUrl", None):
+                    update_data["thumbnailUrl"] = video.thumbnailUrl
+
+                # Merge to avoid overwriting unrelated fields like embeddings
+                batch.set(video_doc_ref, update_data, merge=True)
+                enriched_count += 1
+
+            logger.info(
+                f"Scheduled merge updates for {enriched_count} existing videos needing enrichment"
+            )
 
         # Add currently liked videos (newly liked + still liked) to user's liked videos subcollection
         # Using the correct likedAt timestamps from Step A

@@ -21,11 +21,6 @@ class VideoGridCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
 
-    final shouldSkip = video.shouldSkipThumbnailLoad();
-    final networkUrl = video.thumbnailUrl.isNotEmpty
-        ? video.thumbnailUrl
-        : buildHighQualityThumbnailUrl(video.id);
-
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: InkWell(
@@ -33,22 +28,28 @@ class VideoGridCard extends StatelessWidget {
         child: Card(
           clipBehavior: Clip.antiAlias,
           elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               AspectRatio(
                 aspectRatio: 16 / 9,
-                child: shouldSkip
+                child: video.shouldSkipThumbnailLoad()
                     ? Container(
-                        color: Theme.of(context).colorScheme.surfaceVariant,
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerHighest,
                         alignment: Alignment.center,
                         child: Image.asset(
                           'assets/images/zensort_logo.png',
                           fit: BoxFit.contain,
                         ),
                       )
-                    : _NetworkThumbnail(url: networkUrl),
+                    : _NetworkThumbnail(
+                        url: buildHighQualityThumbnailUrl(video.id),
+                      ),
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(
@@ -92,7 +93,7 @@ class _NetworkThumbnail extends StatelessWidget {
       url,
       fit: BoxFit.cover,
       errorBuilder: (context, error, stack) => Container(
-        color: Theme.of(context).colorScheme.surfaceVariant,
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         child: Icon(
           Icons.image_not_supported,
           color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -101,7 +102,7 @@ class _NetworkThumbnail extends StatelessWidget {
       loadingBuilder: (context, child, loadingProgress) {
         if (loadingProgress == null) return child;
         return Container(
-          color: Theme.of(context).colorScheme.surfaceVariant,
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
           alignment: Alignment.center,
           child: SizedBox(
             width: 24,

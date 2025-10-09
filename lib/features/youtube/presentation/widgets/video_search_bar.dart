@@ -48,7 +48,7 @@ class _VideoSearchBarState extends State<VideoSearchBar> {
             },
           ),
           filled: true,
-          fillColor: colorScheme.surfaceVariant,
+          fillColor: colorScheme.surfaceContainerHighest,
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 16,
             vertical: 14,
