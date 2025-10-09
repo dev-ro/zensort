@@ -28,7 +28,9 @@ class _TopicFilterMenuState extends State<TopicFilterMenu> {
   List<String> _filteredTopics() {
     final q = _searchController.text.trim().toLowerCase();
     if (q.isEmpty) return widget.availableTopics;
-    return widget.availableTopics.where((t) => t.toLowerCase().contains(q)).toList();
+    return widget.availableTopics
+        .where((t) => t.toLowerCase().contains(q))
+        .toList();
   }
 
   void _selectTopic(String? topic) {
@@ -94,6 +96,11 @@ class _DesktopTopicMenuState extends State<_DesktopTopicMenu> {
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final menuWidth = size.width.clamp(280.0, 420.0) * 0.9;
+    final menuHeight = (size.height * 0.7).clamp(280.0, 560.0);
+    final group = widget.selectedTopic ?? '';
+
     return MenuAnchor(
       controller: _menuController,
       alignmentOffset: const Offset(0, 8),
@@ -101,15 +108,12 @@ class _DesktopTopicMenuState extends State<_DesktopTopicMenu> {
         Material(
           color: Theme.of(context).colorScheme.surface,
           elevation: 2,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(
-              minWidth: 280,
-              maxWidth: 360,
-            ),
+          child: SizedBox(
+            width: menuWidth,
+            height: menuHeight,
             child: Padding(
               padding: const EdgeInsets.all(12.0),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   TextField(
@@ -121,37 +125,45 @@ class _DesktopTopicMenuState extends State<_DesktopTopicMenu> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  SizedBox(
-                    height: 360,
+                  Expanded(
                     child: Scrollbar(
-                      child: ListView(
-                        shrinkWrap: true,
-                        children: [
-                          RadioListTile<String>(
-                            value: '',
-                            groupValue: (widget.selectedTopic ?? ''),
-                            title: const Text('All topics'),
-                            onChanged: (_) {
-                              widget.onSelect(null);
-                              _menuController.close();
-                            },
-                          ),
-                          ...widget.topicsBuilder().map((topic) {
+                      child: ListView.builder(
+                        primary: false,
+                        itemCount: widget.topicsBuilder().length + 1,
+                        itemBuilder: (context, index) {
+                          if (index == 0) {
                             return RadioListTile<String>(
-                              value: topic,
-                              groupValue: widget.selectedTopic,
-                              title: Text(topic),
+                              value: '',
+                              groupValue: group,
+                              title: const Text('All topics'),
                               onChanged: (_) {
-                                if (widget.selectedTopic == topic) {
+                                if (group.isEmpty) {
                                   widget.onSelect(null);
                                 } else {
-                                  widget.onSelect(topic);
+                                  widget.onSelect(null);
                                 }
                                 _menuController.close();
                               },
                             );
-                          }),
-                        ],
+                          }
+                          final topic = widget.topicsBuilder()[index - 1];
+                          return RadioListTile<String>(
+                            value: topic,
+                            groupValue: group,
+                            title: Text(
+                              topic,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            onChanged: (_) {
+                              if (group == topic) {
+                                widget.onSelect(null);
+                              } else {
+                                widget.onSelect(topic);
+                              }
+                              _menuController.close();
+                            },
+                          );
+                        },
                       ),
                     ),
                   ),
@@ -242,7 +254,10 @@ class _MobileTopicMenu extends StatelessWidget {
                                     }
                                     final topic = items[index - 1];
                                     return ListTile(
-                                      title: Text(topic),
+                                      title: Text(
+                                        topic,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                       onTap: () {
                                         onSelect(topic);
                                         Navigator.of(context).pop();
