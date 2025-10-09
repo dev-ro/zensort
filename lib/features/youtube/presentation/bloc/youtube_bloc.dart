@@ -242,7 +242,8 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
         .where(
           (v) =>
               v.title.toLowerCase().contains(q) ||
-              v.channelName.toLowerCase().contains(q),
+              v.channelName.toLowerCase().contains(q) ||
+              v.topicTags.any((t) => t.toLowerCase().contains(q)),
         )
         .toList();
   }
