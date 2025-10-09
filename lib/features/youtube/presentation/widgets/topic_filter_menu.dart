@@ -28,9 +28,7 @@ class _TopicFilterMenuState extends State<TopicFilterMenu> {
   List<String> _filteredTopics() {
     final q = _searchController.text.trim().toLowerCase();
     if (q.isEmpty) return widget.availableTopics;
-    return widget.availableTopics
-        .where((t) => t.toLowerCase().contains(q))
-        .toList();
+    return widget.availableTopics.where((t) => t.toLowerCase().contains(q)).toList();
   }
 
   void _selectTopic(String? topic) {
@@ -38,7 +36,6 @@ class _TopicFilterMenuState extends State<TopicFilterMenu> {
       widget.onSelected(null);
       return;
     }
-    // Deselect if tapping the same topic again
     if (widget.selectedTopic != null && widget.selectedTopic == topic) {
       widget.onSelected(null);
     } else {
@@ -60,6 +57,7 @@ class _TopicFilterMenuState extends State<TopicFilterMenu> {
         searchController: _searchController,
         topicsBuilder: _filteredTopics,
         onSelect: _selectTopic,
+        selectedTopic: widget.selectedTopic,
       );
     }
 
@@ -77,12 +75,14 @@ class _DesktopTopicMenu extends StatefulWidget {
   final TextEditingController searchController;
   final List<String> Function() topicsBuilder;
   final ValueChanged<String?> onSelect;
+  final String? selectedTopic;
 
   const _DesktopTopicMenu({
     required this.label,
     required this.searchController,
     required this.topicsBuilder,
     required this.onSelect,
+    this.selectedTopic,
   });
 
   @override
@@ -98,18 +98,18 @@ class _DesktopTopicMenuState extends State<_DesktopTopicMenu> {
       controller: _menuController,
       alignmentOffset: const Offset(0, 8),
       menuChildren: [
-        ConstrainedBox(
-          constraints: const BoxConstraints(
-            maxWidth: 360,
-            maxHeight: 420,
-            minWidth: 280,
-          ),
-          child: Material(
-            color: Theme.of(context).colorScheme.surface,
-            elevation: 2,
+        Material(
+          color: Theme.of(context).colorScheme.surface,
+          elevation: 2,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              minWidth: 280,
+              maxWidth: 360,
+            ),
             child: Padding(
               padding: const EdgeInsets.all(12.0),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   TextField(
@@ -121,13 +121,15 @@ class _DesktopTopicMenuState extends State<_DesktopTopicMenu> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Expanded(
+                  SizedBox(
+                    height: 360,
                     child: Scrollbar(
                       child: ListView(
+                        shrinkWrap: true,
                         children: [
                           RadioListTile<String>(
                             value: '',
-                            groupValue: widget.label == 'Topics: All' ? '' : 'x',
+                            groupValue: (widget.selectedTopic ?? ''),
                             title: const Text('All topics'),
                             onChanged: (_) {
                               widget.onSelect(null);
@@ -135,16 +137,16 @@ class _DesktopTopicMenuState extends State<_DesktopTopicMenu> {
                             },
                           ),
                           ...widget.topicsBuilder().map((topic) {
-                            final isSelected = topic ==
-                                (widget.label.startsWith('Topics: ')
-                                    ? widget.label.substring(8)
-                                    : null);
                             return RadioListTile<String>(
                               value: topic,
-                              groupValue: isSelected ? topic : null,
+                              groupValue: widget.selectedTopic,
                               title: Text(topic),
                               onChanged: (_) {
-                                widget.onSelect(topic);
+                                if (widget.selectedTopic == topic) {
+                                  widget.onSelect(null);
+                                } else {
+                                  widget.onSelect(topic);
+                                }
                                 _menuController.close();
                               },
                             );
@@ -201,57 +203,59 @@ class _MobileTopicMenu extends StatelessWidget {
             context: context,
             isScrollControlled: true,
             builder: (context) {
-              return DraggableScrollableSheet(
-                expand: false,
-                minChildSize: 0.5,
-                maxChildSize: 0.95,
-                builder: (context, controller) {
-                  return Padding(
-                    padding: const EdgeInsets.all(12.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        TextField(
-                          controller: searchController,
-                          onChanged: (_) {
-                            // Trigger rebuild via StatefulBuilder
-                            (context as Element).markNeedsBuild();
-                          },
-                          decoration: const InputDecoration(
-                            hintText: 'Search topics...',
-                            isDense: true,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Expanded(
-                          child: Scrollbar(
-                            child: ListView.builder(
-                              controller: controller,
-                              itemCount: topicsBuilder().length + 1,
-                              itemBuilder: (context, index) {
-                                if (index == 0) {
-                                  return ListTile(
-                                    title: const Text('All topics'),
-                                    onTap: () {
-                                      onSelect(null);
-                                      Navigator.of(context).pop();
-                                    },
-                                  );
-                                }
-                                final topic = topicsBuilder()[index - 1];
-                                return ListTile(
-                                  title: Text(topic),
-                                  onTap: () {
-                                    onSelect(topic);
-                                    Navigator.of(context).pop();
-                                  },
-                                );
-                              },
+              return StatefulBuilder(
+                builder: (context, setSheetState) {
+                  return DraggableScrollableSheet(
+                    expand: false,
+                    minChildSize: 0.5,
+                    maxChildSize: 0.95,
+                    builder: (context, controller) {
+                      final items = topicsBuilder();
+                      return Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            TextField(
+                              controller: searchController,
+                              onChanged: (_) => setSheetState(() {}),
+                              decoration: const InputDecoration(
+                                hintText: 'Search topics...',
+                                isDense: true,
+                              ),
                             ),
-                          ),
+                            const SizedBox(height: 8),
+                            Expanded(
+                              child: Scrollbar(
+                                child: ListView.builder(
+                                  controller: controller,
+                                  itemCount: items.length + 1,
+                                  itemBuilder: (context, index) {
+                                    if (index == 0) {
+                                      return ListTile(
+                                        title: const Text('All topics'),
+                                        onTap: () {
+                                          onSelect(null);
+                                          Navigator.of(context).pop();
+                                        },
+                                      );
+                                    }
+                                    final topic = items[index - 1];
+                                    return ListTile(
+                                      title: Text(topic),
+                                      onTap: () {
+                                        onSelect(topic);
+                                        Navigator.of(context).pop();
+                                      },
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                      );
+                    },
                   );
                 },
               );
