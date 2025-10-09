@@ -132,5 +132,71 @@ When adding a multiline comment to a PR or issue via the gh CLI, you **must** pi
 - **CORRECT**: Renders newlines properly.
     printf "First line.\\nSecond line." | gh pr comment 123 --body-file -
 
-- **INCORRECT**: Will literally print \\n in the comment.
+- **INCORRECT**: Will literally print \\\n in the comment.
     gh pr comment 123 --body "First line.\\nSecond line."
+
+-----
+
+## 4\. Multi-Feature (Stacked) Branching & PRs
+
+When developing multiple features in parallel, avoid mixing unrelated changes into a single PR. Use stacked branches and target PRs at their immediate predecessor branch.
+
+### 4.1 Stacked Branches (Feature B depends on Feature A)
+
+1. Create Feature A from main
+
+```bash
+git checkout main && git pull origin main
+git checkout -b feat/feature-a
+```
+
+1. Work, commit, push, and open PR A with base = main
+
+```bash
+git push -u origin feat/feature-a
+gh pr create --base main --head feat/feature-a --title "feat: Feature A" --body "..."
+```
+
+1. Create Feature B from Feature A (not from main)
+
+```bash
+git checkout -b feat/feature-b feat/feature-a
+```
+
+1. Work, commit, push, and open PR B with base = feat/feature-a (stacked)
+
+```bash
+git push -u origin feat/feature-b
+gh pr create --base feat/feature-a --head feat/feature-b --title "feat: Feature B" --body "Stacked on Feature A"
+```
+
+1. After PR A merges to main, update PR B:
+
+- Option A (retarget): `gh pr edit <PR_B_NUMBER> --base main`
+- Option B (sync): locally `git fetch origin && git checkout feat/feature-b && git merge origin/main && git push`
+
+### 4.2 If You Accidentally Branched from the Wrong Feature
+
+You have two safe corrections. Prefer the smallest, lowest-risk change.
+
+- Retarget PR base to the branch you actually based on (keeps diff clean):
+
+```bash
+gh pr edit <PR_NUMBER> --base feat/feature-a
+```
+
+- Or create a clean branch from main and cherry-pick only the relevant commits:
+
+```bash
+git checkout -b feat/feature-b-clean main
+git cherry-pick <sha1> <sha2> <sha3>
+git push -u origin feat/feature-b-clean
+gh pr create --base main --head feat/feature-b-clean --title "feat: Feature B" --body "Cherry-picked clean PR"
+```
+
+### 4.3 Rules of Thumb
+
+- Base your PR on the branch that contains the code you built upon.
+- Keep each PR narrowly scoped; avoid mixing features.
+- Do not squash or rebase from the GitHub UI; use "Create a merge commit".
+- After parent branch merges, promptly retarget stacked PRs to main or merge main into them.
