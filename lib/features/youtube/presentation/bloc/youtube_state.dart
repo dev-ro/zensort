@@ -26,6 +26,7 @@ class YoutubeSyncSuccess extends YoutubeState {}
 class YoutubeLoaded extends YoutubeState {
   final List<VideoShelf> shelves;
   final List<LikedVideo> allVideos;
+  final List<LikedVideo> unlikedVideos;
   final String searchQuery;
   final bool hasMore;
   final bool loadingMore;
@@ -38,6 +39,7 @@ class YoutubeLoaded extends YoutubeState {
   const YoutubeLoaded({
     required this.shelves,
     required this.allVideos,
+    this.unlikedVideos = const [],
     required this.searchQuery,
     this.hasMore = false,
     this.loadingMore = false,
@@ -51,6 +53,7 @@ class YoutubeLoaded extends YoutubeState {
   factory YoutubeLoaded.initial() => const YoutubeLoaded(
     shelves: [],
     allVideos: [],
+    unlikedVideos: [],
     searchQuery: '',
     hasMore: false,
     loadingMore: false,
@@ -67,6 +70,7 @@ class YoutubeLoaded extends YoutubeState {
     return YoutubeLoaded(
       shelves: const [],
       allVideos: const [],
+      unlikedVideos: const [],
       searchQuery: query,
       hasMore: false,
       loadingMore: false,
@@ -88,6 +92,7 @@ class YoutubeLoaded extends YoutubeState {
   YoutubeLoaded copyWith({
     List<VideoShelf>? shelves,
     List<LikedVideo>? allVideos,
+    List<LikedVideo>? unlikedVideos,
     String? searchQuery,
     bool? hasMore,
     bool? loadingMore,
@@ -100,6 +105,7 @@ class YoutubeLoaded extends YoutubeState {
     return YoutubeLoaded(
       shelves: shelves ?? this.shelves,
       allVideos: allVideos ?? this.allVideos,
+      unlikedVideos: unlikedVideos ?? this.unlikedVideos,
       searchQuery: searchQuery ?? this.searchQuery,
       hasMore: hasMore ?? this.hasMore,
       loadingMore: loadingMore ?? this.loadingMore,

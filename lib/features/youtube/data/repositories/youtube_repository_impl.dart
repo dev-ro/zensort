@@ -127,7 +127,10 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
           // Chunked 'in' queries (<=30 per chunk)
           final List<LikedVideo> results = [];
           for (var i = 0; i < ids.length; i += 30) {
-            final chunk = ids.sublist(i, i + 30 > ids.length ? ids.length : i + 30);
+            final chunk = ids.sublist(
+              i,
+              i + 30 > ids.length ? ids.length : i + 30,
+            );
             final videosSnap = await _firestore
                 .collection('videos')
                 .where(FieldPath.documentId, whereIn: chunk)
@@ -141,8 +144,14 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
                   channelName: (data['channelTitle'] as String?) ?? '',
                   thumbnailUrl: (data['thumbnailUrl'] as String?) ?? '',
                   categoryId: data['categoryId'] as String?,
-                  categoryTitle: (data['categoryTitleUS'] as String?) ?? (data['categoryTitle'] as String?),
-                  topicTags: (data['topicTags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const [],
+                  categoryTitle:
+                      (data['categoryTitleUS'] as String?) ??
+                      (data['categoryTitle'] as String?),
+                  topicTags:
+                      (data['topicTags'] as List<dynamic>?)
+                          ?.map((e) => e.toString())
+                          .toList() ??
+                      const [],
                 ),
               );
             }
@@ -235,8 +244,14 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
             channelName: (vdata['channelTitle'] as String?) ?? '',
             thumbnailUrl: (vdata['thumbnailUrl'] as String?) ?? '',
             categoryId: vdata['categoryId'] as String?,
-            categoryTitle: (vdata['categoryTitleUS'] as String?) ?? (vdata['categoryTitle'] as String?),
-            topicTags: (vdata['topicTags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const [],
+            categoryTitle:
+                (vdata['categoryTitleUS'] as String?) ??
+                (vdata['categoryTitle'] as String?),
+            topicTags:
+                (vdata['topicTags'] as List<dynamic>?)
+                    ?.map((e) => e.toString())
+                    .toList() ??
+                const [],
           ),
         );
       }
@@ -256,7 +271,9 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
   }
 
   @override
-  Stream<List<LikedVideo>> fetchAllLikedVideosBatched({int pageSize = 200}) async* {
+  Stream<List<LikedVideo>> fetchAllLikedVideosBatched({
+    int pageSize = 200,
+  }) async* {
     final user = _auth.currentUser;
     if (user == null) {
       yield <LikedVideo>[];
@@ -273,7 +290,9 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
     final List<LikedVideo> aggregate = [];
 
     while (hasMore) {
-      Query<Map<String, dynamic>> q = likedRef.orderBy('likedAt', descending: true).limit(pageSize);
+      Query<Map<String, dynamic>> q = likedRef
+          .orderBy('likedAt', descending: true)
+          .limit(pageSize);
       if (cursor != null) {
         final startDoc = await likedRef.doc(cursor).get();
         if (startDoc.exists) {
@@ -303,15 +322,24 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
               channelName: (vdata['channelTitle'] as String?) ?? '',
               thumbnailUrl: (vdata['thumbnailUrl'] as String?) ?? '',
               categoryId: vdata['categoryId'] as String?,
-              categoryTitle: (vdata['categoryTitleUS'] as String?) ?? (vdata['categoryTitle'] as String?),
-              topicTags: (vdata['topicTags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const [],
+              categoryTitle:
+                  (vdata['categoryTitleUS'] as String?) ??
+                  (vdata['categoryTitle'] as String?),
+              topicTags:
+                  (vdata['topicTags'] as List<dynamic>?)
+                      ?.map((e) => e.toString())
+                      .toList() ??
+                  const [],
             ),
           );
         }
       }
       // Preserve order
       final byId = {for (final v in pageVideos) v.id: v};
-      final ordered = ids.map((id) => byId[id]).whereType<LikedVideo>().toList();
+      final ordered = ids
+          .map((id) => byId[id])
+          .whereType<LikedVideo>()
+          .toList();
       aggregate.addAll(ordered);
       yield List<LikedVideo>.from(aggregate);
 
@@ -349,8 +377,14 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
             channelName: (vdata['channelTitle'] as String?) ?? '',
             thumbnailUrl: (vdata['thumbnailUrl'] as String?) ?? '',
             categoryId: vdata['categoryId'] as String?,
-            categoryTitle: (vdata['categoryTitleUS'] as String?) ?? (vdata['categoryTitle'] as String?),
-            topicTags: (vdata['topicTags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const [],
+            categoryTitle:
+                (vdata['categoryTitleUS'] as String?) ??
+                (vdata['categoryTitle'] as String?),
+            topicTags:
+                (vdata['topicTags'] as List<dynamic>?)
+                    ?.map((e) => e.toString())
+                    .toList() ??
+                const [],
           ),
         );
       }

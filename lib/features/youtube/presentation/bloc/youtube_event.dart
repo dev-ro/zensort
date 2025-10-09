@@ -31,6 +31,8 @@ class ShelfExpansionChanged extends YoutubeEvent {
 
 class LoadAllVideosForSearch extends YoutubeEvent {}
 
+class LoadUnlikedVideos extends YoutubeEvent {}
+
 class TopicFilterChanged extends YoutubeEvent {
   final String? topic; // null clears filter
   const TopicFilterChanged(this.topic);

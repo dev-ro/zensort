@@ -153,12 +153,12 @@ def _slugify(value: str) -> str:
                 prev_dash = False
             else:
                 if not prev_dash:
-                    out.append('-')
+                    out.append("-")
                     prev_dash = True
-        slug = ''.join(out).strip('-')
-        return slug or 'topic'
+        slug = "".join(out).strip("-")
+        return slug or "topic"
     except Exception:
-        return 'topic'
+        return "topic"
 
 
 def _build_youtube_service(access_token: str):
@@ -1062,7 +1062,7 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
         sync_timestamp = datetime.now(timezone.utc)
 
         # Resolve US category title map (standardized across users)
-        category_map_us = _get_category_map_for_locale(access_token, 'US', 'en', db)
+        category_map_us = _get_category_map_for_locale(access_token, "US", "en", db)
 
         # Add new videos (public + placeholders) to the root /videos collection
         for video in videos_to_store:
@@ -1188,9 +1188,23 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
                                 continue
                             slug = _slugify(tag)
                             topic_ref = db.collection("topics").document(slug)
-                            batch.set(topic_ref, {"name": tag, "slug": slug, "createdAt": sync_timestamp}, merge=True)
-                            topic_video_ref = topic_ref.collection("videos").document(video_id)
-                            batch.set(topic_video_ref, {"createdAt": sync_timestamp}, merge=True)
+                            batch.set(
+                                topic_ref,
+                                {
+                                    "name": tag,
+                                    "slug": slug,
+                                    "createdAt": sync_timestamp,
+                                },
+                                merge=True,
+                            )
+                            topic_video_ref = topic_ref.collection("videos").document(
+                                video_id
+                            )
+                            batch.set(
+                                topic_video_ref,
+                                {"createdAt": sync_timestamp},
+                                merge=True,
+                            )
                 except Exception as _:
                     pass
 
@@ -1415,7 +1429,9 @@ def create_video_embedding(event) -> None:
         # Combine text fields for embedding including category and topics
         category_us = video_data.get("categoryTitleUS") or None
         topic_tags = video_data.get("topicTags") or None
-        combined_text = _prepare_embedding_text(title, description, channel_title, category_us, topic_tags)
+        combined_text = _prepare_embedding_text(
+            title, description, channel_title, category_us, topic_tags
+        )
         logger.info(f"Prepared text for embedding (length: {len(combined_text)})")
 
         # Update status to processing
@@ -1586,7 +1602,9 @@ def trigger_video_embeddings(req) -> Any:
             # Combine text fields for embedding including category and topics
             category_us = video_data.get("categoryTitleUS") or None
             topic_tags = video_data.get("topicTags") or None
-            combined_text = _prepare_embedding_text(title, description, channel_title, category_us, topic_tags)
+            combined_text = _prepare_embedding_text(
+                title, description, channel_title, category_us, topic_tags
+            )
 
             videos_to_process.append(
                 {
@@ -1745,7 +1763,13 @@ def _is_new_video_creation(event) -> bool:
     return event.data.before is None or not event.data.before.exists
 
 
-def _prepare_embedding_text(title: str, description: str, channel_title: str, category_us: str | None = None, topic_tags: list[str] | None = None) -> str:
+def _prepare_embedding_text(
+    title: str,
+    description: str,
+    channel_title: str,
+    category_us: str | None = None,
+    topic_tags: list[str] | None = None,
+) -> str:
     """Combine video fields into embedding-optimized text including category and topics."""
     # Create structured text for better embedding quality
     parts = []
@@ -1757,7 +1781,9 @@ def _prepare_embedding_text(title: str, description: str, channel_title: str, ca
         parts.append(f"Category (US): {category_us}")
     if topic_tags:
         # join unique topic tags
-        tags = ", ".join(sorted(set([t for t in topic_tags if isinstance(t, str) and t]))[:8])
+        tags = ", ".join(
+            sorted(set([t for t in topic_tags if isinstance(t, str) and t]))[:8]
+        )
         if tags:
             parts.append(f"Topics: {tags}")
     if description:

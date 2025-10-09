@@ -28,7 +28,11 @@ class LikedVideo extends Equatable {
       thumbnailUrl: json['thumbnailUrl'] as String,
       categoryId: json['categoryId'] as String?,
       categoryTitle: json['categoryTitle'] as String?,
-      topicTags: (json['topicTags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const [],
+      topicTags:
+          (json['topicTags'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
     );
   }
 

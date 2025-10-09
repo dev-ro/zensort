@@ -57,10 +57,7 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
       _onTopicFilterChanged,
       transformer: _debounceRestartable(const Duration(milliseconds: 150)),
     );
-    on<LoadUnlikedVideos>(
-      _onLoadUnlikedVideos,
-      transformer: droppable(),
-    );
+    on<LoadUnlikedVideos>(_onLoadUnlikedVideos, transformer: droppable());
 
     // Listen to AuthBloc's stable authentication state (hierarchical flow)
     // Repository -> AuthBloc -> YouTubeBloc
