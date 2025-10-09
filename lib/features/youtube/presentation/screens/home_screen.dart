@@ -6,6 +6,7 @@ import 'package:zensort/features/youtube/presentation/widgets/video_search_bar.d
 import 'package:zensort/features/youtube/presentation/widgets/expandable_video_shelf.dart';
 import 'package:zensort/features/youtube/presentation/widgets/responsive_video_grid.dart';
 import 'package:zensort/features/youtube/presentation/widgets/topic_filter_menu.dart';
+import 'package:zensort/features/youtube/presentation/widgets/loading_all_videos_sheet.dart';
 import 'package:zensort/theme.dart';
 import 'package:zensort/widgets/gradient_loader.dart';
 
@@ -142,6 +143,19 @@ class _HomeScreenState extends State<HomeScreen> {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text('An error occurred: ${state.error}')),
               );
+            }
+            // Show loading modal when eager loading all videos
+            if (state is YoutubeAllLoading) {
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                enableDrag: false,
+                builder: (_) => const LoadingAllVideosSheet(),
+              );
+            }
+            // Close modal when fully loaded
+            if (state is YoutubeLoaded && state.isFullyLoaded) {
+              Navigator.of(context).maybePop();
             }
           },
           builder: (context, state) {
