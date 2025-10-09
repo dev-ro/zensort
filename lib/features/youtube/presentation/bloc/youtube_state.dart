@@ -128,6 +128,19 @@ class YoutubeLoaded extends YoutubeState {
   ];
 }
 
+class YoutubeAllLoading extends YoutubeState {
+  final int loadedCount;
+  final int? totalCount;
+
+  const YoutubeAllLoading({required this.loadedCount, this.totalCount});
+
+  double get progress =>
+      (totalCount == null || totalCount == 0) ? 0 : (loadedCount / totalCount!).clamp(0, 1);
+
+  @override
+  List<Object?> get props => [loadedCount, totalCount];
+}
+
 class YoutubeFailure extends YoutubeState {
   final String error;
 
