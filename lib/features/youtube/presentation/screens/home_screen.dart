@@ -4,6 +4,7 @@ import 'package:zensort/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:zensort/features/youtube/presentation/bloc/youtube_bloc.dart';
 import 'package:zensort/features/youtube/presentation/widgets/video_search_bar.dart';
 import 'package:zensort/features/youtube/presentation/widgets/expandable_video_shelf.dart';
+import 'package:zensort/features/youtube/presentation/widgets/responsive_video_grid.dart';
 import 'package:zensort/theme.dart';
 import 'package:zensort/widgets/gradient_loader.dart';
 
@@ -169,14 +170,20 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             }
             if (state is YoutubeLoaded) {
-              final isSearching = state.searchQuery.isNotEmpty || (state.selectedTopic != null && state.selectedTopic!.isNotEmpty);
+              final isSearching =
+                  state.searchQuery.isNotEmpty ||
+                  (state.selectedTopic != null &&
+                      state.selectedTopic!.isNotEmpty);
               return Column(
                 children: [
                   const VideoSearchBar(),
                   if (state.availableTopics.isNotEmpty)
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
                       child: Row(
                         children: [
                           for (final topic in state.availableTopics)
@@ -185,9 +192,10 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: FilterChip(
                                 selected: state.selectedTopic == topic,
                                 label: Text(topic),
-                                onSelected: (sel) => context.read<YouTubeBloc>().add(
-                                  TopicFilterChanged(sel ? topic : null),
-                                ),
+                                onSelected: (sel) =>
+                                    context.read<YouTubeBloc>().add(
+                                      TopicFilterChanged(sel ? topic : null),
+                                    ),
                               ),
                             ),
                         ],
@@ -199,9 +207,12 @@ class _HomeScreenState extends State<HomeScreen> {
                             children: [
                               // In search mode, show a single grid of filtered results without shelves
                               Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16.0,
+                                ),
                                 child: Text(
-                                  state.selectedTopic != null && state.selectedTopic!.isNotEmpty
+                                  state.selectedTopic != null &&
+                                          state.selectedTopic!.isNotEmpty
                                       ? 'Filtered by ${state.selectedTopic}'
                                       : 'Search Results',
                                   style: Theme.of(context).textTheme.titleLarge,
@@ -209,44 +220,55 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               const SizedBox(height: 8),
                               Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16.0,
+                                ),
                                 child: state.shelves.isNotEmpty
-                                    ? ResponsiveVideoGrid(videos: state.shelves.first.videos)
+                                    ? ResponsiveVideoGrid(
+                                        videos: state.shelves.first.videos,
+                                      )
                                     : const SizedBox.shrink(),
                               ),
                               if (state.loadingMore)
                                 const Padding(
                                   padding: EdgeInsets.symmetric(vertical: 12.0),
-                                  child: Center(child: LinearProgressIndicator()),
+                                  child: Center(
+                                    child: LinearProgressIndicator(),
+                                  ),
                                 ),
                             ],
                           )
                         : (state.shelves.isEmpty
-                            ? const Center(
-                                child: Text('No liked videos found. Try syncing!'),
-                              )
-                            : ListView.builder(
-                                itemCount: state.shelves.length,
-                                itemBuilder: (context, index) {
-                                  final shelf = state.shelves[index];
-                                  final isExpanded = shelf.title == state.expandedShelfKey;
-                                  return ExpandableVideoShelf(
-                                    title: shelf.title,
-                                    videos: shelf.videos,
-                                    isExpanded: isExpanded,
-                                    hasMore: state.hasMore,
-                                    isLoading: state.loadingMore,
-                                    onExpansionChanged: (expanded) {
-                                      context
+                              ? const Center(
+                                  child: Text(
+                                    'No liked videos found. Try syncing!',
+                                  ),
+                                )
+                              : ListView.builder(
+                                  itemCount: state.shelves.length,
+                                  itemBuilder: (context, index) {
+                                    final shelf = state.shelves[index];
+                                    final isExpanded =
+                                        shelf.title == state.expandedShelfKey;
+                                    return ExpandableVideoShelf(
+                                      title: shelf.title,
+                                      videos: shelf.videos,
+                                      isExpanded: isExpanded,
+                                      hasMore: state.hasMore,
+                                      isLoading: state.loadingMore,
+                                      onExpansionChanged: (expanded) {
+                                        context.read<YouTubeBloc>().add(
+                                          ShelfExpansionChanged(
+                                            expanded ? shelf.title : null,
+                                          ),
+                                        );
+                                      },
+                                      onEndReached: () => context
                                           .read<YouTubeBloc>()
-                                          .add(ShelfExpansionChanged(expanded ? shelf.title : null));
-                                    },
-                                    onEndReached: () => context
-                                        .read<YouTubeBloc>()
-                                        .add(LoadMoreAllVideos()),
-                                  );
-                                },
-                              )),
+                                          .add(LoadMoreAllVideos()),
+                                    );
+                                  },
+                                )),
                   ),
                 ],
               );
