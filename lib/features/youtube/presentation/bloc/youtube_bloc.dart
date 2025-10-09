@@ -224,12 +224,12 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
   }
 
   List<String> _deriveAvailableTopics(List<LikedVideo> videos) {
-    // Note: LikedVideo does not include topicTags currently; derive from categoryTitle as fallback
-    // This will be extended when LikedVideo includes topic tags
     final set = <String>{};
     for (final v in videos) {
-      final cat = (v.categoryTitle ?? '').trim();
-      if (cat.isNotEmpty) set.add(cat);
+      for (final tag in v.topicTags) {
+        final t = tag.trim();
+        if (t.isNotEmpty) set.add(t);
+      }
     }
     final list = set.toList()..sort();
     return list;
@@ -448,8 +448,9 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
       emit(current.copyWith(shelves: shelves, selectedTopic: null));
       return;
     }
-    // For now, filter by categoryTitle as proxy for topics
-    final filtered = all.where((v) => (v.categoryTitle ?? '').toLowerCase() == topic.toLowerCase()).toList();
+    // Filter by topicTags
+    final lowered = topic.toLowerCase();
+    final filtered = all.where((v) => v.topicTags.any((t) => t.toLowerCase() == lowered)).toList();
     final shelves = <VideoShelf>[
       VideoShelf(title: 'Filtered by $topic', videos: filtered),
     ];
