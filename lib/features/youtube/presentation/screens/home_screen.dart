@@ -191,7 +191,20 @@ class _HomeScreenState extends State<HomeScreen> {
                       state.selectedTopic!.isNotEmpty);
               return Column(
                 children: [
-                  const VideoSearchBar(),
+                  Row(
+                    children: [
+                      const Expanded(child: VideoSearchBar()),
+                      const SizedBox(width: 8),
+                      FilledButton.tonal(
+                        onPressed: () {
+                          context.read<YouTubeBloc>().add(const SearchQueryChanged(''));
+                          context.read<YouTubeBloc>().add(const TopicFilterChanged(null));
+                        },
+                        child: const Text('All Shelves'),
+                      ),
+                      const SizedBox(width: 16),
+                    ],
+                  ),
                   if (state.availableTopics.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
