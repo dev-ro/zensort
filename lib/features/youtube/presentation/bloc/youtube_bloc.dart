@@ -49,9 +49,18 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
       transformer: _debounceRestartable(const Duration(milliseconds: 250)),
     );
     on<ShelfExpansionChanged>(_onShelfExpansionChanged);
-    on<LoadAllVideosForSearch>(_onLoadAllVideosForSearch, transformer: droppable());
-    on<TopicFilterChanged>(_onTopicFilterChanged,
-        transformer: _debounceRestartable(const Duration(milliseconds: 150)));
+    on<LoadAllVideosForSearch>(
+      _onLoadAllVideosForSearch,
+      transformer: droppable(),
+    );
+    on<TopicFilterChanged>(
+      _onTopicFilterChanged,
+      transformer: _debounceRestartable(const Duration(milliseconds: 150)),
+    );
+    on<LoadUnlikedVideos>(
+      _onLoadUnlikedVideos,
+      transformer: droppable(),
+    );
 
     // Listen to AuthBloc's stable authentication state (hierarchical flow)
     // Repository -> AuthBloc -> YouTubeBloc
@@ -106,6 +115,10 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
         (videos) {
           print('watchLikedVideos stream emitted ${videos.length} videos');
           add(_LikedVideosUpdated(videos));
+          // Also load unliked videos once per session after we have a baseline
+          if (!_hasVerifiedRemoteTotal) {
+            add(LoadUnlikedVideos());
+          }
         },
         onError: (error) {
           print('Liked videos stream error: $error');
@@ -433,7 +446,9 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     ShelfExpansionChanged event,
     Emitter<YoutubeState> emit,
   ) {
-    final current = state is YoutubeLoaded ? state as YoutubeLoaded : YoutubeLoaded.initial();
+    final current = state is YoutubeLoaded
+        ? state as YoutubeLoaded
+        : YoutubeLoaded.initial();
     emit(current.copyWith(expandedShelfKey: event.shelfKey));
   }
 
@@ -441,7 +456,9 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     TopicFilterChanged event,
     Emitter<YoutubeState> emit,
   ) {
-    final current = state is YoutubeLoaded ? state as YoutubeLoaded : YoutubeLoaded.initial();
+    final current = state is YoutubeLoaded
+        ? state as YoutubeLoaded
+        : YoutubeLoaded.initial();
     final topic = event.topic;
     final all = current.allVideos;
     if (topic == null || topic.isEmpty) {
@@ -451,11 +468,32 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     }
     // Filter by topicTags
     final lowered = topic.toLowerCase();
-    final filtered = all.where((v) => v.topicTags.any((t) => t.toLowerCase() == lowered)).toList();
+    final filtered = all
+        .where((v) => v.topicTags.any((t) => t.toLowerCase() == lowered))
+        .toList();
     final shelves = <VideoShelf>[
       VideoShelf(title: 'Filtered by $topic', videos: filtered),
     ];
     emit(current.copyWith(shelves: shelves, selectedTopic: topic));
+  }
+
+  Future<void> _onLoadUnlikedVideos(
+    LoadUnlikedVideos event,
+    Emitter<YoutubeState> emit,
+  ) async {
+    final current = state is YoutubeLoaded
+        ? state as YoutubeLoaded
+        : YoutubeLoaded.initial();
+    try {
+      final items = await _youtubeRepository.fetchUnlikedVideos();
+      final newShelves = <VideoShelf>[..._buildBaseShelves(current.allVideos)];
+      if (items.isNotEmpty) {
+        newShelves.add(VideoShelf(title: 'Unliked Videos', videos: items));
+      }
+      emit(current.copyWith(unlikedVideos: items, shelves: newShelves));
+    } catch (_) {
+      // ignore
+    }
   }
 
   /// Handles stream errors from repository
