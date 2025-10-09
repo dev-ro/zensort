@@ -82,6 +82,198 @@ def _firestore():
     return _firestore_mod
 
 
+# In-memory cache for category maps by (regionCode, hl)
+_CATEGORY_CACHE: dict[tuple[str, str], dict[str, Any]] = {}
+_CATEGORY_CACHE_TTL_SECONDS = 6 * 60 * 60  # 6 hours
+
+
+def _parse_locale_to_region_hl(locale: str) -> tuple[str, str]:
+    """Return (regionCode, hl) from BCP 47 locale like 'en-US'."""
+    try:
+        if not isinstance(locale, str) or not locale:
+            return ("US", "en")
+        parts = locale.replace("_", "-").split("-")
+        if len(parts) == 1:
+            return ("US", parts[0].lower())
+        lang = parts[0].lower()
+        region = parts[-1].upper()
+        return (region, lang)
+    except Exception:
+        return ("US", "en")
+
+
+def _get_user_locale(db, user_id: str) -> str:
+    """Fetch user's preferred locale from /users/{uid}/settings.locale or default 'en-US'."""
+    try:
+        user_doc = db.collection("users").document(user_id).get()
+        if user_doc.exists:
+            data = user_doc.to_dict() or {}
+            settings = data.get("settings") or {}
+            loc = settings.get("locale")
+            if isinstance(loc, str) and loc:
+                return loc
+    except Exception:
+        pass
+    return "en-US"
+
+
+def _build_youtube_service(access_token: str):
+    credentials = oauth2_credentials.Credentials(
+        token=access_token,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id="unused",
+        client_secret="unused",
+        scopes=["https://www.googleapis.com/auth/youtube.readonly"],
+    )
+    try:
+        if getattr(credentials, "universe_domain", None) is None or isinstance(
+            getattr(credentials, "universe_domain"), object
+        ):
+            setattr(credentials, "universe_domain", "googleapis.com")
+    except Exception:
+        pass
+    return build("youtube", "v3", credentials=credentials)
+
+
+def _get_category_map_for_locale(
+    access_token: str, region_code: str, hl: str, db
+) -> dict[str, str]:
+    """Return a map of videoCategory id -> localized title for a given locale.
+    Caches in-memory and in Firestore doc `/ytCategoryMaps/{region_hl}`.
+    """
+    try:
+        cache_key = (region_code, hl)
+        now = time.time()
+        cached = _CATEGORY_CACHE.get(cache_key)
+        if cached and isinstance(cached.get("fetched_at"), (int, float)):
+            if now - cached["fetched_at"] < _CATEGORY_CACHE_TTL_SECONDS:
+                return cached.get("map", {})
+
+        # Try Firestore cache first
+        doc_id = f"{region_code}_{hl}"
+        cache_ref = db.collection("ytCategoryMaps").document(doc_id)
+        cache_doc = cache_ref.get()
+        if cache_doc.exists:
+            data = cache_doc.to_dict() or {}
+            categories = data.get("categories")
+            if isinstance(categories, dict) and categories:
+                # Update memory cache and return
+                _CATEGORY_CACHE[cache_key] = {"map": categories, "fetched_at": now}
+                return categories
+
+        # Fetch from YouTube API
+        youtube = _build_youtube_service(access_token)
+        request = youtube.videoCategories().list(
+            part="snippet", regionCode=region_code, hl=hl
+        )
+        response = request.execute()
+        items = response.get("items", [])
+        category_map: dict[str, str] = {}
+        for item in items:
+            cid = str(item.get("id", "")).strip()
+            snippet = item.get("snippet", {})
+            title = (snippet.get("title") or "").strip()
+            if cid and title:
+                category_map[cid] = title
+
+        # Persist cache to Firestore and memory
+        cache_ref.set(
+            {
+                "categories": category_map,
+                "updatedAt": datetime.now(timezone.utc),
+            }
+        )
+        _CATEGORY_CACHE[cache_key] = {"map": category_map, "fetched_at": now}
+        return category_map
+    except Exception as e:
+        logger.error(f"Failed to resolve category map for {region_code}/{hl}: {e}")
+        return {}
+
+
+@https_fn.on_call(timeout_sec=540)
+def backfill_liked_categories(req: https_fn.CallableRequest) -> dict:
+    """
+    Backfill /users/{uid}/likedVideos docs with categoryId/categoryTitle using
+    authoritative /videos/{id}.categoryId and localized titles per user locale.
+    Does not touch embeddings or /videos beyond reads.
+    Batch process with pagination cursors.
+    Expected request data:
+      - user_id: string (required)
+      - access_token: string (required, for YouTube category map)
+      - page_size: int (optional, default 200)
+      - start_after: string videoId (optional)
+    """
+    user_id = req.data.get("user_id")
+    access_token = req.data.get("access_token")
+    page_size = int(req.data.get("page_size", 200))
+    start_after = req.data.get("start_after")
+
+    if not user_id or not access_token:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            message="Missing user_id or access_token",
+        )
+
+    try:
+        db = _firestore().Client()
+        user_locale = _get_user_locale(db, user_id)
+        region_code, hl = _parse_locale_to_region_hl(user_locale)
+        category_map = _get_category_map_for_locale(access_token, region_code, hl, db)
+
+        liked_ref = db.collection("users").document(user_id).collection("likedVideos")
+        query = liked_ref.order_by("__name__").limit(page_size)
+        if start_after:
+            sad = liked_ref.document(start_after).get()
+            if sad.exists:
+                query = query.start_after(sad)
+
+        docs = query.get()
+        if not docs:
+            return {"processed": 0, "nextStartAfter": None, "done": True}
+
+        batch = db.batch()
+        last_id = None
+        processed = 0
+
+        for doc in docs:
+            last_id = doc.id
+            data = doc.to_dict() or {}
+            # Skip if already has both fields
+            if isinstance(data.get("categoryId"), str) and isinstance(
+                data.get("categoryTitle"), str
+            ):
+                continue
+
+            # Read authoritative categoryId from /videos
+            vdoc = db.collection("videos").document(doc.id).get()
+            if not vdoc.exists:
+                continue
+            vdata = vdoc.to_dict() or {}
+            cid = vdata.get("categoryId")
+            if not isinstance(cid, str) or not cid:
+                continue
+
+            ctitle = category_map.get(str(cid))
+            update = {"categoryId": cid}
+            if ctitle:
+                update["categoryTitle"] = ctitle
+            batch.set(doc.reference, update, merge=True)
+            processed += 1
+
+        batch.commit()
+        return {
+            "processed": processed,
+            "nextStartAfter": last_id,
+            "done": len(docs) < page_size,
+        }
+    except Exception as e:
+        logger.error(f"backfill_liked_categories error: {e}")
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INTERNAL,
+            message=f"Backfill failed: {str(e)}",
+        )
+
+
 @https_fn.on_request()
 def test_secret_manager(req) -> Any:
     """
@@ -194,7 +386,6 @@ class Video:
     publishedAt: datetime
     platform: str = "YouTube"
     addedToZensortAt: datetime | None = None
-    isMusic: bool = False
     # Authoritative classification fields from YouTube Data API v3
     categoryId: str | None = None
     topicCategories: list[str] | None = None
@@ -223,25 +414,7 @@ def get_liked_videos_total(req: https_fn.CallableRequest) -> dict:
         )
 
     try:
-        # Create OAuth2 credentials from the access token
-        credentials = oauth2_credentials.Credentials(
-            token=access_token,
-            token_uri="https://oauth2.googleapis.com/token",
-            client_id="unused",
-            client_secret="unused",
-            scopes=["https://www.googleapis.com/auth/youtube.readonly"],
-        )
-        # Ensure universe domain is set to the default to avoid client mismatch in tests/mocks
-        try:
-            if getattr(credentials, "universe_domain", None) is None or isinstance(
-                getattr(credentials, "universe_domain"), object
-            ):
-                setattr(credentials, "universe_domain", "googleapis.com")
-        except Exception:
-            pass
-
-        # Build the YouTube service
-        youtube = build("youtube", "v3", credentials=credentials)
+        youtube = _build_youtube_service(access_token)
 
         # Use playlistItems.list with the special "Liked Videos" playlist ID 'LL'
         # to get accurate total count including private/deleted videos
@@ -283,23 +456,7 @@ def fetch_liked_video_items(access_token: str) -> list[dict]:
         logger.info("=== Starting fetch_liked_video_items ===")
 
         # Create OAuth2 credentials from the access token
-        credentials = oauth2_credentials.Credentials(
-            token=access_token,
-            token_uri="https://oauth2.googleapis.com/token",
-            client_id="unused",
-            client_secret="unused",
-            scopes=["https://www.googleapis.com/auth/youtube.readonly"],
-        )
-        try:
-            if getattr(credentials, "universe_domain", None) is None or isinstance(
-                getattr(credentials, "universe_domain"), object
-            ):
-                setattr(credentials, "universe_domain", "googleapis.com")
-        except Exception:
-            pass
-
-        # Build the YouTube service
-        youtube = build("youtube", "v3", credentials=credentials)
+        youtube = _build_youtube_service(access_token)
 
         video_items = []
         next_page_token = None
@@ -403,22 +560,7 @@ def fetch_video_details(access_token: str, video_ids: list[str]) -> list[Video]:
     try:
         logger.info(f"=== Starting fetch_video_details for {len(video_ids)} videos ===")
 
-        credentials = oauth2_credentials.Credentials(
-            token=access_token,
-            token_uri="https://oauth2.googleapis.com/token",
-            client_id="unused",
-            client_secret="unused",
-            scopes=["https://www.googleapis.com/auth/youtube.readonly"],
-        )
-        try:
-            if getattr(credentials, "universe_domain", None) is None or isinstance(
-                getattr(credentials, "universe_domain"), object
-            ):
-                setattr(credentials, "universe_domain", "googleapis.com")
-        except Exception:
-            pass
-
-        youtube = build("youtube", "v3", credentials=credentials)
+        youtube = _build_youtube_service(access_token)
 
         all_videos = []  # Master list to aggregate all results
         batch_size = 50  # YouTube API limit for videos.list endpoint
@@ -477,16 +619,9 @@ def fetch_video_details(access_token: str, video_ids: list[str]) -> list[Video]:
                         or f"https://i.ytimg.com/vi/{item['id']}/hqdefault.jpg"
                     )
 
-                    # Determine music classification
+                    # Category metadata
                     category_id = snippet.get("categoryId", "")
                     topics = topic_details.get("topicCategories", []) or []
-                    is_music = False
-                    try:
-                        is_music = category_id == "10" or any(
-                            str(t).endswith("/Music") for t in topics
-                        )
-                    except Exception:
-                        is_music = category_id == "10"
 
                     video = Video(
                         videoId=item["id"],
@@ -497,7 +632,6 @@ def fetch_video_details(access_token: str, video_ids: list[str]) -> list[Video]:
                         publishedAt=published_at,
                         platform="YouTube",
                         addedToZensortAt=datetime.now(timezone.utc),
-                        isMusic=is_music,
                         categoryId=category_id,
                         topicCategories=topics,
                     )
@@ -585,7 +719,7 @@ def get_existing_video_ids(video_ids: list[str]) -> set[str]:
 def get_videos_missing_enrichment(video_ids: list[str]) -> list[str]:
     """
     From a list of existing video IDs, return the subset that is missing
-    the authoritative enrichment fields (categoryId, topicCategories, isMusic).
+    the authoritative enrichment fields (categoryId, topicCategories).
 
     Skips private/deleted placeholder videos.
     """
@@ -614,9 +748,7 @@ def get_videos_missing_enrichment(video_ids: list[str]) -> list[str]:
             )
             topics = data.get("topicCategories")
             has_topics = isinstance(topics, list) and len(topics) > 0
-            has_is_music_field = "isMusic" in data
-
-            if not (has_category_id and has_topics and has_is_music_field):
+            if not (has_category_id and has_topics):
                 missing_ids.append(doc.id)
 
         logger.info(
@@ -885,6 +1017,11 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
 
         sync_timestamp = datetime.now(timezone.utc)
 
+        # Resolve user locale and category title map
+        user_locale = _get_user_locale(db, user_id)
+        region_code, hl = _parse_locale_to_region_hl(user_locale)
+        category_map = _get_category_map_for_locale(access_token, region_code, hl, db)
+
         # Add new videos (public + placeholders) to the root /videos collection
         for video in videos_to_store:
             video_doc_ref = db.collection("videos").document(video.videoId)
@@ -899,7 +1036,6 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
                 "thumbnailUrl": video.thumbnailUrl,
                 "publishedAt": video.publishedAt,
                 "addedToZensortAt": video.addedToZensortAt,
-                "isMusic": getattr(video, "isMusic", False),
             }
 
             # Include authoritative YouTube classification fields when available
@@ -922,9 +1058,7 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
                 if not video:
                     continue
                 video_doc_ref = db.collection("videos").document(video.videoId)
-                update_data = {
-                    "isMusic": getattr(video, "isMusic", False),
-                }
+                update_data = {}
                 if getattr(video, "categoryId", None) is not None:
                     update_data["categoryId"] = video.categoryId
                 if getattr(video, "topicCategories", None) is not None:
@@ -953,15 +1087,52 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
                     .collection("likedVideos")
                     .document(video_id)
                 )
-                batch.set(
-                    liked_video_doc_ref,
-                    {
-                        "likedAt": video_item[
-                            "likedAt"
-                        ],  # Correct timestamp from playlist API
-                        "syncedAt": sync_timestamp,
-                    },
-                )
+                # Resolve categoryId and localized categoryTitle if available
+                category_id = None
+                category_title = None
+                # Prefer details map for new videos fetched this run
+                video_detail = video_details_map.get(video_id)
+                if video_detail and getattr(video_detail, "categoryId", None):
+                    category_id = video_detail.categoryId
+                else:
+                    # Fallback: read from existing /videos if present
+                    try:
+                        vdoc = db.collection("videos").document(video_id).get()
+                        if vdoc.exists:
+                            vdata = vdoc.to_dict() or {}
+                            cid = vdata.get("categoryId")
+                            if isinstance(cid, str) and cid:
+                                category_id = cid
+                    except Exception:
+                        pass
+
+                if category_id:
+                    category_title = category_map.get(str(category_id))
+                # Prepare relation payload with guarded access to detail fields
+                relation_data = {
+                    "likedAt": video_item["likedAt"],
+                    "syncedAt": sync_timestamp,
+                }
+                vdet = video_details_map.get(video_id)
+                if vdet is not None:
+                    try:
+                        title_val = getattr(vdet, "title", None)
+                        if title_val:
+                            relation_data["title"] = title_val
+                        channel_val = getattr(vdet, "channelTitle", None)
+                        if channel_val:
+                            relation_data["channelTitle"] = channel_val
+                        thumb_val = getattr(vdet, "thumbnailUrl", None)
+                        if thumb_val:
+                            relation_data["thumbnailUrl"] = thumb_val
+                    except Exception:
+                        pass
+                if category_id:
+                    relation_data["categoryId"] = category_id
+                if category_title:
+                    relation_data["categoryTitle"] = category_title
+
+                batch.set(liked_video_doc_ref, relation_data)
 
         # Handle newly unliked videos - move to unlikedVideos subcollection
         for unliked_video_id in newly_unliked:

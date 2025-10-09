@@ -171,26 +171,36 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
   }
 
   List<VideoShelf> _buildBaseShelves(List<LikedVideo> allVideos) {
-    final unavailableVideos = allVideos
-        .where((v) => v.title == 'Private video' || v.title == 'Deleted video')
-        .toList();
-    final legacyMusic = allVideos
-        .where((v) => v.channelName == 'Music Library Uploads')
-        .toList();
-    final musicVideos = allVideos.where((v) => v.isMusic).toList();
-
     final shelves = <VideoShelf>[];
     if (allVideos.isNotEmpty) {
       shelves.add(VideoShelf(title: 'All Videos', videos: allVideos));
     }
-    if (musicVideos.isNotEmpty) {
-      shelves.add(VideoShelf(title: 'Music', videos: musicVideos));
+
+    // Group by categoryTitle
+    final Map<String, List<LikedVideo>> byCategory = {};
+    for (final v in allVideos) {
+      final title = (v.categoryTitle ?? '').trim();
+      if (title.isEmpty) continue;
+      byCategory.putIfAbsent(title, () => <LikedVideo>[]).add(v);
     }
+    for (final entry in byCategory.entries) {
+      if (entry.value.isNotEmpty) {
+        shelves.add(VideoShelf(title: entry.key, videos: entry.value));
+      }
+    }
+
+    // Special shelves remain
+    final unavailableVideos = allVideos
+        .where((v) => v.title == 'Private video' || v.title == 'Deleted video')
+        .toList();
     if (unavailableVideos.isNotEmpty) {
       shelves.add(
         VideoShelf(title: 'Unavailable Videos', videos: unavailableVideos),
       );
     }
+    final legacyMusic = allVideos
+        .where((v) => v.channelName == 'Music Library Uploads')
+        .toList();
     if (legacyMusic.isNotEmpty) {
       shelves.add(
         VideoShelf(title: 'Legacy Music Uploads', videos: legacyMusic),
@@ -217,7 +227,8 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     // Fire and forget check
     Future(() async {
       try {
-        final remoteTotal = await _youtubeRepository.fetchRemoteLikedVideosTotal();
+        final remoteTotal = await _youtubeRepository
+            .fetchRemoteLikedVideosTotal();
         print('Remote liked total: $remoteTotal, local count: $localCount');
         if (remoteTotal != localCount) {
           print('Mismatch detected; triggering auto-sync');

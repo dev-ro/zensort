@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:rxdart/rxdart.dart';
 import 'package:zensort/features/auth/domain/repositories/auth_repository.dart';
 import 'package:zensort/features/youtube/domain/entities/liked_video.dart';
 import 'package:zensort/features/youtube/domain/entities/sync_progress.dart';
@@ -103,20 +102,6 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
         });
   }
 
-  /// A utility function that splits a list into chunks of a specified size.
-  List<List<T>> _partition<T>(List<T> list, int size) {
-    if (size <= 0) {
-      throw ArgumentError('Size must be positive');
-    }
-    final parts = <List<T>>[];
-    final listLength = list.length;
-    for (var i = 0; i < listLength; i += size) {
-      final end = (i + size < listLength) ? i + size : listLength;
-      parts.add(list.sublist(i, end));
-    }
-    return parts;
-  }
-
   @override
   Stream<List<LikedVideo>> watchLikedVideos() {
     final user = _auth.currentUser;
@@ -124,61 +109,27 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
       return Stream.value([]);
     }
 
-    // Create stream of liked video IDs from user's likedVideos subcollection
-    final likedVideoIdsStream = _firestore
+    // Stream the first 100 most recent liked videos with denormalized fields from likedVideos
+    return _firestore
         .collection('users')
         .doc(user.uid)
         .collection('likedVideos')
         .orderBy('likedAt', descending: true)
+        .limit(100)
         .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => doc.id).toList());
-
-    // Use switchMap to handle the incoming stream of ID lists
-    return likedVideoIdsStream.switchMap((videoIds) {
-      // Handle the edge case of an empty list of IDs
-      if (videoIds.isEmpty) {
-        return Stream.value(<LikedVideo>[]);
-      }
-
-      // Partition the incoming list of IDs into chunks of 10
-      final idChunks = _partition(videoIds, 10);
-
-      // For each chunk, create a Future that fetches the corresponding documents
-      final futures = idChunks.map((chunk) {
-        return _firestore
-            .collection('videos')
-            .where(FieldPath.documentId, whereIn: chunk)
-            .get()
-            .then((snapshot) => snapshot.docs);
-      }).toList();
-
-      // Use Future.wait to execute all fetch operations in parallel
-      return Stream.fromFuture(Future.wait(futures)).map((listOfListOfDocs) {
-        // Flatten the nested list
-        final flatList = listOfListOfDocs.expand((docList) => docList).toList();
-
-        // Map the raw DocumentSnapshots to our strongly-typed LikedVideo model objects
-        final videos = flatList.map((doc) {
-          final data = doc.data();
-          return LikedVideo(
-            id: doc.id,
-            title: data['title'] ?? '',
-            channelName: data['channelTitle'] ?? '',
-            thumbnailUrl: data['thumbnailUrl'] ?? '',
-            isMusic: (data['isMusic'] as bool?) ?? false,
-          );
-        }).toList();
-
-        // Re-order the results to match the original order
-        final videosById = {for (var video in videos) video.id: video};
-        final orderedVideos = videoIds
-            .map((id) => videosById[id])
-            .whereType<LikedVideo>() // Filter out nulls in case a video was deleted
-            .toList();
-
-        return orderedVideos;
-      });
-    });
+        .map((snapshot) {
+          return snapshot.docs.map((doc) {
+            final data = doc.data();
+            return LikedVideo(
+              id: doc.id,
+              title: (data['title'] as String?) ?? '',
+              channelName: (data['channelTitle'] as String?) ?? '',
+              thumbnailUrl: (data['thumbnailUrl'] as String?) ?? '',
+              categoryId: data['categoryId'] as String?,
+              categoryTitle: data['categoryTitle'] as String?,
+            );
+          }).toList();
+        });
   }
 
   @override
@@ -188,7 +139,9 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
     final accessToken = await _authRepository.getAccessToken();
     if (accessToken == null) throw Exception('Missing access token');
 
-    final callable = FirebaseFunctions.instance.httpsCallable('get_liked_videos_total');
+    final callable = FirebaseFunctions.instance.httpsCallable(
+      'get_liked_videos_total',
+    );
     final result = await callable.call({'access_token': accessToken});
     final total = (result.data['total'] as num?)?.toInt() ?? 0;
     return total;

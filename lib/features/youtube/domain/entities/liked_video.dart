@@ -5,14 +5,16 @@ class LikedVideo extends Equatable {
   final String title;
   final String channelName;
   final String thumbnailUrl;
-  final bool isMusic;
+  final String? categoryId;
+  final String? categoryTitle;
 
   const LikedVideo({
     required this.id,
     required this.title,
     required this.channelName,
     required this.thumbnailUrl,
-    this.isMusic = false,
+    this.categoryId,
+    this.categoryTitle,
   });
 
   // Serialization methods for hydrated_bloc
@@ -22,7 +24,8 @@ class LikedVideo extends Equatable {
       title: json['title'] as String,
       channelName: json['channelName'] as String,
       thumbnailUrl: json['thumbnailUrl'] as String,
-      isMusic: (json['isMusic'] as bool?) ?? false,
+      categoryId: json['categoryId'] as String?,
+      categoryTitle: json['categoryTitle'] as String?,
     );
   }
 
@@ -32,7 +35,8 @@ class LikedVideo extends Equatable {
       'title': title,
       'channelName': channelName,
       'thumbnailUrl': thumbnailUrl,
-      'isMusic': isMusic,
+      if (categoryId != null) 'categoryId': categoryId,
+      if (categoryTitle != null) 'categoryTitle': categoryTitle,
     };
   }
 
@@ -41,11 +45,18 @@ class LikedVideo extends Equatable {
   /// are known to have broken thumbnail URLs.
   bool shouldSkipThumbnailLoad() {
     return title == 'Private video' ||
-           title == 'Deleted video' ||
-           title == 'Music Library Uploads' ||
-           channelName == 'Music Library Uploads';
+        title == 'Deleted video' ||
+        title == 'Music Library Uploads' ||
+        channelName == 'Music Library Uploads';
   }
 
   @override
-  List<Object?> get props => [id, title, channelName, thumbnailUrl, isMusic];
+  List<Object?> get props => [
+    id,
+    title,
+    channelName,
+    thumbnailUrl,
+    categoryId,
+    categoryTitle,
+  ];
 }

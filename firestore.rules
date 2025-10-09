@@ -140,11 +140,21 @@ function validateVideoUpdate(newData, existingData) {
 }
 
 function validateLikedVideoData(data) {
-  // Validate liked video relation structure
-  return data.keys().hasAll(['likedAt', 'syncedAt'])
+  // Validate liked video relation structure (denormalized display fields allowed)
+  let hasCore = data.keys().hasAll(['likedAt', 'syncedAt'])
     && data.likedAt is timestamp
-    && data.syncedAt is timestamp
-    && data.keys().size() == 2; // Only allow these two fields
+    && data.syncedAt is timestamp;
+
+  let validOptional = (!data.keys().hasAny(['title']) || data.title is string)
+    && (!data.keys().hasAny(['channelTitle']) || data.channelTitle is string)
+    && (!data.keys().hasAny(['thumbnailUrl']) || (data.thumbnailUrl is string && data.thumbnailUrl.size() <= 500))
+    && (!data.keys().hasAny(['categoryId']) || data.categoryId is string)
+    && (!data.keys().hasAny(['categoryTitle']) || data.categoryTitle is string);
+
+  // Only allow expected fields
+  let allowed = data.keys().hasOnly(['likedAt','syncedAt','title','channelTitle','thumbnailUrl','categoryId','categoryTitle']);
+
+  return hasCore && validOptional && allowed;
 }
 
 function validateSyncJobData(data) {
