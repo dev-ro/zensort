@@ -7,6 +7,7 @@ class LikedVideo extends Equatable {
   final String thumbnailUrl;
   final String? categoryId;
   final String? categoryTitle;
+  final List<String> topicTags;
 
   const LikedVideo({
     required this.id,
@@ -15,6 +16,7 @@ class LikedVideo extends Equatable {
     required this.thumbnailUrl,
     this.categoryId,
     this.categoryTitle,
+    this.topicTags = const [],
   });
 
   // Serialization methods for hydrated_bloc
@@ -26,6 +28,7 @@ class LikedVideo extends Equatable {
       thumbnailUrl: json['thumbnailUrl'] as String,
       categoryId: json['categoryId'] as String?,
       categoryTitle: json['categoryTitle'] as String?,
+      topicTags: (json['topicTags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const [],
     );
   }
 
@@ -37,6 +40,7 @@ class LikedVideo extends Equatable {
       'thumbnailUrl': thumbnailUrl,
       if (categoryId != null) 'categoryId': categoryId,
       if (categoryTitle != null) 'categoryTitle': categoryTitle,
+      if (topicTags.isNotEmpty) 'topicTags': topicTags,
     };
   }
 
@@ -58,5 +62,6 @@ class LikedVideo extends Equatable {
     thumbnailUrl,
     categoryId,
     categoryTitle,
+    topicTags,
   ];
 }
