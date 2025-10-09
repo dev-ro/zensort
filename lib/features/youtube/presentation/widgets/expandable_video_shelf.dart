@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:zensort/features/youtube/domain/entities/liked_video.dart';
 import 'package:zensort/features/youtube/presentation/widgets/responsive_video_grid.dart';
 
-class ExpandableVideoShelf extends StatefulWidget {
+class ExpandableVideoShelf extends StatelessWidget {
   final String title;
   final List<LikedVideo> videos;
-  final bool initiallyExpanded;
+  final bool isExpanded;
+  final ValueChanged<bool>? onExpansionChanged;
   final VoidCallback? onEndReached; // Triggered when near bottom
   final VoidCallback? onExpand; // Trigger initial load on expand
   final bool isLoading;
@@ -15,7 +16,8 @@ class ExpandableVideoShelf extends StatefulWidget {
     super.key,
     required this.title,
     required this.videos,
-    this.initiallyExpanded = false,
+    required this.isExpanded,
+    this.onExpansionChanged,
     this.onEndReached,
     this.onExpand,
     this.isLoading = false,
@@ -23,33 +25,20 @@ class ExpandableVideoShelf extends StatefulWidget {
   });
 
   @override
-  State<ExpandableVideoShelf> createState() => _ExpandableVideoShelfState();
-}
-
-class _ExpandableVideoShelfState extends State<ExpandableVideoShelf> {
-  late bool _expanded;
-
-  @override
-  void initState() {
-    super.initState();
-    _expanded = widget.initiallyExpanded;
-  }
-
-  @override
   Widget build(BuildContext context) {
     final titleStyle = Theme.of(context).textTheme.titleLarge;
 
     return ExpansionTile(
-      initiallyExpanded: _expanded,
+      initiallyExpanded: isExpanded,
       onExpansionChanged: (value) {
-        setState(() => _expanded = value);
-        if (value && widget.onExpand != null) widget.onExpand!();
+        if (value && onExpand != null) onExpand!();
+        if (onExpansionChanged != null) onExpansionChanged!(value);
       },
-      title: Text(widget.title, style: titleStyle),
+      title: Text(title, style: titleStyle),
       tilePadding: const EdgeInsets.symmetric(horizontal: 16),
       childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       children: [
-        if (widget.videos.isEmpty && !widget.isLoading)
+        if (videos.isEmpty && !isLoading)
           Padding(
             padding: const EdgeInsets.only(bottom: 12.0),
             child: Text(
@@ -58,20 +47,31 @@ class _ExpandableVideoShelfState extends State<ExpandableVideoShelf> {
             ),
           )
         else ...[
-          NotificationListener<ScrollNotification>(
-            onNotification: (notification) {
-              if (notification.metrics.pixels >=
-                      notification.metrics.maxScrollExtent * 0.7 &&
-                  widget.hasMore &&
-                  widget.onEndReached != null &&
-                  !widget.isLoading) {
-                widget.onEndReached!();
-              }
-              return false;
+          LayoutBuilder(
+            builder: (context, constraints) {
+              // Constrain inner scroll to viewport height so shelves can individually infinite-scroll
+              final maxHeight = MediaQuery.of(context).size.height * 0.7;
+              return ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: maxHeight),
+                child: NotificationListener<ScrollNotification>(
+                  onNotification: (notification) {
+                    if (notification.metrics.pixels >=
+                            notification.metrics.maxScrollExtent * 0.7 &&
+                        hasMore &&
+                        onEndReached != null &&
+                        !isLoading) {
+                      onEndReached!();
+                    }
+                    return false;
+                  },
+                  child: SingleChildScrollView(
+                    child: ResponsiveVideoGrid(videos: videos),
+                  ),
+                ),
+              );
             },
-            child: ResponsiveVideoGrid(videos: widget.videos),
           ),
-          if (widget.isLoading)
+          if (isLoading)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 12.0),
               child: Center(child: CircularProgressIndicator()),

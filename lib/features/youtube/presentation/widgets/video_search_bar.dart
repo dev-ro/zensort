@@ -45,6 +45,7 @@ class _VideoSearchBarState extends State<VideoSearchBar> {
               _controller.clear();
               FocusScope.of(context).unfocus();
               context.read<YouTubeBloc>().add(const SearchQueryChanged(''));
+              context.read<YouTubeBloc>().add(const TopicFilterChanged(null));
             },
           ),
           filled: true,

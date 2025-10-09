@@ -27,15 +27,38 @@ class YoutubeLoaded extends YoutubeState {
   final List<VideoShelf> shelves;
   final List<LikedVideo> allVideos;
   final String searchQuery;
+  final bool hasMore;
+  final bool loadingMore;
+  final String? nextCursor;
+  final String? expandedShelfKey; // title as key for now
+  final String? selectedTopic;
+  final List<String> availableTopics;
+  final bool isFullyLoaded;
 
   const YoutubeLoaded({
     required this.shelves,
     required this.allVideos,
     required this.searchQuery,
+    this.hasMore = false,
+    this.loadingMore = false,
+    this.nextCursor,
+    this.expandedShelfKey,
+    this.selectedTopic,
+    this.availableTopics = const [],
+    this.isFullyLoaded = false,
   });
 
-  factory YoutubeLoaded.initial() =>
-      const YoutubeLoaded(shelves: [], allVideos: [], searchQuery: '');
+  factory YoutubeLoaded.initial() => const YoutubeLoaded(
+    shelves: [],
+    allVideos: [],
+    searchQuery: '',
+    hasMore: false,
+    loadingMore: false,
+    expandedShelfKey: null,
+    selectedTopic: null,
+    availableTopics: [],
+    isFullyLoaded: false,
+  );
 
   // Serialization methods for hydrated_bloc
   factory YoutubeLoaded.fromJson(Map<String, dynamic> json) {
@@ -45,27 +68,58 @@ class YoutubeLoaded extends YoutubeState {
       shelves: const [],
       allVideos: const [],
       searchQuery: query,
+      hasMore: false,
+      loadingMore: false,
+      expandedShelfKey: json['expandedShelfKey'] as String?,
+      selectedTopic: json['selectedTopic'] as String?,
+      availableTopics: const [],
+      isFullyLoaded: false,
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'searchQuery': searchQuery};
+    return {
+      'searchQuery': searchQuery,
+      if (expandedShelfKey != null) 'expandedShelfKey': expandedShelfKey,
+      if (selectedTopic != null) 'selectedTopic': selectedTopic,
+    };
   }
 
   YoutubeLoaded copyWith({
     List<VideoShelf>? shelves,
     List<LikedVideo>? allVideos,
     String? searchQuery,
+    bool? hasMore,
+    bool? loadingMore,
+    String? nextCursor,
+    String? expandedShelfKey,
+    String? selectedTopic,
+    List<String>? availableTopics,
+    bool? isFullyLoaded,
   }) {
     return YoutubeLoaded(
       shelves: shelves ?? this.shelves,
       allVideos: allVideos ?? this.allVideos,
       searchQuery: searchQuery ?? this.searchQuery,
+      hasMore: hasMore ?? this.hasMore,
+      loadingMore: loadingMore ?? this.loadingMore,
+      nextCursor: nextCursor ?? this.nextCursor,
+      expandedShelfKey: expandedShelfKey ?? this.expandedShelfKey,
+      selectedTopic: selectedTopic ?? this.selectedTopic,
+      availableTopics: availableTopics ?? this.availableTopics,
+      isFullyLoaded: isFullyLoaded ?? this.isFullyLoaded,
     );
   }
 
   @override
-  List<Object?> get props => [shelves, allVideos, searchQuery];
+  List<Object?> get props => [
+    shelves,
+    allVideos,
+    searchQuery,
+    hasMore,
+    loadingMore,
+    nextCursor,
+  ];
 }
 
 class YoutubeFailure extends YoutubeState {

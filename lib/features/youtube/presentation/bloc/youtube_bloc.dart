@@ -39,6 +39,7 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     : super(YoutubeInitial()) {
     on<SyncLikedVideos>(_onSyncLikedVideos);
     on<LoadInitialVideos>(_onLoadInitialVideos);
+    on<LoadMoreAllVideos>(_onLoadMoreAllVideos, transformer: droppable());
     on<_YoutubeSyncProgressUpdated>(_onYoutubeSyncProgressUpdated);
     on<_AuthStatusChanged>(_onAuthStatusChanged, transformer: restartable());
     on<_LikedVideosUpdated>(_onLikedVideosUpdated);
@@ -47,6 +48,10 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
       _onSearchQueryChanged,
       transformer: _debounceRestartable(const Duration(milliseconds: 250)),
     );
+    on<ShelfExpansionChanged>(_onShelfExpansionChanged);
+    on<LoadAllVideosForSearch>(_onLoadAllVideosForSearch, transformer: droppable());
+    on<TopicFilterChanged>(_onTopicFilterChanged,
+        transformer: _debounceRestartable(const Duration(milliseconds: 150)));
 
     // Listen to AuthBloc's stable authentication state (hierarchical flow)
     // Repository -> AuthBloc -> YouTubeBloc
@@ -137,7 +142,12 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     } catch (e) {
       print('Error calling sync function: $e');
       print('Stack trace: ${StackTrace.current}');
+      // Non-destructive: surface failure then restore last loaded shelves
+      final lastLoaded = state is YoutubeLoaded ? state as YoutubeLoaded : null;
       emit(YoutubeFailure('Video sync failed: $e'));
+      if (lastLoaded != null) {
+        emit(lastLoaded);
+      }
     }
   }
 
@@ -165,8 +175,12 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
       print('Sync completed! Emitting YoutubeSyncSuccess');
       emit(YoutubeSyncSuccess());
     } else if (progress.status == SyncStatus.failed) {
-      print('Sync failed! Emitting YoutubeFailure');
+      print('Sync failed! Emitting YoutubeFailure but preserving UI');
+      final lastLoaded = state is YoutubeLoaded ? state as YoutubeLoaded : null;
       emit(const YoutubeFailure('Video sync failed.'));
+      if (lastLoaded != null) {
+        emit(lastLoaded);
+      }
     }
   }
 
@@ -209,6 +223,18 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     return shelves;
   }
 
+  List<String> _deriveAvailableTopics(List<LikedVideo> videos) {
+    // Note: LikedVideo does not include topicTags currently; derive from categoryTitle as fallback
+    // This will be extended when LikedVideo includes topic tags
+    final set = <String>{};
+    for (final v in videos) {
+      final cat = (v.categoryTitle ?? '').trim();
+      if (cat.isNotEmpty) set.add(cat);
+    }
+    final list = set.toList()..sort();
+    return list;
+  }
+
   List<LikedVideo> _filterVideos(List<LikedVideo> allVideos, String query) {
     if (query.trim().isEmpty) return allVideos;
     final q = query.toLowerCase();
@@ -221,17 +247,23 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
         .toList();
   }
 
-  void _verifyTotalsOnceAsync(int localCount) {
+  void _verifyTotalsOnceAsync(int initialPageCount) {
     if (_hasVerifiedRemoteTotal) return;
     _hasVerifiedRemoteTotal = true;
     // Fire and forget check
     Future(() async {
       try {
+        // Use aggregate local count, not the limited page size
         final remoteTotal = await _youtubeRepository
             .fetchRemoteLikedVideosTotal();
-        print('Remote liked total: $remoteTotal, local count: $localCount');
-        if (remoteTotal != localCount) {
-          print('Mismatch detected; triggering auto-sync');
+        final localTotal = await _youtubeRepository
+            .fetchLocalLikedVideosCount();
+        print(
+          'Remote liked total: $remoteTotal, local total: $localTotal, initial page: $initialPageCount',
+        );
+        // Only trigger when local is zero or the gap is meaningful (>= 5)
+        if (localTotal == 0 || (remoteTotal - localTotal) >= 5) {
+          print('Meaningful mismatch detected; triggering auto-sync');
           add(SyncLikedVideos());
         }
       } catch (e) {
@@ -277,7 +309,15 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     if (currentQuery.isEmpty) {
       final shelves = _buildBaseShelves(allVideos);
       emit(
-        YoutubeLoaded(shelves: shelves, allVideos: allVideos, searchQuery: ''),
+        YoutubeLoaded(
+          shelves: shelves,
+          allVideos: allVideos,
+          searchQuery: '',
+          // We don't know hasMore until we fetch a page cursor; start optimistic
+          hasMore: true,
+          loadingMore: false,
+          availableTopics: _deriveAvailableTopics(allVideos),
+        ),
       );
     } else {
       final filtered = _filterVideos(allVideos, currentQuery);
@@ -289,8 +329,48 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
           shelves: shelves,
           allVideos: allVideos,
           searchQuery: currentQuery,
+          hasMore: true,
+          loadingMore: false,
+          availableTopics: _deriveAvailableTopics(allVideos),
         ),
       );
+    }
+  }
+
+  Future<void> _onLoadMoreAllVideos(
+    LoadMoreAllVideos event,
+    Emitter<YoutubeState> emit,
+  ) async {
+    final current = state is YoutubeLoaded ? state as YoutubeLoaded : null;
+    if (current == null) return;
+    if (current.loadingMore || !current.hasMore) return;
+
+    emit(current.copyWith(loadingMore: true));
+    try {
+      final fallbackCursor =
+          current.nextCursor ??
+          (current.allVideos.isNotEmpty ? current.allVideos.last.id : null);
+      final page = await _youtubeRepository.fetchLikedVideosPage(
+        startAfterId: fallbackCursor,
+        limit: 100,
+      );
+
+      final merged = List<LikedVideo>.from(current.allVideos)
+        ..addAll(page.videos);
+      final shelves = _buildBaseShelves(merged);
+      emit(
+        current.copyWith(
+          allVideos: merged,
+          shelves: shelves,
+          hasMore: page.hasMore,
+          nextCursor: page.nextCursor,
+          loadingMore: false,
+        ),
+      );
+    } catch (e) {
+      print('LoadMoreAllVideos failed: $e');
+      // Non-destructive; stop loading but keep state
+      emit(current.copyWith(loadingMore: false));
     }
   }
 
@@ -313,7 +393,67 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
         VideoShelf(title: 'Search Results', videos: filtered),
       ];
       emit(currentLoaded.copyWith(shelves: shelves, searchQuery: query));
+      // Trigger full load if not fully loaded
+      if (!currentLoaded.isFullyLoaded) {
+        add(LoadAllVideosForSearch());
+      }
     }
+  }
+
+  Future<void> _onLoadAllVideosForSearch(
+    LoadAllVideosForSearch event,
+    Emitter<YoutubeState> emit,
+  ) async {
+    final current = state is YoutubeLoaded ? state as YoutubeLoaded : null;
+    if (current == null) return;
+    await emit.forEach<List<LikedVideo>>(
+      _youtubeRepository.fetchAllLikedVideosBatched(pageSize: 200),
+      onData: (videos) {
+        final query = current.searchQuery;
+        final filtered = query.isEmpty ? videos : _filterVideos(videos, query);
+        final shelves = <VideoShelf>[
+          if (query.isNotEmpty)
+            VideoShelf(title: 'Search Results', videos: filtered)
+          else
+            ..._buildBaseShelves(videos),
+        ];
+        return current.copyWith(
+          allVideos: videos,
+          shelves: shelves,
+          isFullyLoaded: true,
+          availableTopics: _deriveAvailableTopics(videos),
+        );
+      },
+      onError: (_, __) => current,
+    );
+  }
+
+  void _onShelfExpansionChanged(
+    ShelfExpansionChanged event,
+    Emitter<YoutubeState> emit,
+  ) {
+    final current = state is YoutubeLoaded ? state as YoutubeLoaded : YoutubeLoaded.initial();
+    emit(current.copyWith(expandedShelfKey: event.shelfKey));
+  }
+
+  void _onTopicFilterChanged(
+    TopicFilterChanged event,
+    Emitter<YoutubeState> emit,
+  ) {
+    final current = state is YoutubeLoaded ? state as YoutubeLoaded : YoutubeLoaded.initial();
+    final topic = event.topic;
+    final all = current.allVideos;
+    if (topic == null || topic.isEmpty) {
+      final shelves = _buildBaseShelves(all);
+      emit(current.copyWith(shelves: shelves, selectedTopic: null));
+      return;
+    }
+    // For now, filter by categoryTitle as proxy for topics
+    final filtered = all.where((v) => (v.categoryTitle ?? '').toLowerCase() == topic.toLowerCase()).toList();
+    final shelves = <VideoShelf>[
+      VideoShelf(title: 'Filtered by $topic', videos: filtered),
+    ];
+    emit(current.copyWith(shelves: shelves, selectedTopic: topic));
   }
 
   /// Handles stream errors from repository

@@ -181,13 +181,21 @@ class _HomeScreenState extends State<HomeScreen> {
                             itemCount: state.shelves.length,
                             itemBuilder: (context, index) {
                               final shelf = state.shelves[index];
-                              final expand = state
-                                  .searchQuery
-                                  .isNotEmpty; // expand search results
+                              final isExpanded = shelf.title == state.expandedShelfKey || state.searchQuery.isNotEmpty;
                               return ExpandableVideoShelf(
                                 title: shelf.title,
                                 videos: shelf.videos,
-                                initiallyExpanded: expand,
+                                isExpanded: isExpanded,
+                                hasMore: state.hasMore,
+                                isLoading: state.loadingMore,
+                                onExpansionChanged: (expanded) {
+                                  context
+                                      .read<YouTubeBloc>()
+                                      .add(ShelfExpansionChanged(expanded ? shelf.title : null));
+                                },
+                                onEndReached: () => context
+                                    .read<YouTubeBloc>()
+                                    .add(LoadMoreAllVideos()),
                               );
                             },
                           ),

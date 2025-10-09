@@ -11,12 +11,32 @@ class SyncLikedVideos extends YoutubeEvent {}
 
 class LoadInitialVideos extends YoutubeEvent {}
 
+class LoadMoreAllVideos extends YoutubeEvent {}
+
 class SearchQueryChanged extends YoutubeEvent {
   final String query;
   const SearchQueryChanged(this.query);
 
   @override
   List<Object> get props => [query];
+}
+
+class ShelfExpansionChanged extends YoutubeEvent {
+  final String? shelfKey; // title-based key; null means collapse all
+  const ShelfExpansionChanged(this.shelfKey);
+
+  @override
+  List<Object> get props => [shelfKey ?? ''];
+}
+
+class LoadAllVideosForSearch extends YoutubeEvent {}
+
+class TopicFilterChanged extends YoutubeEvent {
+  final String? topic; // null clears filter
+  const TopicFilterChanged(this.topic);
+
+  @override
+  List<Object> get props => [topic ?? ''];
 }
 
 class _YoutubeSyncProgressUpdated extends YoutubeEvent {
