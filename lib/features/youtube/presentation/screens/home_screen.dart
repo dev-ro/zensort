@@ -5,6 +5,7 @@ import 'package:zensort/features/youtube/presentation/bloc/youtube_bloc.dart';
 import 'package:zensort/features/youtube/presentation/widgets/video_search_bar.dart';
 import 'package:zensort/features/youtube/presentation/widgets/expandable_video_shelf.dart';
 import 'package:zensort/features/youtube/presentation/widgets/responsive_video_grid.dart';
+import 'package:zensort/features/youtube/presentation/widgets/topic_filter_menu.dart';
 import 'package:zensort/theme.dart';
 import 'package:zensort/widgets/gradient_loader.dart';
 
@@ -178,27 +179,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   const VideoSearchBar(),
                   if (state.availableTopics.isNotEmpty)
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      child: Row(
-                        children: [
-                          for (final topic in state.availableTopics)
-                            Padding(
-                              padding: const EdgeInsets.only(right: 8.0),
-                              child: FilterChip(
-                                selected: state.selectedTopic == topic,
-                                label: Text(topic),
-                                onSelected: (sel) =>
-                                    context.read<YouTubeBloc>().add(
-                                      TopicFilterChanged(sel ? topic : null),
-                                    ),
-                              ),
-                            ),
-                        ],
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      child: TopicFilterMenu(
+                        availableTopics: state.availableTopics,
+                        selectedTopic: state.selectedTopic,
+                        onSelected: (value) => context
+                            .read<YouTubeBloc>()
+                            .add(TopicFilterChanged(value)),
                       ),
                     ),
                   Expanded(
