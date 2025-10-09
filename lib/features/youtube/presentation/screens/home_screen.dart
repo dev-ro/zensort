@@ -174,12 +174,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   const VideoSearchBar(),
                   Expanded(
                     child: state.shelves.isEmpty
-                        ? const Center(child: Text('No liked videos found. Try syncing!'))
+                        ? const Center(
+                            child: Text('No liked videos found. Try syncing!'),
+                          )
                         : ListView.builder(
                             itemCount: state.shelves.length,
                             itemBuilder: (context, index) {
                               final shelf = state.shelves[index];
-                              final expand = state.searchQuery.isNotEmpty; // expand search results
+                              final expand = state
+                                  .searchQuery
+                                  .isNotEmpty; // expand search results
                               return ExpandableVideoShelf(
                                 title: shelf.title,
                                 videos: shelf.videos,

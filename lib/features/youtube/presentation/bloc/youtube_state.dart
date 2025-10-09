@@ -34,17 +34,18 @@ class YoutubeLoaded extends YoutubeState {
     required this.searchQuery,
   });
 
-  factory YoutubeLoaded.initial() => const YoutubeLoaded(
-        shelves: [],
-        allVideos: [],
-        searchQuery: '',
-      );
+  factory YoutubeLoaded.initial() =>
+      const YoutubeLoaded(shelves: [], allVideos: [], searchQuery: '');
 
   // Serialization methods for hydrated_bloc
   factory YoutubeLoaded.fromJson(Map<String, dynamic> json) {
     // Persist only searchQuery to restore UI intent; videos come from repository stream.
     final query = (json['searchQuery'] as String?) ?? '';
-    return YoutubeLoaded(shelves: const [], allVideos: const [], searchQuery: query);
+    return YoutubeLoaded(
+      shelves: const [],
+      allVideos: const [],
+      searchQuery: query,
+    );
   }
 
   Map<String, dynamic> toJson() {

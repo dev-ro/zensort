@@ -41,7 +41,10 @@ class _ExpandableVideoShelfState extends State<ExpandableVideoShelf> {
         if (widget.videos.isEmpty)
           Padding(
             padding: const EdgeInsets.only(bottom: 12.0),
-            child: Text('No videos', style: Theme.of(context).textTheme.bodySmall),
+            child: Text(
+              'No videos',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
           )
         else
           ResponsiveVideoGrid(videos: widget.videos),

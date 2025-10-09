@@ -1,60 +1,77 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:zensort/features/youtube/domain/entities/liked_video.dart';
+import 'package:zensort/features/youtube/presentation/utils/youtube_thumbnail.dart';
 
 class VideoGridCard extends StatelessWidget {
   final LikedVideo video;
 
   const VideoGridCard({super.key, required this.video});
 
+  Future<void> _openVideo() async {
+    final uri = Uri.parse('https://www.youtube.com/watch?v=${video.id}');
+    await launchUrl(
+      uri,
+      mode: LaunchMode.platformDefault,
+      webOnlyWindowName: '_blank',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
 
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          AspectRatio(
-            aspectRatio: 16 / 9,
-            child: video.shouldSkipThumbnailLoad()
-                ? Container(
-                    color: Theme.of(context).colorScheme.surfaceVariant,
-                    alignment: Alignment.center,
-                    child: Image.asset(
-                      'assets/images/zensort_logo.png',
-                      fit: BoxFit.contain,
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: InkWell(
+        onTap: _openVideo,
+        child: Card(
+          clipBehavior: Clip.antiAlias,
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              AspectRatio(
+                aspectRatio: 16 / 9,
+                child: video.shouldSkipThumbnailLoad()
+                    ? Container(
+                        color: Theme.of(context).colorScheme.surfaceVariant,
+                        alignment: Alignment.center,
+                        child: Image.asset(
+                          'assets/images/zensort_logo.png',
+                          fit: BoxFit.contain,
+                        ),
+                      )
+                    : _NetworkThumbnail(url: buildHighQualityThumbnailUrl(video.id)),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12.0,
+                  vertical: 10.0,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      video.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: textTheme.titleMedium,
                     ),
-                  )
-                : _NetworkThumbnail(url: video.thumbnailUrl),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 12.0,
-              vertical: 10.0,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  video.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: textTheme.titleMedium,
+                    const SizedBox(height: 6),
+                    Text(
+                      video.channelName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: textTheme.bodySmall,
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  video.channelName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: textTheme.bodySmall,
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

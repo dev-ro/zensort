@@ -19,7 +19,9 @@ class ResponsiveVideoGrid extends StatelessWidget {
         // Height = width*(9/16) + 96  => aspect = width / height
         // For stability across widths, compute at runtime
         double estimateAspect(double width) => width / (width * 9 / 16 + 96);
-        final sampleWidth = (constraints.maxWidth / (constraints.maxWidth / maxExtent).ceil()).clamp(220, maxExtent);
+        final sampleWidth =
+            (constraints.maxWidth / (constraints.maxWidth / maxExtent).ceil())
+                .clamp(220, maxExtent);
         final childAspectRatio = estimateAspect(sampleWidth.toDouble());
 
         return GridView.builder(

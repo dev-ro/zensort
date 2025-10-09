@@ -5,12 +5,14 @@ class LikedVideo extends Equatable {
   final String title;
   final String channelName;
   final String thumbnailUrl;
+  final bool isMusic;
 
   const LikedVideo({
     required this.id,
     required this.title,
     required this.channelName,
     required this.thumbnailUrl,
+    this.isMusic = false,
   });
 
   // Serialization methods for hydrated_bloc
@@ -20,6 +22,7 @@ class LikedVideo extends Equatable {
       title: json['title'] as String,
       channelName: json['channelName'] as String,
       thumbnailUrl: json['thumbnailUrl'] as String,
+      isMusic: (json['isMusic'] as bool?) ?? false,
     );
   }
 
@@ -29,6 +32,7 @@ class LikedVideo extends Equatable {
       'title': title,
       'channelName': channelName,
       'thumbnailUrl': thumbnailUrl,
+      'isMusic': isMusic,
     };
   }
 
@@ -43,5 +47,5 @@ class LikedVideo extends Equatable {
   }
 
   @override
-  List<Object?> get props => [id, title, channelName, thumbnailUrl];
+  List<Object?> get props => [id, title, channelName, thumbnailUrl, isMusic];
 }

@@ -5,4 +5,7 @@ abstract class YoutubeRepository {
   Future<void> syncLikedVideos();
   Stream<SyncProgress> getSyncProgressStream();
   Stream<List<LikedVideo>> watchLikedVideos();
+
+  Future<int> fetchRemoteLikedVideosTotal();
+  Future<int> fetchLocalLikedVideosCount();
 }

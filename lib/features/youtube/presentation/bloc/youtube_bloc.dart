@@ -32,6 +32,9 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
   // Flag to track if we need to check for empty videos and auto-sync
   bool _shouldCheckForAutoSync = false;
 
+  // Verify remote total vs local only once per session
+  bool _hasVerifiedRemoteTotal = false;
+
   YouTubeBloc(this._youtubeRepository, this._authBloc)
     : super(YoutubeInitial()) {
     on<SyncLikedVideos>(_onSyncLikedVideos);
@@ -40,8 +43,10 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     on<_AuthStatusChanged>(_onAuthStatusChanged, transformer: restartable());
     on<_LikedVideosUpdated>(_onLikedVideosUpdated);
     on<_LikedVideosError>(_onLikedVideosError);
-    on<SearchQueryChanged>(_onSearchQueryChanged,
-        transformer: _debounceRestartable(const Duration(milliseconds: 250)));
+    on<SearchQueryChanged>(
+      _onSearchQueryChanged,
+      transformer: _debounceRestartable(const Duration(milliseconds: 250)),
+    );
 
     // Listen to AuthBloc's stable authentication state (hierarchical flow)
     // Repository -> AuthBloc -> YouTubeBloc
@@ -107,6 +112,7 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
       // Reset the latches when user becomes unauthenticated
       _isInitialLoadDispatched = false;
       _shouldCheckForAutoSync = false;
+      _hasVerifiedRemoteTotal = false;
 
       // Clear state and cancel subscriptions
       _syncProgressSubscription?.cancel();
@@ -171,16 +177,24 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     final legacyMusic = allVideos
         .where((v) => v.channelName == 'Music Library Uploads')
         .toList();
+    final musicVideos = allVideos.where((v) => v.isMusic).toList();
 
     final shelves = <VideoShelf>[];
     if (allVideos.isNotEmpty) {
       shelves.add(VideoShelf(title: 'All Videos', videos: allVideos));
     }
+    if (musicVideos.isNotEmpty) {
+      shelves.add(VideoShelf(title: 'Music', videos: musicVideos));
+    }
     if (unavailableVideos.isNotEmpty) {
-      shelves.add(VideoShelf(title: 'Unavailable Videos', videos: unavailableVideos));
+      shelves.add(
+        VideoShelf(title: 'Unavailable Videos', videos: unavailableVideos),
+      );
     }
     if (legacyMusic.isNotEmpty) {
-      shelves.add(VideoShelf(title: 'Legacy Music Uploads', videos: legacyMusic));
+      shelves.add(
+        VideoShelf(title: 'Legacy Music Uploads', videos: legacyMusic),
+      );
     }
     return shelves;
   }
@@ -189,8 +203,30 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     if (query.trim().isEmpty) return allVideos;
     final q = query.toLowerCase();
     return allVideos
-        .where((v) => v.title.toLowerCase().contains(q) || v.channelName.toLowerCase().contains(q))
+        .where(
+          (v) =>
+              v.title.toLowerCase().contains(q) ||
+              v.channelName.toLowerCase().contains(q),
+        )
         .toList();
+  }
+
+  void _verifyTotalsOnceAsync(int localCount) {
+    if (_hasVerifiedRemoteTotal) return;
+    _hasVerifiedRemoteTotal = true;
+    // Fire and forget check
+    Future(() async {
+      try {
+        final remoteTotal = await _youtubeRepository.fetchRemoteLikedVideosTotal();
+        print('Remote liked total: $remoteTotal, local count: $localCount');
+        if (remoteTotal != localCount) {
+          print('Mismatch detected; triggering auto-sync');
+          add(SyncLikedVideos());
+        }
+      } catch (e) {
+        print('Error verifying remote total: $e');
+      }
+    });
   }
 
   void _onLikedVideosUpdated(
@@ -216,23 +252,34 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
         add(SyncLikedVideos());
         // Don't emit a loaded state here, wait for sync to provide videos
         return;
-      } else {
-        print(
-          'Found ${event.videos.length} existing videos, skipping auto-sync',
-        );
       }
     }
 
-    final currentQuery = state is YoutubeLoaded ? (state as YoutubeLoaded).searchQuery : '';
+    // Verify totals once even if we have local data
+    _verifyTotalsOnceAsync(event.videos.length);
+
+    final currentQuery = state is YoutubeLoaded
+        ? (state as YoutubeLoaded).searchQuery
+        : '';
     final allVideos = event.videos;
 
     if (currentQuery.isEmpty) {
       final shelves = _buildBaseShelves(allVideos);
-      emit(YoutubeLoaded(shelves: shelves, allVideos: allVideos, searchQuery: ''));
+      emit(
+        YoutubeLoaded(shelves: shelves, allVideos: allVideos, searchQuery: ''),
+      );
     } else {
       final filtered = _filterVideos(allVideos, currentQuery);
-      final shelves = <VideoShelf>[VideoShelf(title: 'Search Results', videos: filtered)];
-      emit(YoutubeLoaded(shelves: shelves, allVideos: allVideos, searchQuery: currentQuery));
+      final shelves = <VideoShelf>[
+        VideoShelf(title: 'Search Results', videos: filtered),
+      ];
+      emit(
+        YoutubeLoaded(
+          shelves: shelves,
+          allVideos: allVideos,
+          searchQuery: currentQuery,
+        ),
+      );
     }
   }
 
@@ -241,7 +288,9 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     Emitter<YoutubeState> emit,
   ) {
     final query = event.query;
-    final currentLoaded = state is YoutubeLoaded ? state as YoutubeLoaded : YoutubeLoaded.initial();
+    final currentLoaded = state is YoutubeLoaded
+        ? state as YoutubeLoaded
+        : YoutubeLoaded.initial();
     final allVideos = currentLoaded.allVideos;
 
     if (query.isEmpty) {
@@ -249,7 +298,9 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
       emit(currentLoaded.copyWith(shelves: shelves, searchQuery: ''));
     } else {
       final filtered = _filterVideos(allVideos, query);
-      final shelves = <VideoShelf>[VideoShelf(title: 'Search Results', videos: filtered)];
+      final shelves = <VideoShelf>[
+        VideoShelf(title: 'Search Results', videos: filtered),
+      ];
       emit(currentLoaded.copyWith(shelves: shelves, searchQuery: query));
     }
   }

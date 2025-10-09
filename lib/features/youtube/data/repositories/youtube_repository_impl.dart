@@ -165,6 +165,7 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
             title: data['title'] ?? '',
             channelName: data['channelTitle'] ?? '',
             thumbnailUrl: data['thumbnailUrl'] ?? '',
+            isMusic: (data['isMusic'] as bool?) ?? false,
           );
         }).toList();
 
@@ -172,13 +173,48 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
         final videosById = {for (var video in videos) video.id: video};
         final orderedVideos = videoIds
             .map((id) => videosById[id])
-            .whereType<
-              LikedVideo
-            >() // Filter out nulls in case a video was deleted
+            .whereType<LikedVideo>() // Filter out nulls in case a video was deleted
             .toList();
 
         return orderedVideos;
       });
     });
+  }
+
+  @override
+  Future<int> fetchRemoteLikedVideosTotal() async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('User not authenticated');
+    final accessToken = await _authRepository.getAccessToken();
+    if (accessToken == null) throw Exception('Missing access token');
+
+    final callable = FirebaseFunctions.instance.httpsCallable('get_liked_videos_total');
+    final result = await callable.call({'access_token': accessToken});
+    final total = (result.data['total'] as num?)?.toInt() ?? 0;
+    return total;
+  }
+
+  @override
+  Future<int> fetchLocalLikedVideosCount() async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('User not authenticated');
+
+    try {
+      final agg = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('likedVideos')
+          .count()
+          .get();
+      return agg.count ?? 0;
+    } catch (_) {
+      // Fallback when count() not available
+      final snap = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('likedVideos')
+          .get();
+      return snap.docs.length;
+    }
   }
 }

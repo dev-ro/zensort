@@ -31,7 +31,8 @@ class _VideoSearchBarState extends State<VideoSearchBar> {
       padding: const EdgeInsets.all(16.0),
       child: TextField(
         controller: _controller,
-        onChanged: (value) => context.read<YouTubeBloc>().add(SearchQueryChanged(value)),
+        onChanged: (value) =>
+            context.read<YouTubeBloc>().add(SearchQueryChanged(value)),
         style: TextStyle(color: colorScheme.onSurface),
         decoration: InputDecoration(
           hintText: 'Search liked videos...',
@@ -48,7 +49,10 @@ class _VideoSearchBarState extends State<VideoSearchBar> {
           ),
           filled: true,
           fillColor: colorScheme.surfaceVariant,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 14,
+          ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12.0),
             borderSide: BorderSide(color: colorScheme.outlineVariant, width: 1),

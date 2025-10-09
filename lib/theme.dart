@@ -81,6 +81,14 @@ class CustomMarkdownStyle {
 }
 
 ThemeData getDarkTheme() {
+  final fallback = const [
+    'Noto Sans',
+    'Noto Color Emoji',
+    'Segoe UI Emoji',
+    'Apple Color Emoji',
+    'Twemoji Mozilla',
+    'Arial',
+  ];
   return ThemeData(
     useMaterial3: true,
     brightness: Brightness.dark,
@@ -101,10 +109,19 @@ ThemeData getDarkTheme() {
       displayColor: ZenSortTheme.lightText,
     ),
     fontFamily: GoogleFonts.nunito().fontFamily,
+    fontFamilyFallback: fallback,
   );
 }
 
 ThemeData getLightTheme() {
+  final fallback = const [
+    'Noto Sans',
+    'Noto Color Emoji',
+    'Segoe UI Emoji',
+    'Apple Color Emoji',
+    'Twemoji Mozilla',
+    'Arial',
+  ];
   return ThemeData(
     useMaterial3: true,
     scaffoldBackgroundColor: ZenSortTheme.scaffoldBackground,
@@ -141,5 +158,6 @@ ThemeData getLightTheme() {
           displayColor: ZenSortTheme.darkText,
         ),
     fontFamily: GoogleFonts.nunito().fontFamily,
+    fontFamilyFallback: fallback,
   );
 }

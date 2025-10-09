@@ -194,6 +194,7 @@ class Video:
     publishedAt: datetime
     platform: str = "YouTube"
     addedToZensortAt: datetime | None = None
+    isMusic: bool = False
 
 
 @dataclass
@@ -440,7 +441,7 @@ def fetch_video_details(access_token: str, video_ids: list[str]) -> list[Video]:
             # Make API request for this batch
             try:
                 request = youtube.videos().list(
-                    part="id,snippet", id=",".join(batch_ids)
+                    part="id,snippet,topicDetails", id=",".join(batch_ids)
                 )
                 response = request.execute()
 
@@ -449,6 +450,7 @@ def fetch_video_details(access_token: str, video_ids: list[str]) -> list[Video]:
                 # Process each item in the response
                 for item in response.get("items", []):
                     snippet = item.get("snippet", {})
+                    topic_details = item.get("topicDetails", {})
 
                     # Parse publishedAt timestamp safely
                     published_at_str = snippet.get("publishedAt", "")
@@ -462,59 +464,53 @@ def fetch_video_details(access_token: str, video_ids: list[str]) -> list[Video]:
                         )
                         published_at = datetime.now(timezone.utc)
 
+                    # Choose the best available thumbnail
+                    thumbs = snippet.get("thumbnails", {})
+                    best_thumb = (
+                        thumbs.get("maxres", {}).get("url")
+                        or thumbs.get("standard", {}).get("url")
+                        or thumbs.get("high", {}).get("url")
+                        or thumbs.get("medium", {}).get("url")
+                        or thumbs.get("default", {}).get("url", "")
+                    )
+
+                    # Determine music classification
+                    category_id = snippet.get("categoryId", "")
+                    topics = topic_details.get("topicCategories", []) or []
+                    is_music = False
+                    try:
+                        is_music = (
+                            category_id == "10"
+                            or any(str(t).endswith("/Music") for t in topics)
+                        )
+                    except Exception:
+                        is_music = category_id == "10"
+
                     video = Video(
                         videoId=item["id"],
                         title=snippet.get("title", ""),
                         description=snippet.get("description", ""),
-                        thumbnailUrl=snippet.get("thumbnails", {})
-                        .get("default", {})
-                        .get("url", ""),
+                        thumbnailUrl=best_thumb,
                         channelTitle=snippet.get("channelTitle", ""),
                         publishedAt=published_at,
                         platform="YouTube",
                         addedToZensortAt=datetime.now(timezone.utc),
+                        isMusic=is_music,
                     )
                     batch_videos.append(video)
 
                 # Add this batch's results to the master list
                 all_videos.extend(batch_videos)
-                logger.info(
-                    f"Batch {current_batch_number}: Successfully fetched {len(batch_videos)} video details"
-                )
-                logger.info(f"Total videos fetched so far: {len(all_videos)}")
 
             except HttpError as e:
                 logger.error(
-                    f"YouTube API error for batch {current_batch_number}: HTTP {e.resp.status}"
+                    f"YouTube API error while fetching video details: {e.resp.status}"
                 )
-                # Continue with next batch instead of failing completely
-                if e.resp.status == 401:
-                    raise https_fn.HttpsError(
-                        code=https_fn.FunctionsErrorCode.UNAUTHENTICATED,
-                        message="Invalid or expired YouTube access token.",
-                    )
-                else:
-                    logger.warning(
-                        f"Skipping batch {current_batch_number} due to API error: {e}"
-                    )
-                    continue
-
-            except Exception as e:
-                logger.error(
-                    f"Unexpected error processing batch {current_batch_number}: {type(e).__name__}: {str(e)}"
-                )
-                # Continue with next batch
-                continue
+                raise
 
         logger.info(
-            f"=== Completed fetch_video_details: {len(all_videos)} videos fetched out of {len(video_ids)} requested ==="
+            f"Completed fetch_video_details: aggregated {len(all_videos)} detailed videos"
         )
-
-        if len(all_videos) != len(video_ids):
-            logger.warning(
-                f"Video count mismatch: requested {len(video_ids)}, got {len(all_videos)}"
-            )
-
         return all_videos
 
     except Exception as e:
@@ -839,6 +835,7 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
                 "thumbnailUrl": video.thumbnailUrl,
                 "publishedAt": video.publishedAt,
                 "addedToZensortAt": video.addedToZensortAt,
+                "isMusic": getattr(video, "isMusic", False),
             }
 
             # Only add category field if it's not None (to avoid unnecessary null fields)
