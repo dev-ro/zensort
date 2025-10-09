@@ -142,6 +142,7 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
                   thumbnailUrl: (data['thumbnailUrl'] as String?) ?? '',
                   categoryId: data['categoryId'] as String?,
                   categoryTitle: (data['categoryTitleUS'] as String?) ?? (data['categoryTitle'] as String?),
+                  topicTags: (data['topicTags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const [],
                 ),
               );
             }
@@ -235,6 +236,7 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
             thumbnailUrl: (vdata['thumbnailUrl'] as String?) ?? '',
             categoryId: vdata['categoryId'] as String?,
             categoryTitle: (vdata['categoryTitleUS'] as String?) ?? (vdata['categoryTitle'] as String?),
+            topicTags: (vdata['topicTags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const [],
           ),
         );
       }
@@ -302,6 +304,7 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
               thumbnailUrl: (vdata['thumbnailUrl'] as String?) ?? '',
               categoryId: vdata['categoryId'] as String?,
               categoryTitle: (vdata['categoryTitleUS'] as String?) ?? (vdata['categoryTitle'] as String?),
+              topicTags: (vdata['topicTags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const [],
             ),
           );
         }
@@ -347,6 +350,7 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
             thumbnailUrl: (vdata['thumbnailUrl'] as String?) ?? '',
             categoryId: vdata['categoryId'] as String?,
             categoryTitle: (vdata['categoryTitleUS'] as String?) ?? (vdata['categoryTitle'] as String?),
+            topicTags: (vdata['topicTags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const [],
           ),
         );
       }
