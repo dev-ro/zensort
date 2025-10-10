@@ -1789,16 +1789,6 @@ def _prepare_embedding_text(
     if description:
         parts.append(f"Description: {description}")
     return "\n".join(parts)
-    # Let the API handle truncation automatically (no manual truncation)
-    parts = []
-    if title:
-        parts.append(f"Title: {title}")
-    if channel_title:
-        parts.append(f"Channel: {channel_title}")
-    if description:
-        parts.append(f"Description: {description}")
-
-    return " | ".join(parts)
 
 
 def _generate_embedding(client: OpenAI, text: str) -> list:
