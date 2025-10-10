@@ -11,6 +11,7 @@ class ExpandableVideoShelf extends StatelessWidget {
   final VoidCallback? onExpand; // Trigger initial load on expand
   final bool isLoading;
   final bool hasMore;
+  final bool showBusy;
 
   const ExpandableVideoShelf({
     super.key,
@@ -22,6 +23,7 @@ class ExpandableVideoShelf extends StatelessWidget {
     this.onExpand,
     this.isLoading = false,
     this.hasMore = false,
+    this.showBusy = false,
   });
 
   @override
@@ -47,30 +49,12 @@ class ExpandableVideoShelf extends StatelessWidget {
             ),
           )
         else ...[
-          LayoutBuilder(
-            builder: (context, constraints) {
-              // Constrain inner scroll to viewport height so shelves can individually infinite-scroll
-              final maxHeight = MediaQuery.of(context).size.height * 0.7;
-              return ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: maxHeight),
-                child: NotificationListener<ScrollNotification>(
-                  onNotification: (notification) {
-                    if (notification.metrics.pixels >=
-                            notification.metrics.maxScrollExtent * 0.7 &&
-                        hasMore &&
-                        onEndReached != null &&
-                        !isLoading) {
-                      onEndReached!();
-                    }
-                    return false;
-                  },
-                  child: SingleChildScrollView(
-                    child: ResponsiveVideoGrid(videos: videos),
-                  ),
-                ),
-              );
-            },
-          ),
+          if (showBusy)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8.0),
+              child: LinearProgressIndicator(),
+            ),
+          ResponsiveVideoGrid(videos: videos, isBusy: false),
           if (isLoading)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 12.0),

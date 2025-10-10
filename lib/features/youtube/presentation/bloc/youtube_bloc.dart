@@ -29,9 +29,6 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
   // Boolean latch to prevent race conditions from rapid auth state emissions
   bool _isInitialLoadDispatched = false;
 
-  // Flag to track if we need to check for empty videos and auto-sync
-  bool _shouldCheckForAutoSync = false;
-
   // Verify remote total vs local only once per session
   bool _hasVerifiedRemoteTotal = false;
 
@@ -53,11 +50,8 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
       _onLoadAllVideosForSearch,
       transformer: droppable(),
     );
-    on<TopicFilterChanged>(
-      _onTopicFilterChanged,
-      transformer: _debounceRestartable(const Duration(milliseconds: 150)),
-    );
     on<LoadUnlikedVideos>(_onLoadUnlikedVideos, transformer: droppable());
+    on<LoadAllVideosEager>(_onLoadAllVideosEager, transformer: droppable());
 
     // Listen to AuthBloc's stable authentication state (hierarchical flow)
     // Repository -> AuthBloc -> YouTubeBloc
@@ -85,8 +79,6 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
         'User authenticated with access token - setting up streams and triggering initial load',
       );
       _isInitialLoadDispatched = true;
-      _shouldCheckForAutoSync =
-          true; // Flag to check for auto-sync on first stream emission
 
       emit(YoutubeLoading());
 
@@ -94,7 +86,7 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
       _syncProgressSubscription?.cancel();
       _likedVideosSubscription?.cancel();
 
-      // Set up sync progress monitoring
+      // Set up sync progress monitoring (non-blocking)
       _syncProgressSubscription = _youtubeRepository
           .getSyncProgressStream()
           .listen(
@@ -105,9 +97,20 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
             },
           );
 
-      // Set up reactive liked videos stream
-      // The _onLikedVideosUpdated handler will check _shouldCheckForAutoSync flag
-      // and trigger sync if videos are empty on first emission
+      // Make sync/eager load decision BEFORE setting up video stream
+      try {
+        final remote = await _youtubeRepository.fetchRemoteLikedVideosTotal();
+        final local = await _youtubeRepository.fetchLocalLikedVideosCount();
+        if (remote > local) {
+          add(SyncLikedVideos());
+        } else {
+          add(LoadAllVideosEager());
+        }
+      } catch (_) {
+        add(LoadAllVideosEager());
+      }
+
+      // NOW set up reactive liked videos stream (after decision made)
       _likedVideosSubscription = _youtubeRepository.watchLikedVideos().listen(
         (videos) {
           print('watchLikedVideos stream emitted ${videos.length} videos');
@@ -126,7 +129,6 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
       print('User unauthenticated - clearing state and resetting latch');
       // Reset the latches when user becomes unauthenticated
       _isInitialLoadDispatched = false;
-      _shouldCheckForAutoSync = false;
       _hasVerifiedRemoteTotal = false;
 
       // Clear state and cancel subscriptions
@@ -184,6 +186,8 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     } else if (progress.status == SyncStatus.completed) {
       print('Sync completed! Emitting YoutubeSyncSuccess');
       emit(YoutubeSyncSuccess());
+      // After sync, reload everything eagerly so shelves/search are complete
+      add(LoadAllVideosEager());
     } else if (progress.status == SyncStatus.failed) {
       print('Sync failed! Emitting YoutubeFailure but preserving UI');
       final lastLoaded = state is YoutubeLoaded ? state as YoutubeLoaded : null;
@@ -196,24 +200,55 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
 
   List<VideoShelf> _buildBaseShelves(List<LikedVideo> allVideos) {
     final shelves = <VideoShelf>[];
+
+    // 1. All Videos shelf (always first)
     if (allVideos.isNotEmpty) {
       shelves.add(VideoShelf(title: 'All Videos', videos: allVideos));
     }
 
-    // Group by categoryTitle
+    // 2. Group by categoryTitle
     final Map<String, List<LikedVideo>> byCategory = {};
     for (final v in allVideos) {
       final title = (v.categoryTitle ?? '').trim();
       if (title.isEmpty) continue;
       byCategory.putIfAbsent(title, () => <LikedVideo>[]).add(v);
     }
-    for (final entry in byCategory.entries) {
-      if (entry.value.isNotEmpty) {
-        shelves.add(VideoShelf(title: entry.key, videos: entry.value));
+
+    // 3. Priority categories in order: Music, Movies, Shows
+    final priorityCategories = ['Music', 'Movies', 'Shows'];
+    for (final category in priorityCategories) {
+      if (byCategory.containsKey(category)) {
+        shelves.add(VideoShelf(title: category, videos: byCategory[category]!));
+        byCategory.remove(category);
       }
     }
 
-    // Special shelves remain
+    // 4. Other categories alphabetically
+    final otherCategories = byCategory.keys.toList()..sort();
+    for (final category in otherCategories) {
+      shelves.add(VideoShelf(title: category, videos: byCategory[category]!));
+    }
+
+    // 5. Group by topic tags (prefixed with "Topic - ")
+    final Map<String, List<LikedVideo>> byTopic = {};
+    for (final v in allVideos) {
+      for (final tag in v.topicTags) {
+        final trimmedTag = tag.trim();
+        if (trimmedTag.isNotEmpty) {
+          byTopic.putIfAbsent(trimmedTag, () => <LikedVideo>[]).add(v);
+        }
+      }
+    }
+
+    // Add topic shelves alphabetically
+    final topicNames = byTopic.keys.toList()..sort();
+    for (final topicName in topicNames) {
+      shelves.add(
+        VideoShelf(title: 'Topic - $topicName', videos: byTopic[topicName]!),
+      );
+    }
+
+    // 6. Special shelves at the bottom
     final unavailableVideos = allVideos
         .where((v) => v.title == 'Private video' || v.title == 'Deleted video')
         .toList();
@@ -230,19 +265,8 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
         VideoShelf(title: 'Legacy Music Uploads', videos: legacyMusic),
       );
     }
-    return shelves;
-  }
 
-  List<String> _deriveAvailableTopics(List<LikedVideo> videos) {
-    final set = <String>{};
-    for (final v in videos) {
-      for (final tag in v.topicTags) {
-        final t = tag.trim();
-        if (t.isNotEmpty) set.add(t);
-      }
-    }
-    final list = set.toList()..sort();
-    return list;
+    return shelves;
   }
 
   List<LikedVideo> _filterVideos(List<LikedVideo> allVideos, String query) {
@@ -289,24 +313,9 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
   ) {
     print('=== YouTubeBloc._onLikedVideosUpdated ===');
     print('Received ${event.videos.length} videos from stream');
-    print('Should check for auto-sync: $_shouldCheckForAutoSync');
 
     if (event.videos.isNotEmpty) {
       print('First video: ${event.videos.first.title}');
-    }
-
-    // Check if this is the first stream emission and we need to auto-sync
-    if (_shouldCheckForAutoSync) {
-      _shouldCheckForAutoSync = false; // Reset flag after first check
-
-      if (event.videos.isEmpty) {
-        print(
-          'No existing videos found on first stream emission, triggering automatic sync...',
-        );
-        add(SyncLikedVideos());
-        // Don't emit a loaded state here, wait for sync to provide videos
-        return;
-      }
     }
 
     // Verify totals once even if we have local data
@@ -327,7 +336,6 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
           // We don't know hasMore until we fetch a page cursor; start optimistic
           hasMore: true,
           loadingMore: false,
-          availableTopics: _deriveAvailableTopics(allVideos),
         ),
       );
     } else {
@@ -342,7 +350,6 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
           searchQuery: currentQuery,
           hasMore: true,
           loadingMore: false,
-          availableTopics: _deriveAvailableTopics(allVideos),
         ),
       );
     }
@@ -432,11 +439,66 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
           allVideos: videos,
           shelves: shelves,
           isFullyLoaded: true,
-          availableTopics: _deriveAvailableTopics(videos),
         );
       },
       onError: (_, __) => current,
     );
+  }
+
+  Future<void> _onLoadAllVideosEager(
+    LoadAllVideosEager event,
+    Emitter<YoutubeState> emit,
+  ) async {
+    int loaded = 0;
+    int? total;
+    List<LikedVideo> latestVideos = const [];
+    try {
+      // Try to fetch total; ignore failures and use indeterminate mode
+      try {
+        total = await _youtubeRepository.fetchRemoteLikedVideosTotal();
+      } catch (_) {
+        total = null;
+      }
+
+      await emit.forEach<List<LikedVideo>>(
+        _youtubeRepository.fetchAllLikedVideosBatched(pageSize: 200),
+        onData: (videos) {
+          loaded = videos.length;
+          latestVideos = videos;
+          // Emit progress state
+          return YoutubeAllLoading(loadedCount: loaded, totalCount: total);
+        },
+        onError: (_, __) =>
+            YoutubeAllLoading(loadedCount: loaded, totalCount: total),
+      );
+
+      // After stream completes, set fully loaded state while preserving query/filters
+      final current = state is YoutubeLoaded
+          ? state as YoutubeLoaded
+          : YoutubeLoaded.initial();
+      final allVideos = latestVideos;
+      final query = current.searchQuery;
+      final filtered = query.isEmpty
+          ? allVideos
+          : _filterVideos(allVideos, query);
+      final shelves = <VideoShelf>[
+        if (query.isNotEmpty)
+          VideoShelf(title: 'Search Results', videos: filtered)
+        else
+          ..._buildBaseShelves(allVideos),
+      ];
+      emit(
+        current.copyWith(
+          allVideos: allVideos,
+          shelves: shelves,
+          isFullyLoaded: true,
+        ),
+      );
+    } catch (e) {
+      // On error, fall back to current state
+      final current = state is YoutubeLoaded ? state as YoutubeLoaded : null;
+      if (current != null) emit(current);
+    }
   }
 
   void _onShelfExpansionChanged(
@@ -446,32 +508,25 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     final current = state is YoutubeLoaded
         ? state as YoutubeLoaded
         : YoutubeLoaded.initial();
-    emit(current.copyWith(expandedShelfKey: event.shelfKey));
-  }
-
-  void _onTopicFilterChanged(
-    TopicFilterChanged event,
-    Emitter<YoutubeState> emit,
-  ) {
-    final current = state is YoutubeLoaded
-        ? state as YoutubeLoaded
-        : YoutubeLoaded.initial();
-    final topic = event.topic;
-    final all = current.allVideos;
-    if (topic == null || topic.isEmpty) {
-      final shelves = _buildBaseShelves(all);
-      emit(current.copyWith(shelves: shelves, selectedTopic: null));
-      return;
+    final key = event.shelfKey;
+    emit(
+      current.copyWith(
+        expandedShelfKey: key,
+        activeShelfKey: key,
+        activeShelfBusy: key != null,
+      ),
+    );
+    if (key != null) {
+      // Clear the busy flag after the next microtask/frame to allow UI to show a quick indicator
+      Future.microtask(() {
+        final now = this.state is YoutubeLoaded
+            ? this.state as YoutubeLoaded
+            : null;
+        if (now != null && now.activeShelfKey == key) {
+          emit(now.copyWith(activeShelfBusy: false));
+        }
+      });
     }
-    // Filter by topicTags
-    final lowered = topic.toLowerCase();
-    final filtered = all
-        .where((v) => v.topicTags.any((t) => t.toLowerCase() == lowered))
-        .toList();
-    final shelves = <VideoShelf>[
-      VideoShelf(title: 'Filtered by $topic', videos: filtered),
-    ];
-    emit(current.copyWith(shelves: shelves, selectedTopic: topic));
   }
 
   Future<void> _onLoadUnlikedVideos(

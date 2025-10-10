@@ -32,9 +32,9 @@ class YoutubeLoaded extends YoutubeState {
   final bool loadingMore;
   final String? nextCursor;
   final String? expandedShelfKey; // title as key for now
-  final String? selectedTopic;
-  final List<String> availableTopics;
   final bool isFullyLoaded;
+  final String? activeShelfKey;
+  final bool activeShelfBusy;
 
   const YoutubeLoaded({
     required this.shelves,
@@ -45,9 +45,9 @@ class YoutubeLoaded extends YoutubeState {
     this.loadingMore = false,
     this.nextCursor,
     this.expandedShelfKey,
-    this.selectedTopic,
-    this.availableTopics = const [],
     this.isFullyLoaded = false,
+    this.activeShelfKey,
+    this.activeShelfBusy = false,
   });
 
   factory YoutubeLoaded.initial() => const YoutubeLoaded(
@@ -58,9 +58,9 @@ class YoutubeLoaded extends YoutubeState {
     hasMore: false,
     loadingMore: false,
     expandedShelfKey: null,
-    selectedTopic: null,
-    availableTopics: [],
     isFullyLoaded: false,
+    activeShelfKey: null,
+    activeShelfBusy: false,
   );
 
   // Serialization methods for hydrated_bloc
@@ -75,8 +75,6 @@ class YoutubeLoaded extends YoutubeState {
       hasMore: false,
       loadingMore: false,
       expandedShelfKey: json['expandedShelfKey'] as String?,
-      selectedTopic: json['selectedTopic'] as String?,
-      availableTopics: const [],
       isFullyLoaded: false,
     );
   }
@@ -85,7 +83,6 @@ class YoutubeLoaded extends YoutubeState {
     return {
       'searchQuery': searchQuery,
       if (expandedShelfKey != null) 'expandedShelfKey': expandedShelfKey,
-      if (selectedTopic != null) 'selectedTopic': selectedTopic,
     };
   }
 
@@ -98,9 +95,9 @@ class YoutubeLoaded extends YoutubeState {
     bool? loadingMore,
     String? nextCursor,
     String? expandedShelfKey,
-    String? selectedTopic,
-    List<String>? availableTopics,
     bool? isFullyLoaded,
+    String? activeShelfKey,
+    bool? activeShelfBusy,
   }) {
     return YoutubeLoaded(
       shelves: shelves ?? this.shelves,
@@ -111,9 +108,9 @@ class YoutubeLoaded extends YoutubeState {
       loadingMore: loadingMore ?? this.loadingMore,
       nextCursor: nextCursor ?? this.nextCursor,
       expandedShelfKey: expandedShelfKey ?? this.expandedShelfKey,
-      selectedTopic: selectedTopic ?? this.selectedTopic,
-      availableTopics: availableTopics ?? this.availableTopics,
       isFullyLoaded: isFullyLoaded ?? this.isFullyLoaded,
+      activeShelfKey: activeShelfKey ?? this.activeShelfKey,
+      activeShelfBusy: activeShelfBusy ?? this.activeShelfBusy,
     );
   }
 
@@ -125,7 +122,24 @@ class YoutubeLoaded extends YoutubeState {
     hasMore,
     loadingMore,
     nextCursor,
+    expandedShelfKey,
+    activeShelfKey,
+    activeShelfBusy,
   ];
+}
+
+class YoutubeAllLoading extends YoutubeState {
+  final int loadedCount;
+  final int? totalCount;
+
+  const YoutubeAllLoading({required this.loadedCount, this.totalCount});
+
+  double get progress => (totalCount == null || totalCount == 0)
+      ? 0
+      : (loadedCount / totalCount!).clamp(0, 1);
+
+  @override
+  List<Object?> get props => [loadedCount, totalCount];
 }
 
 class YoutubeFailure extends YoutubeState {
