@@ -29,9 +29,6 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
   // Boolean latch to prevent race conditions from rapid auth state emissions
   bool _isInitialLoadDispatched = false;
 
-  // Flag to track if we need to check for empty videos and auto-sync
-  bool _shouldCheckForAutoSync = false;
-
   // Verify remote total vs local only once per session
   bool _hasVerifiedRemoteTotal = false;
 
@@ -82,8 +79,6 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
         'User authenticated with access token - setting up streams and triggering initial load',
       );
       _isInitialLoadDispatched = true;
-      _shouldCheckForAutoSync =
-          true; // Flag to check for auto-sync on first stream emission
 
       emit(YoutubeLoading());
 
@@ -91,7 +86,7 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
       _syncProgressSubscription?.cancel();
       _likedVideosSubscription?.cancel();
 
-      // Set up sync progress monitoring
+      // Set up sync progress monitoring (non-blocking)
       _syncProgressSubscription = _youtubeRepository
           .getSyncProgressStream()
           .listen(
@@ -102,9 +97,20 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
             },
           );
 
-      // Set up reactive liked videos stream
-      // The _onLikedVideosUpdated handler will check _shouldCheckForAutoSync flag
-      // and trigger sync if videos are empty on first emission
+      // Make sync/eager load decision BEFORE setting up video stream
+      try {
+        final remote = await _youtubeRepository.fetchRemoteLikedVideosTotal();
+        final local = await _youtubeRepository.fetchLocalLikedVideosCount();
+        if (remote > local) {
+          add(SyncLikedVideos());
+        } else {
+          add(LoadAllVideosEager());
+        }
+      } catch (_) {
+        add(LoadAllVideosEager());
+      }
+
+      // NOW set up reactive liked videos stream (after decision made)
       _likedVideosSubscription = _youtubeRepository.watchLikedVideos().listen(
         (videos) {
           print('watchLikedVideos stream emitted ${videos.length} videos');
@@ -119,26 +125,10 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
           add(_LikedVideosError(error.toString()));
         },
       );
-
-      // Decide whether to sync first based on remote vs local totals
-      Future(() async {
-        try {
-          final remote = await _youtubeRepository.fetchRemoteLikedVideosTotal();
-          final local = await _youtubeRepository.fetchLocalLikedVideosCount();
-          if (remote > local) {
-            add(SyncLikedVideos());
-          } else {
-            add(LoadAllVideosEager());
-          }
-        } catch (_) {
-          add(LoadAllVideosEager());
-        }
-      });
     } else if (authState is AuthUnauthenticated) {
       print('User unauthenticated - clearing state and resetting latch');
       // Reset the latches when user becomes unauthenticated
       _isInitialLoadDispatched = false;
-      _shouldCheckForAutoSync = false;
       _hasVerifiedRemoteTotal = false;
 
       // Clear state and cancel subscriptions
@@ -323,24 +313,9 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
   ) {
     print('=== YouTubeBloc._onLikedVideosUpdated ===');
     print('Received ${event.videos.length} videos from stream');
-    print('Should check for auto-sync: $_shouldCheckForAutoSync');
 
     if (event.videos.isNotEmpty) {
       print('First video: ${event.videos.first.title}');
-    }
-
-    // Check if this is the first stream emission and we need to auto-sync
-    if (_shouldCheckForAutoSync) {
-      _shouldCheckForAutoSync = false; // Reset flag after first check
-
-      if (event.videos.isEmpty) {
-        print(
-          'No existing videos found on first stream emission, triggering automatic sync...',
-        );
-        add(SyncLikedVideos());
-        // Don't emit a loaded state here, wait for sync to provide videos
-        return;
-      }
     }
 
     // Verify totals once even if we have local data
