@@ -466,28 +466,35 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
           // Emit progress state
           return YoutubeAllLoading(loadedCount: loaded, totalCount: total);
         },
-        onError: (_, __) => YoutubeAllLoading(loadedCount: loaded, totalCount: total),
+        onError: (_, __) =>
+            YoutubeAllLoading(loadedCount: loaded, totalCount: total),
       );
 
       // After stream completes, set fully loaded state while preserving query/filters
-      final current = state is YoutubeLoaded ? state as YoutubeLoaded : YoutubeLoaded.initial();
+      final current = state is YoutubeLoaded
+          ? state as YoutubeLoaded
+          : YoutubeLoaded.initial();
       final allVideos = await _youtubeRepository
           .fetchAllLikedVideosBatched(pageSize: 200)
           .last;
       final query = current.searchQuery;
-      final filtered = query.isEmpty ? allVideos : _filterVideos(allVideos, query);
+      final filtered = query.isEmpty
+          ? allVideos
+          : _filterVideos(allVideos, query);
       final shelves = <VideoShelf>[
         if (query.isNotEmpty)
           VideoShelf(title: 'Search Results', videos: filtered)
         else
           ..._buildBaseShelves(allVideos),
       ];
-      emit(current.copyWith(
-        allVideos: allVideos,
-        shelves: shelves,
-        isFullyLoaded: true,
-        availableTopics: _deriveAvailableTopics(allVideos),
-      ));
+      emit(
+        current.copyWith(
+          allVideos: allVideos,
+          shelves: shelves,
+          isFullyLoaded: true,
+          availableTopics: _deriveAvailableTopics(allVideos),
+        ),
+      );
     } catch (e) {
       // On error, fall back to current state
       final current = state is YoutubeLoaded ? state as YoutubeLoaded : null;

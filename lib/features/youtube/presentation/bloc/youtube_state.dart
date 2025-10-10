@@ -134,8 +134,9 @@ class YoutubeAllLoading extends YoutubeState {
 
   const YoutubeAllLoading({required this.loadedCount, this.totalCount});
 
-  double get progress =>
-      (totalCount == null || totalCount == 0) ? 0 : (loadedCount / totalCount!).clamp(0, 1);
+  double get progress => (totalCount == null || totalCount == 0)
+      ? 0
+      : (loadedCount / totalCount!).clamp(0, 1);
 
   @override
   List<Object?> get props => [loadedCount, totalCount];

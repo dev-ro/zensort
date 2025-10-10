@@ -28,9 +28,15 @@ class LoadingAllVideosSheet extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.video_library, color: Theme.of(context).colorScheme.primary),
+                    Icon(
+                      Icons.video_library,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                     const SizedBox(width: 12),
-                    Text('Loading your library', style: Theme.of(context).textTheme.titleLarge),
+                    Text(
+                      'Loading your library',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -42,7 +48,9 @@ class LoadingAllVideosSheet extends StatelessWidget {
                 LinearProgressIndicator(
                   value: value,
                   backgroundColor: Colors.grey[300],
-                  valueColor: const AlwaysStoppedAnimation<Color>(ZenSortTheme.primaryColor),
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    ZenSortTheme.primaryColor,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 if (total != null)
@@ -50,7 +58,9 @@ class LoadingAllVideosSheet extends StatelessWidget {
                     children: [
                       Text('Loaded $loaded of $total'),
                       const Spacer(),
-                      Text('${(((value ?? 0) * 100).clamp(0, 100)).toStringAsFixed(0)}%'),
+                      Text(
+                        '${(((value ?? 0) * 100).clamp(0, 100)).toStringAsFixed(0)}%',
+                      ),
                     ],
                   )
                 else
@@ -63,5 +73,3 @@ class LoadingAllVideosSheet extends StatelessWidget {
     );
   }
 }
-
-

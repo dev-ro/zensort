@@ -197,8 +197,12 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(width: 8),
                       FilledButton.tonal(
                         onPressed: () {
-                          context.read<YouTubeBloc>().add(const SearchQueryChanged(''));
-                          context.read<YouTubeBloc>().add(const TopicFilterChanged(null));
+                          context.read<YouTubeBloc>().add(
+                            const SearchQueryChanged(''),
+                          );
+                          context.read<YouTubeBloc>().add(
+                            const TopicFilterChanged(null),
+                          );
                         },
                         child: const Text('All Shelves'),
                       ),
@@ -211,9 +215,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: TopicFilterMenu(
                         availableTopics: state.availableTopics,
                         selectedTopic: state.selectedTopic,
-                        onSelected: (value) => context
-                            .read<YouTubeBloc>()
-                            .add(TopicFilterChanged(value)),
+                        onSelected: (value) => context.read<YouTubeBloc>().add(
+                          TopicFilterChanged(value),
+                        ),
                       ),
                     ),
                   Expanded(
