@@ -170,9 +170,35 @@ class YoutubeFailure extends YoutubeState {
 
 // Helper function to build shelves from video list (used in fromJson)
 List<VideoShelf> _buildBaseShelvesFromVideos(List<LikedVideo> videos) {
-  // This is a simplified version - the full implementation is in youtube_bloc.dart
-  // For now, create a single "All Videos" shelf
-  return [
-    VideoShelf(title: 'All Videos', videos: videos),
-  ];
+  final shelves = <VideoShelf>[];
+
+  // 1. All Videos shelf (always first)
+  if (videos.isNotEmpty) {
+    shelves.add(VideoShelf(title: 'All Videos', videos: videos));
+  }
+
+  // 2. Group by categoryTitle
+  final Map<String, List<LikedVideo>> byCategory = {};
+  for (final v in videos) {
+    final title = (v.categoryTitle ?? '').trim();
+    if (title.isEmpty) continue;
+    byCategory.putIfAbsent(title, () => <LikedVideo>[]).add(v);
+  }
+
+  // 3. Priority categories in order: Music, Movies, Shows
+  final priorityCategories = ['Music', 'Movies', 'Shows'];
+  for (final category in priorityCategories) {
+    if (byCategory.containsKey(category)) {
+      shelves.add(VideoShelf(title: category, videos: byCategory[category]!));
+      byCategory.remove(category);
+    }
+  }
+
+  // 4. Other categories alphabetically
+  final otherCategories = byCategory.keys.toList()..sort();
+  for (final category in otherCategories) {
+    shelves.add(VideoShelf(title: category, videos: byCategory[category]!));
+  }
+
+  return shelves;
 }
