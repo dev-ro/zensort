@@ -87,15 +87,15 @@ class VideoShelfSliver extends StatelessWidget {
       // Videos grid with true lazy rendering
       SliverPadding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        sliver: LayoutBuilder(
+        sliver: SliverLayoutBuilder(
           builder: (context, constraints) {
             // Calculate grid parameters based on available width
             double maxExtent = 360.0;
-            if (constraints.maxWidth <= 420) maxExtent = 320.0;
+            if (constraints.crossAxisExtent <= 420) maxExtent = 320.0;
 
             // Estimate childAspectRatio: 16:9 thumbnail + ~96px text/padding area
             double estimateAspect(double width) => width / (width * 9 / 16 + 96);
-            final sampleWidth = (constraints.maxWidth / (constraints.maxWidth / maxExtent).ceil())
+            final sampleWidth = (constraints.crossAxisExtent / (constraints.crossAxisExtent / maxExtent).ceil())
                 .clamp(220.0, maxExtent);
             final childAspectRatio = estimateAspect(sampleWidth.toDouble());
 
