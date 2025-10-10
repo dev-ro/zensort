@@ -76,10 +76,30 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
         authState.accessToken != null &&
         !_isInitialLoadDispatched) {
       print(
-        'User authenticated with access token - setting up streams and triggering initial load',
+        'User authenticated with access token - checking for cached videos',
       );
       _isInitialLoadDispatched = true;
 
+      // Check if we have cached videos from hydrated state
+      final currentState = state;
+      if (currentState is YoutubeLoaded && 
+          currentState.allVideos.isNotEmpty && 
+          currentState.isFullyLoaded) {
+        print('Found cached videos (${currentState.allVideos.length} videos) - loading immediately');
+        
+        // Emit cached state immediately for instant access
+        emit(currentState);
+        
+        // Set up streams for reactive updates
+        _setupStreams();
+        
+        // Perform background sync check (silent)
+        _performBackgroundSyncCheck();
+        
+        return;
+      }
+
+      print('No cached videos found - starting fresh load');
       emit(YoutubeLoading());
 
       // Cancel existing subscriptions
@@ -565,6 +585,56 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     _authStateSubscription?.cancel();
     _likedVideosSubscription?.cancel();
     return super.close();
+  }
+
+  // Helper method to set up streams for cached state
+  void _setupStreams() {
+    // Set up sync progress monitoring (non-blocking)
+    _syncProgressSubscription = _youtubeRepository
+        .getSyncProgressStream()
+        .listen(
+          (progress) => add(_YoutubeSyncProgressUpdated(progress)),
+          onError: (error) {
+            print('Sync progress stream error: $error');
+            // Don't emit failure for cached state, just log
+            print('Background sync check failed: $error');
+          },
+        );
+
+    // Set up reactive liked videos stream
+    _likedVideosSubscription = _youtubeRepository.watchLikedVideos().listen(
+      (videos) {
+        print('watchLikedVideos stream emitted ${videos.length} videos');
+        add(_LikedVideosUpdated(videos));
+        // Also load unliked videos once per session after we have a baseline
+        if (!_hasVerifiedRemoteTotal) {
+          add(LoadUnlikedVideos());
+        }
+      },
+      onError: (error) {
+        print('Liked videos stream error: $error');
+        add(_LikedVideosError(error.toString()));
+      },
+    );
+  }
+
+  // Helper method to perform silent background sync check
+  void _performBackgroundSyncCheck() async {
+    try {
+      print('Performing background sync check...');
+      final remote = await _youtubeRepository.fetchRemoteLikedVideosTotal();
+      final local = await _youtubeRepository.fetchLocalLikedVideosCount();
+      
+      if (remote > local) {
+        print('Background check: Remote has more videos ($remote vs $local) - triggering sync');
+        add(SyncLikedVideos());
+      } else {
+        print('Background check: Local is up to date ($local videos)');
+      }
+    } catch (e) {
+      print('Background sync check failed: $e');
+      // Silent failure - don't disrupt user experience
+    }
   }
 
   // HydratedBloc serialization methods

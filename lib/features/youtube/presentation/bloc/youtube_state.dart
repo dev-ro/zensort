@@ -65,17 +65,32 @@ class YoutubeLoaded extends YoutubeState {
 
   // Serialization methods for hydrated_bloc
   factory YoutubeLoaded.fromJson(Map<String, dynamic> json) {
-    // Persist only searchQuery to restore UI intent; videos come from repository stream.
     final query = (json['searchQuery'] as String?) ?? '';
+    final expandedShelfKey = json['expandedShelfKey'] as String?;
+    final isFullyLoaded = json['isFullyLoaded'] as bool? ?? false;
+    
+    // Deserialize cached videos if available
+    final allVideosJson = json['allVideos'] as List<dynamic>?;
+    final allVideos = allVideosJson != null
+        ? allVideosJson
+            .map((videoJson) => LikedVideo.fromJson(videoJson as Map<String, dynamic>))
+            .toList()
+        : <LikedVideo>[];
+    
+    // Build shelves from cached videos if available
+    final shelves = allVideos.isNotEmpty
+        ? _buildBaseShelvesFromVideos(allVideos)
+        : <VideoShelf>[];
+    
     return YoutubeLoaded(
-      shelves: const [],
-      allVideos: const [],
+      shelves: shelves,
+      allVideos: allVideos,
       unlikedVideos: const [],
       searchQuery: query,
       hasMore: false,
       loadingMore: false,
-      expandedShelfKey: json['expandedShelfKey'] as String?,
-      isFullyLoaded: false,
+      expandedShelfKey: expandedShelfKey,
+      isFullyLoaded: isFullyLoaded,
     );
   }
 
@@ -83,6 +98,8 @@ class YoutubeLoaded extends YoutubeState {
     return {
       'searchQuery': searchQuery,
       if (expandedShelfKey != null) 'expandedShelfKey': expandedShelfKey,
+      'isFullyLoaded': isFullyLoaded,
+      if (allVideos.isNotEmpty) 'allVideos': allVideos.map((video) => video.toJson()).toList(),
     };
   }
 
@@ -149,4 +166,13 @@ class YoutubeFailure extends YoutubeState {
 
   @override
   List<Object> get props => [error];
+}
+
+// Helper function to build shelves from video list (used in fromJson)
+List<VideoShelf> _buildBaseShelvesFromVideos(List<LikedVideo> videos) {
+  // This is a simplified version - the full implementation is in youtube_bloc.dart
+  // For now, create a single "All Videos" shelf
+  return [
+    VideoShelf(title: 'All Videos', videos: videos),
+  ];
 }
