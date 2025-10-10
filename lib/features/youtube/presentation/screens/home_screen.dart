@@ -6,6 +6,8 @@ import 'package:zensort/features/youtube/presentation/widgets/video_search_bar.d
 import 'package:zensort/features/youtube/presentation/widgets/expandable_video_shelf.dart';
 import 'package:zensort/features/youtube/presentation/widgets/responsive_video_grid.dart';
 import 'package:zensort/features/youtube/presentation/widgets/full_screen_loading_overlay.dart';
+import 'package:zensort/features/youtube/presentation/widgets/embedding_status_sheet.dart';
+import 'package:zensort/features/youtube/presentation/bloc/embedding_progress_cubit.dart';
 import 'package:zensort/theme.dart';
 import 'package:zensort/widgets/gradient_loader.dart';
 
@@ -18,6 +20,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool _isWaitingForTokenRefresh = false;
+  bool _embeddingStatusShownThisSession = false;
 
   @override
   void initState() {
@@ -66,6 +69,21 @@ class _HomeScreenState extends State<HomeScreen> {
             appBar: AppBar(
               title: const Text('Liked Videos'),
               actions: [
+                Tooltip(
+                  message: 'Embeddings Status',
+                  child: FilledButton.tonalIcon(
+                    onPressed: () async {
+                      await showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        showDragHandle: true,
+                        builder: (_) => const EmbeddingStatusSheet(),
+                      );
+                    },
+                    icon: const Icon(Icons.insights),
+                    label: const Text('Status'),
+                  ),
+                ),
                 IconButton(
                   icon: const Icon(Icons.sync),
                   onPressed: isSyncing
@@ -148,6 +166,22 @@ class _HomeScreenState extends State<HomeScreen> {
                       content: Text('An error occurred: ${state.error}'),
                     ),
                   );
+                }
+                // Auto-open embeddings status once after login if incomplete
+                if (!_embeddingStatusShownThisSession) {
+                  final p = context.watch<EmbeddingProgressCubit>().state;
+                  if (!p.isComplete && (p.total > 0 || p.pending > 0)) {
+                    _embeddingStatusShownThisSession = true;
+                    // Open non-blocking after current frame
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        showDragHandle: true,
+                        builder: (_) => const EmbeddingStatusSheet(),
+                      );
+                    });
+                  }
                 }
               },
               child: _buildBody(youtubeState),
