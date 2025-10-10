@@ -238,7 +238,6 @@ class _HomeScreenState extends State<HomeScreen> {
                             final isExpanded =
                                 shelf.title == state.expandedShelfKey;
                             return ExpandableVideoShelf(
-                              key: PageStorageKey('shelf_${shelf.title}'),
                               title: shelf.title,
                               videos: shelf.videos,
                               isExpanded: isExpanded,

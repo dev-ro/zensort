@@ -6,15 +6,19 @@ class ResponsiveVideoGrid extends StatelessWidget {
   final List<LikedVideo> videos;
   final bool isBusy;
 
-  const ResponsiveVideoGrid({super.key, required this.videos, this.isBusy = false});
+  const ResponsiveVideoGrid({
+    super.key,
+    required this.videos,
+    this.isBusy = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         // Choose a max tile width that yields rectangular tiles on web
-        double maxExtent = 360;
-        if (constraints.maxWidth <= 420) maxExtent = 320;
+        double maxExtent = 360.0;
+        if (constraints.maxWidth <= 420) maxExtent = 320.0;
 
         // Estimate childAspectRatio: 16:9 thumbnail + ~96px text/padding area
         // Height = width*(9/16) + 96  => aspect = width / height
@@ -22,30 +26,21 @@ class ResponsiveVideoGrid extends StatelessWidget {
         double estimateAspect(double width) => width / (width * 9 / 16 + 96);
         final sampleWidth =
             (constraints.maxWidth / (constraints.maxWidth / maxExtent).ceil())
-                .clamp(220, maxExtent);
+                .clamp(220.0, maxExtent);
         final childAspectRatio = estimateAspect(sampleWidth.toDouble());
 
-        return Column(
-          children: [
-            if (isBusy)
-              const Padding(
-                padding: EdgeInsets.only(bottom: 8.0),
-                child: LinearProgressIndicator(),
-              ),
-            GridView.builder(
+        return GridView.builder(
           physics: const NeverScrollableScrollPhysics(),
           shrinkWrap: true,
           gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
             maxCrossAxisExtent: maxExtent,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
+            mainAxisSpacing: 12.0,
+            crossAxisSpacing: 12.0,
             childAspectRatio: childAspectRatio,
           ),
           itemCount: videos.length,
           cacheExtent: 800.0,
           itemBuilder: (context, index) => VideoGridCard(video: videos[index]),
-        ),
-          ],
         );
       },
     );
