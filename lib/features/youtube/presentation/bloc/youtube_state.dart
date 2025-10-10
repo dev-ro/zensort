@@ -65,24 +65,39 @@ class YoutubeLoaded extends YoutubeState {
 
   // Serialization methods for hydrated_bloc
   factory YoutubeLoaded.fromJson(Map<String, dynamic> json) {
-    // Persist only searchQuery to restore UI intent; videos come from repository stream.
     final query = (json['searchQuery'] as String?) ?? '';
+    final isFullyLoaded = json['isFullyLoaded'] as bool? ?? false;
+    
+    // Deserialize cached videos if available
+    final allVideosJson = json['allVideos'] as List<dynamic>?;
+    final allVideos = allVideosJson != null
+        ? allVideosJson
+            .map((videoJson) => LikedVideo.fromJson(videoJson as Map<String, dynamic>))
+            .toList()
+        : <LikedVideo>[];
+    
+    // Build shelves from cached videos if available
+    final shelves = allVideos.isNotEmpty
+        ? _buildBaseShelvesFromVideos(allVideos)
+        : <VideoShelf>[];
+    
     return YoutubeLoaded(
-      shelves: const [],
-      allVideos: const [],
+      shelves: shelves,
+      allVideos: allVideos,
       unlikedVideos: const [],
       searchQuery: query,
       hasMore: false,
       loadingMore: false,
-      expandedShelfKey: json['expandedShelfKey'] as String?,
-      isFullyLoaded: false,
+      expandedShelfKey: null, // Always start collapsed for faster initial render
+      isFullyLoaded: isFullyLoaded,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'searchQuery': searchQuery,
-      if (expandedShelfKey != null) 'expandedShelfKey': expandedShelfKey,
+      'isFullyLoaded': isFullyLoaded,
+      if (allVideos.isNotEmpty) 'allVideos': allVideos.map((video) => video.toJson()).toList(),
     };
   }
 
@@ -149,4 +164,39 @@ class YoutubeFailure extends YoutubeState {
 
   @override
   List<Object> get props => [error];
+}
+
+// Helper function to build shelves from video list (used in fromJson)
+List<VideoShelf> _buildBaseShelvesFromVideos(List<LikedVideo> videos) {
+  final shelves = <VideoShelf>[];
+
+  // 1. All Videos shelf (always first)
+  if (videos.isNotEmpty) {
+    shelves.add(VideoShelf(title: 'All Videos', videos: videos));
+  }
+
+  // 2. Group by categoryTitle
+  final Map<String, List<LikedVideo>> byCategory = {};
+  for (final v in videos) {
+    final title = (v.categoryTitle ?? '').trim();
+    if (title.isEmpty) continue;
+    byCategory.putIfAbsent(title, () => <LikedVideo>[]).add(v);
+  }
+
+  // 3. Priority categories in order: Music, Movies, Shows
+  final priorityCategories = ['Music', 'Movies', 'Shows'];
+  for (final category in priorityCategories) {
+    if (byCategory.containsKey(category)) {
+      shelves.add(VideoShelf(title: category, videos: byCategory[category]!));
+      byCategory.remove(category);
+    }
+  }
+
+  // 4. Other categories alphabetically
+  final otherCategories = byCategory.keys.toList()..sort();
+  for (final category in otherCategories) {
+    shelves.add(VideoShelf(title: category, videos: byCategory[category]!));
+  }
+
+  return shelves;
 }

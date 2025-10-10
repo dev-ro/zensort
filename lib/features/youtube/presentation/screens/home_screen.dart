@@ -3,7 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:zensort/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:zensort/features/youtube/presentation/bloc/youtube_bloc.dart';
 import 'package:zensort/features/youtube/presentation/widgets/video_search_bar.dart';
-import 'package:zensort/features/youtube/presentation/widgets/expandable_video_shelf.dart';
+import 'package:zensort/features/youtube/presentation/widgets/video_shelf_sliver.dart';
 import 'package:zensort/features/youtube/presentation/widgets/responsive_video_grid.dart';
 import 'package:zensort/features/youtube/presentation/widgets/full_screen_loading_overlay.dart';
 import 'package:zensort/features/youtube/presentation/widgets/embedding_status_sheet.dart';
@@ -243,33 +243,33 @@ class _HomeScreenState extends State<HomeScreen> {
                       ? const Center(
                           child: Text('No liked videos found. Try syncing!'),
                         )
-                      : ListView.builder(
-                          itemCount: state.shelves.length,
-                          itemBuilder: (context, index) {
-                            final shelf = state.shelves[index];
-                            final isExpanded =
-                                shelf.title == state.expandedShelfKey;
-                            return ExpandableVideoShelf(
-                              title: shelf.title,
-                              videos: shelf.videos,
-                              isExpanded: isExpanded,
-                              showBusy:
-                                  state.activeShelfKey == shelf.title &&
-                                  state.activeShelfBusy,
-                              hasMore: state.hasMore,
-                              isLoading: state.loadingMore,
-                              onExpansionChanged: (expanded) {
-                                context.read<YouTubeBloc>().add(
-                                  ShelfExpansionChanged(
-                                    expanded ? shelf.title : null,
-                                  ),
-                                );
-                              },
-                              onEndReached: () => context
-                                  .read<YouTubeBloc>()
-                                  .add(LoadMoreAllVideos()),
-                            );
-                          },
+                      : CustomScrollView(
+                          slivers: [
+                            // Build slivers for each shelf
+                            ...state.shelves.map((shelf) {
+                              final isExpanded = shelf.title == state.expandedShelfKey;
+                              return VideoShelfSliver(
+                                shelf: shelf,
+                                isExpanded: isExpanded,
+                                showBusy: state.activeShelfKey == shelf.title && state.activeShelfBusy,
+                                onExpansionChanged: (expanded) {
+                                  context.read<YouTubeBloc>().add(
+                                    ShelfExpansionChanged(
+                                      expanded ? shelf.title : null,
+                                    ),
+                                  );
+                                },
+                              );
+                            }).toList(),
+                            // Load more indicator
+                            if (state.loadingMore)
+                              const SliverToBoxAdapter(
+                                child: Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 12.0),
+                                  child: Center(child: CircularProgressIndicator()),
+                                ),
+                              ),
+                          ],
                         )),
           ),
         ],
