@@ -71,7 +71,9 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: () {
                 context.read<YouTubeBloc>().add(const SearchQueryChanged(''));
                 context.read<YouTubeBloc>().add(const TopicFilterChanged(null));
-                context.read<YouTubeBloc>().add(const ShelfExpansionChanged(null));
+                context.read<YouTubeBloc>().add(
+                  const ShelfExpansionChanged(null),
+                );
               },
             ),
             IconButton(
@@ -279,11 +281,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                     final isExpanded =
                                         shelf.title == state.expandedShelfKey;
                                     return ExpandableVideoShelf(
-                                      key: PageStorageKey('shelf_${shelf.title}'),
+                                      key: PageStorageKey(
+                                        'shelf_${shelf.title}',
+                                      ),
                                       title: shelf.title,
                                       videos: shelf.videos,
                                       isExpanded: isExpanded,
-                                      showBusy: state.activeShelfKey == shelf.title && state.activeShelfBusy,
+                                      showBusy:
+                                          state.activeShelfKey == shelf.title &&
+                                          state.activeShelfBusy,
                                       hasMore: state.hasMore,
                                       isLoading: state.loadingMore,
                                       onExpansionChanged: (expanded) {
