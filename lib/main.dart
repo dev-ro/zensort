@@ -13,6 +13,7 @@ import 'package:zensort/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:zensort/features/youtube/data/repositories/youtube_repository_impl.dart';
 import 'package:zensort/features/youtube/domain/repositories/youtube_repository.dart';
 import 'package:zensort/features/youtube/presentation/bloc/youtube_bloc.dart';
+import 'package:zensort/features/youtube/presentation/bloc/embedding_progress_cubit.dart';
 import 'package:zensort/firebase_options_dev.dart' as dev;
 import 'package:zensort/firebase_options.dart' as prod;
 import 'package:zensort/router.dart';
@@ -89,6 +90,10 @@ class ZenSortApp extends StatelessWidget {
               context.read<YoutubeRepository>(),
               context.read<AuthBloc>(),
             ),
+          ),
+          BlocProvider<EmbeddingProgressCubit>(
+            create: (context) =>
+                EmbeddingProgressCubit(context.read<YoutubeRepository>()),
           ),
         ],
         child: MaterialApp.router(

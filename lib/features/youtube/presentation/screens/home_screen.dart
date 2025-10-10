@@ -6,6 +6,7 @@ import 'package:zensort/features/youtube/presentation/widgets/video_search_bar.d
 import 'package:zensort/features/youtube/presentation/widgets/expandable_video_shelf.dart';
 import 'package:zensort/features/youtube/presentation/widgets/responsive_video_grid.dart';
 import 'package:zensort/features/youtube/presentation/widgets/full_screen_loading_overlay.dart';
+import 'package:zensort/features/youtube/presentation/widgets/embedding_status_sheet.dart';
 import 'package:zensort/theme.dart';
 import 'package:zensort/widgets/gradient_loader.dart';
 
@@ -66,6 +67,17 @@ class _HomeScreenState extends State<HomeScreen> {
             appBar: AppBar(
               title: const Text('Liked Videos'),
               actions: [
+                IconButton(
+                  icon: const Icon(Icons.analytics),
+                  onPressed: () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (context) => const EmbeddingStatusSheet(),
+                    );
+                  },
+                ),
                 IconButton(
                   icon: const Icon(Icons.sync),
                   onPressed: isSyncing
