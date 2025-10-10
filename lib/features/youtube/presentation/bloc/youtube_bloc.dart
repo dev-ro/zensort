@@ -124,8 +124,20 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
         },
       );
 
-      // Trigger eager full load for shelves and search
-      add(LoadAllVideosEager());
+      // Decide whether to sync first based on remote vs local totals
+      Future(() async {
+        try {
+          final remote = await _youtubeRepository.fetchRemoteLikedVideosTotal();
+          final local = await _youtubeRepository.fetchLocalLikedVideosCount();
+          if (remote > local) {
+            add(SyncLikedVideos());
+          } else {
+            add(LoadAllVideosEager());
+          }
+        } catch (_) {
+          add(LoadAllVideosEager());
+        }
+      });
     } else if (authState is AuthUnauthenticated) {
       print('User unauthenticated - clearing state and resetting latch');
       // Reset the latches when user becomes unauthenticated
@@ -451,6 +463,7 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
   ) async {
     int loaded = 0;
     int? total;
+    List<LikedVideo> latestVideos = const [];
     try {
       // Try to fetch total; ignore failures and use indeterminate mode
       try {
@@ -463,6 +476,7 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
         _youtubeRepository.fetchAllLikedVideosBatched(pageSize: 200),
         onData: (videos) {
           loaded = videos.length;
+          latestVideos = videos;
           // Emit progress state
           return YoutubeAllLoading(loadedCount: loaded, totalCount: total);
         },
@@ -474,9 +488,7 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
       final current = state is YoutubeLoaded
           ? state as YoutubeLoaded
           : YoutubeLoaded.initial();
-      final allVideos = await _youtubeRepository
-          .fetchAllLikedVideosBatched(pageSize: 200)
-          .last;
+      final allVideos = latestVideos;
       final query = current.searchQuery;
       final filtered = query.isEmpty
           ? allVideos

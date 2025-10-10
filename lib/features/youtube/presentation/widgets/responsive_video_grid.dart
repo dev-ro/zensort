@@ -42,7 +42,7 @@ class ResponsiveVideoGrid extends StatelessWidget {
             childAspectRatio: childAspectRatio,
           ),
           itemCount: videos.length,
-          cacheExtent: 800,
+          cacheExtent: 800.0,
           itemBuilder: (context, index) => VideoGridCard(video: videos[index]),
         ),
           ],
