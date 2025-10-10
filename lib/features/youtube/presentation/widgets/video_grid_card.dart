@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:zensort/features/youtube/domain/entities/liked_video.dart';
 import 'package:zensort/features/youtube/presentation/utils/youtube_thumbnail.dart';
 
@@ -47,8 +48,21 @@ class VideoGridCard extends StatelessWidget {
                           fit: BoxFit.contain,
                         ),
                       )
-                    : _NetworkThumbnail(
-                        url: buildHighQualityThumbnailUrl(video.id),
+                    : CachedNetworkImage(
+                        imageUrl: buildHighQualityThumbnailUrl(video.id),
+                        fit: BoxFit.cover,
+                        memCacheWidth: 480,
+                        maxWidthDiskCache: 480,
+                        placeholder: (context, url) => Container(
+                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          child: const Center(
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                        errorWidget: (context, url, error) => Container(
+                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          child: const Icon(Icons.image_not_supported),
+                        ),
                       ),
               ),
               Padding(
@@ -83,39 +97,3 @@ class VideoGridCard extends StatelessWidget {
   }
 }
 
-class _NetworkThumbnail extends StatelessWidget {
-  final String url;
-  const _NetworkThumbnail({required this.url});
-
-  @override
-  Widget build(BuildContext context) {
-    return Image.network(
-      url,
-      fit: BoxFit.cover,
-      errorBuilder: (context, error, stack) => Container(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        child: Icon(
-          Icons.image_not_supported,
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-      ),
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) return child;
-        return Container(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          alignment: Alignment.center,
-          child: SizedBox(
-            width: 24,
-            height: 24,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              valueColor: AlwaysStoppedAnimation<Color>(
-                Theme.of(context).colorScheme.primary,
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}

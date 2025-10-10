@@ -82,10 +82,18 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
 
       // Check if we have cached videos from hydrated state
       final currentState = state;
+      print('Current state type: ${currentState.runtimeType}');
+      print('Is YoutubeLoaded: ${currentState is YoutubeLoaded}');
+      if (currentState is YoutubeLoaded) {
+        print('Cached videos count: ${currentState.allVideos.length}');
+        print('Is fully loaded: ${currentState.isFullyLoaded}');
+        print('Shelves count: ${currentState.shelves.length}');
+      }
+      
       if (currentState is YoutubeLoaded && 
           currentState.allVideos.isNotEmpty && 
           currentState.isFullyLoaded) {
-        print('Found cached videos (${currentState.allVideos.length} videos) - loading immediately');
+        print('✅ Found cached videos (${currentState.allVideos.length} videos) - loading immediately');
         
         // Emit cached state immediately for instant access
         emit(currentState);
@@ -97,6 +105,8 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
         _performBackgroundSyncCheck();
         
         return;
+      } else {
+        print('❌ No cached videos found or not fully loaded - starting fresh load');
       }
 
       print('No cached videos found - starting fresh load');
@@ -641,14 +651,24 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
   @override
   YoutubeState? fromJson(Map<String, dynamic> json) {
     try {
+      print('🔄 YouTubeBloc.fromJson called');
+      print('JSON keys: ${json.keys.toList()}');
       final stateType = json['stateType'] as String?;
+      print('State type: $stateType');
+      
       if (stateType == 'YoutubeLoaded') {
-        return YoutubeLoaded.fromJson(json);
+        print('✅ Deserializing YoutubeLoaded state');
+        final result = YoutubeLoaded.fromJson(json);
+        print('Deserialized videos count: ${result.allVideos.length}');
+        print('Is fully loaded: ${result.isFullyLoaded}');
+        return result;
       }
       // For other states, return null to use default initial state
+      print('❌ No YoutubeLoaded state found, using initial state');
       return null;
-    } catch (_) {
+    } catch (e) {
       // If deserialization fails, return null to use default initial state
+      print('❌ Deserialization failed: $e');
       return null;
     }
   }

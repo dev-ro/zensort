@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:zensort/features/youtube/domain/entities/liked_video.dart';
+import 'package:zensort/features/youtube/presentation/utils/youtube_thumbnail.dart';
 import 'package:zensort/widgets/thumbnail_placeholder.dart';
 
 class VideoListItem extends StatelessWidget {
@@ -36,28 +38,25 @@ class VideoListItem extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
                 child: video.shouldSkipThumbnailLoad() || video.thumbnailUrl.isEmpty
                     ? const ThumbnailPlaceholder()
-                    : Image.network(
-                        video.thumbnailUrl,
+                    : CachedNetworkImage(
+                        imageUrl: buildHighQualityThumbnailUrl(video.id),
                         width: 120,
                         height: 90,
                         fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return const ThumbnailPlaceholder();
-                        },
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return Container(
-                            width: 120,
-                            height: 90,
-                            decoration: BoxDecoration(
-                              color: Colors.grey[200],
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Center(
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          );
-                        },
+                        memCacheWidth: 480,
+                        maxWidthDiskCache: 480,
+                        placeholder: (context, url) => Container(
+                          width: 120,
+                          height: 90,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[200],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Center(
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                        errorWidget: (context, url, error) => const ThumbnailPlaceholder(),
                       ),
               ),
               const SizedBox(width: 16),

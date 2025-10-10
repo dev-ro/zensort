@@ -66,7 +66,6 @@ class YoutubeLoaded extends YoutubeState {
   // Serialization methods for hydrated_bloc
   factory YoutubeLoaded.fromJson(Map<String, dynamic> json) {
     final query = (json['searchQuery'] as String?) ?? '';
-    final expandedShelfKey = json['expandedShelfKey'] as String?;
     final isFullyLoaded = json['isFullyLoaded'] as bool? ?? false;
     
     // Deserialize cached videos if available
@@ -89,7 +88,7 @@ class YoutubeLoaded extends YoutubeState {
       searchQuery: query,
       hasMore: false,
       loadingMore: false,
-      expandedShelfKey: expandedShelfKey,
+      expandedShelfKey: null, // Always start collapsed for faster initial render
       isFullyLoaded: isFullyLoaded,
     );
   }
@@ -97,7 +96,6 @@ class YoutubeLoaded extends YoutubeState {
   Map<String, dynamic> toJson() {
     return {
       'searchQuery': searchQuery,
-      if (expandedShelfKey != null) 'expandedShelfKey': expandedShelfKey,
       'isFullyLoaded': isFullyLoaded,
       if (allVideos.isNotEmpty) 'allVideos': allVideos.map((video) => video.toJson()).toList(),
     };
