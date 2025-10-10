@@ -66,6 +66,15 @@ class _HomeScreenState extends State<HomeScreen> {
           title: const Text('Liked Videos'),
           actions: [
             IconButton(
+              tooltip: 'Reset view',
+              icon: const Icon(Icons.home_outlined),
+              onPressed: () {
+                context.read<YouTubeBloc>().add(const SearchQueryChanged(''));
+                context.read<YouTubeBloc>().add(const TopicFilterChanged(null));
+                context.read<YouTubeBloc>().add(const ShelfExpansionChanged(null));
+              },
+            ),
+            IconButton(
               icon: const Icon(Icons.sync),
               onPressed: isSyncing
                   ? null
