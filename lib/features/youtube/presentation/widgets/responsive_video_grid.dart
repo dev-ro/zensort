@@ -29,25 +29,20 @@ class ResponsiveVideoGrid extends StatelessWidget {
                 .clamp(220.0, maxExtent);
         final childAspectRatio = estimateAspect(sampleWidth.toDouble());
 
-        return CustomScrollView(
-          physics: const ClampingScrollPhysics(),
-          slivers: [
-            SliverGrid(
-              gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: maxExtent,
-                mainAxisSpacing: 12.0,
-                crossAxisSpacing: 12.0,
-                childAspectRatio: childAspectRatio,
-              ),
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  // Only called for visible items - lazy rendering
-                  return VideoGridCard(video: videos[index]);
-                },
-                childCount: videos.length, // All data available for search
-              ),
-            ),
-          ],
+        return GridView.builder(
+          shrinkWrap: true, // Required for ExpansionTile
+          physics: const NeverScrollableScrollPhysics(), // Parent ListView handles scrolling
+          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: maxExtent,
+            mainAxisSpacing: 12.0,
+            crossAxisSpacing: 12.0,
+            childAspectRatio: childAspectRatio,
+          ),
+          itemCount: videos.length,
+          itemBuilder: (context, index) {
+            // Still lazy - only visible items render
+            return VideoGridCard(video: videos[index]);
+          },
         );
       },
     );
