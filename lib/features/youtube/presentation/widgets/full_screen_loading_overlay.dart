@@ -9,8 +9,8 @@ class FullScreenLoadingOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final value = (loaded != null && total != null && total! > 0)
-        ? (loaded! / total!).clamp(0, 1)
+    final double? value = (loaded != null && total != null && total! > 0)
+        ? (loaded! / total!).clamp(0.0, 1.0).toDouble()
         : null;
 
     return ColoredBox(
@@ -29,7 +29,10 @@ class FullScreenLoadingOverlay extends StatelessWidget {
                   children: [
                     Icon(Icons.video_library, color: theme.colorScheme.primary),
                     const SizedBox(width: 12),
-                    Text('Loading your videos', style: theme.textTheme.titleLarge),
+                    Text(
+                      'Loading your videos',
+                      style: theme.textTheme.titleLarge,
+                    ),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -42,10 +45,7 @@ class FullScreenLoadingOverlay extends StatelessWidget {
                 LinearProgressIndicator(value: value),
                 if (loaded != null && total != null) ...[
                   const SizedBox(height: 12),
-                  Text(
-                    'Loaded $loaded of $total',
-                    textAlign: TextAlign.center,
-                  ),
+                  Text('Loaded $loaded of $total', textAlign: TextAlign.center),
                 ],
               ],
             ),
@@ -55,5 +55,3 @@ class FullScreenLoadingOverlay extends StatelessWidget {
     );
   }
 }
-
-
