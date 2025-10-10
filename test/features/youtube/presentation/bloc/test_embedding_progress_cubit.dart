@@ -30,12 +30,16 @@ class TestYoutubeRepository implements YoutubeRepository {
   Future<int> fetchLocalLikedVideosCount() async => 0;
 
   @override
-  Future<LikedVideosPage> fetchLikedVideosPage({String? startAfterId, int limit = 100}) async {
+  Future<LikedVideosPage> fetchLikedVideosPage({
+    String? startAfterId,
+    int limit = 100,
+  }) async {
     return const LikedVideosPage(videos: [], hasMore: false);
   }
 
   @override
-  Stream<List<LikedVideo>> fetchAllLikedVideosBatched({int pageSize = 200}) => Stream.empty();
+  Stream<List<LikedVideo>> fetchAllLikedVideosBatched({int pageSize = 200}) =>
+      Stream.empty();
 
   @override
   Future<List<LikedVideo>> fetchUnlikedVideos() async => [];
@@ -46,27 +50,27 @@ void main() {
     test('initial state should be default EmbeddingProgress', () async {
       final repository = TestYoutubeRepository();
       final cubit = EmbeddingProgressCubit(repository);
-      
+
       // The cubit should start with default progress
       expect(cubit.state, const EmbeddingProgress());
-      
+
       // Wait a bit for the stream to emit
       await Future.delayed(const Duration(milliseconds: 100));
-      
+
       cubit.close();
     });
 
     test('should emit progress updates from repository stream', () async {
       final repository = TestYoutubeRepository();
       final cubit = EmbeddingProgressCubit(repository);
-      
+
       // Wait a bit for the stream to emit
       await Future.delayed(const Duration(milliseconds: 100));
-      
+
       // Should have received the progress from the test repository
       expect(cubit.state.total, 100);
       expect(cubit.state.completed, 50);
-      
+
       cubit.close();
     });
   });

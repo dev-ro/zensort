@@ -408,12 +408,12 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
         .doc('current')
         .snapshots()
         .map((snapshot) {
-      if (!snapshot.exists || snapshot.data() == null) {
-        // Return default progress when document doesn't exist
-        return const EmbeddingProgress();
-      }
+          if (!snapshot.exists || snapshot.data() == null) {
+            // Return default progress when document doesn't exist
+            return const EmbeddingProgress();
+          }
 
-      return EmbeddingProgress.fromMap(snapshot.data()!);
-    });
+          return EmbeddingProgress.fromMap(snapshot.data()!);
+        });
   }
 }

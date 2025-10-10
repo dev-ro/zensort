@@ -22,15 +22,13 @@ class EmbeddingStatusSheet extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               gradient: ZenSortTheme.primaryGradient,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(16),
+              ),
             ),
             child: Row(
               children: [
-                const Icon(
-                  Icons.analytics,
-                  color: Colors.white,
-                  size: 24,
-                ),
+                const Icon(Icons.analytics, color: Colors.white, size: 24),
                 const SizedBox(width: 12),
                 const Expanded(
                   child: Text(
@@ -44,15 +42,12 @@ class EmbeddingStatusSheet extends StatelessWidget {
                 ),
                 IconButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(
-                    Icons.close,
-                    color: Colors.white,
-                  ),
+                  icon: const Icon(Icons.close, color: Colors.white),
                 ),
               ],
             ),
           ),
-          
+
           // Content
           Padding(
             padding: const EdgeInsets.all(16),
@@ -70,17 +65,17 @@ class EmbeddingStatusSheet extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    
+
                     // Progress Text
                     Text(
                       _getProgressText(progress),
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 16),
-                    
+
                     // Statistics Grid
                     _buildStatisticsGrid(context, progress),
-                    
+
                     if (progress.lastUpdated != null) ...[
                       const SizedBox(height: 16),
                       Text(
@@ -100,7 +95,10 @@ class EmbeddingStatusSheet extends StatelessWidget {
     );
   }
 
-  Widget _buildStatisticsGrid(BuildContext context, EmbeddingProgress progress) {
+  Widget _buildStatisticsGrid(
+    BuildContext context,
+    EmbeddingProgress progress,
+  ) {
     return Row(
       children: [
         Expanded(
@@ -158,9 +156,7 @@ class EmbeddingStatusSheet extends StatelessWidget {
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: color.withValues(alpha: 0.3),
-        ),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(
         children: [
@@ -175,9 +171,9 @@ class EmbeddingStatusSheet extends StatelessWidget {
           ),
           Text(
             label,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: color,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: color),
             textAlign: TextAlign.center,
           ),
         ],
@@ -189,11 +185,11 @@ class EmbeddingStatusSheet extends StatelessWidget {
     if (progress.total == 0) {
       return 'No embeddings in progress';
     }
-    
+
     if (progress.isComplete) {
       return 'Embedding process completed!';
     }
-    
+
     final percentage = (progress.percentComplete * 100).round();
     return 'Processing embeddings: $percentage% complete';
   }
@@ -201,7 +197,7 @@ class EmbeddingStatusSheet extends StatelessWidget {
   String _formatDateTime(DateTime dateTime) {
     final now = DateTime.now();
     final difference = now.difference(dateTime);
-    
+
     if (difference.inMinutes < 1) {
       return 'Just now';
     } else if (difference.inMinutes < 60) {

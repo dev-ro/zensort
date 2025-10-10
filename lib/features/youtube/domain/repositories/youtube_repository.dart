@@ -11,7 +11,10 @@ abstract class YoutubeRepository {
   Future<int> fetchRemoteLikedVideosTotal();
   Future<int> fetchLocalLikedVideosCount();
 
-  Future<LikedVideosPage> fetchLikedVideosPage({String? startAfterId, int limit = 100});
+  Future<LikedVideosPage> fetchLikedVideosPage({
+    String? startAfterId,
+    int limit = 100,
+  });
 
   // Fetch all liked video IDs in pages and join with /videos metadata in chunks
   Stream<List<LikedVideo>> fetchAllLikedVideosBatched({int pageSize = 200});

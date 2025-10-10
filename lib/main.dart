@@ -92,9 +92,8 @@ class ZenSortApp extends StatelessWidget {
             ),
           ),
           BlocProvider<EmbeddingProgressCubit>(
-            create: (context) => EmbeddingProgressCubit(
-              context.read<YoutubeRepository>(),
-            ),
+            create: (context) =>
+                EmbeddingProgressCubit(context.read<YoutubeRepository>()),
           ),
         ],
         child: MaterialApp.router(
