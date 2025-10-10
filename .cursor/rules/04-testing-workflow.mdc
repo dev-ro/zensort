@@ -1,8 +1,5 @@
 ---
-
-description: Guides the AI to follow a strict Test-Driven Development (TDD) workflow for all new features and logic.
-
-alwaysApply: true
+alwaysApply: false
 ---
 # Workflow: Test-Driven Development (TDD)
 
