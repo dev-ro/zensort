@@ -55,6 +55,7 @@ dependencies:
     hydrated_bloc: ^10.1.1
     path_provider: ^2.1.4
     cached_network_image: ^3.3.1
+    flutter_cache_manager: ^3.3.1
 
 dev_dependencies:
     flutter_test:

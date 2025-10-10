@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:zensort/features/youtube/domain/entities/liked_video.dart';
-import 'package:zensort/features/youtube/presentation/utils/youtube_thumbnail.dart';
+import 'package:zensort/features/youtube/data/services/image_cache_service.dart';
 import 'package:zensort/widgets/thumbnail_placeholder.dart';
 
 class VideoListItem extends StatelessWidget {
@@ -39,7 +39,9 @@ class VideoListItem extends StatelessWidget {
                 child: video.shouldSkipThumbnailLoad() || video.thumbnailUrl.isEmpty
                     ? const ThumbnailPlaceholder()
                     : CachedNetworkImage(
-                        imageUrl: buildHighQualityThumbnailUrl(video.id),
+                        imageUrl: ImageCacheService.buildThumbnailUrl(video.id),
+                        cacheKey: ImageCacheService.getCacheKey(video.id),
+                        cacheManager: ImageCacheService.cacheManager,
                         width: 120,
                         height: 90,
                         fit: BoxFit.cover,
@@ -56,7 +58,25 @@ class VideoListItem extends StatelessWidget {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           ),
                         ),
-                        errorWidget: (context, url, error) => const ThumbnailPlaceholder(),
+                        errorWidget: (context, url, error) => Container(
+                          width: 120,
+                          height: 90,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[200],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.image_not_supported, size: 24),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Retry',
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
               ),
               const SizedBox(width: 16),

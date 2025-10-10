@@ -31,7 +31,6 @@ class ResponsiveVideoGrid extends StatelessWidget {
 
         return CustomScrollView(
           physics: const ClampingScrollPhysics(),
-          shrinkWrap: true,
           slivers: [
             SliverGrid(
               gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:zensort/features/youtube/domain/entities/liked_video.dart';
-import 'package:zensort/features/youtube/presentation/utils/youtube_thumbnail.dart';
+import 'package:zensort/features/youtube/data/services/image_cache_service.dart';
 
 class VideoGridCard extends StatelessWidget {
   final LikedVideo video;
@@ -49,7 +49,9 @@ class VideoGridCard extends StatelessWidget {
                         ),
                       )
                     : CachedNetworkImage(
-                        imageUrl: buildHighQualityThumbnailUrl(video.id),
+                        imageUrl: ImageCacheService.buildThumbnailUrl(video.id),
+                        cacheKey: ImageCacheService.getCacheKey(video.id),
+                        cacheManager: ImageCacheService.cacheManager,
                         fit: BoxFit.cover,
                         memCacheWidth: 480,
                         maxWidthDiskCache: 480,
@@ -61,7 +63,17 @@ class VideoGridCard extends StatelessWidget {
                         ),
                         errorWidget: (context, url, error) => Container(
                           color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                          child: const Icon(Icons.image_not_supported),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.image_not_supported, size: 32),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Retry',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
                         ),
                       ),
               ),
