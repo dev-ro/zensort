@@ -509,7 +509,21 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     final current = state is YoutubeLoaded
         ? state as YoutubeLoaded
         : YoutubeLoaded.initial();
-    emit(current.copyWith(expandedShelfKey: event.shelfKey));
+    final key = event.shelfKey;
+    emit(current.copyWith(
+      expandedShelfKey: key,
+      activeShelfKey: key,
+      activeShelfBusy: key != null,
+    ));
+    if (key != null) {
+      // Clear the busy flag after the next microtask/frame to allow UI to show a quick indicator
+      Future.microtask(() {
+        final now = this.state is YoutubeLoaded ? this.state as YoutubeLoaded : null;
+        if (now != null && now.activeShelfKey == key) {
+          emit(now.copyWith(activeShelfBusy: false));
+        }
+      });
+    }
   }
 
   void _onTopicFilterChanged(

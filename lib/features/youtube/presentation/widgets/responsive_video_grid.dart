@@ -4,8 +4,9 @@ import 'package:zensort/features/youtube/presentation/widgets/video_grid_card.da
 
 class ResponsiveVideoGrid extends StatelessWidget {
   final List<LikedVideo> videos;
+  final bool isBusy;
 
-  const ResponsiveVideoGrid({super.key, required this.videos});
+  const ResponsiveVideoGrid({super.key, required this.videos, this.isBusy = false});
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +25,14 @@ class ResponsiveVideoGrid extends StatelessWidget {
                 .clamp(220, maxExtent);
         final childAspectRatio = estimateAspect(sampleWidth.toDouble());
 
-        return GridView.builder(
+        return Column(
+          children: [
+            if (isBusy)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 8.0),
+                child: LinearProgressIndicator(),
+              ),
+            GridView.builder(
           physics: const NeverScrollableScrollPhysics(),
           shrinkWrap: true,
           gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
@@ -34,7 +42,10 @@ class ResponsiveVideoGrid extends StatelessWidget {
             childAspectRatio: childAspectRatio,
           ),
           itemCount: videos.length,
+          cacheExtent: 800,
           itemBuilder: (context, index) => VideoGridCard(video: videos[index]),
+        ),
+          ],
         );
       },
     );

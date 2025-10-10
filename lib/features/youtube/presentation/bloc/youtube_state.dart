@@ -35,6 +35,8 @@ class YoutubeLoaded extends YoutubeState {
   final String? selectedTopic;
   final List<String> availableTopics;
   final bool isFullyLoaded;
+  final String? activeShelfKey;
+  final bool activeShelfBusy;
 
   const YoutubeLoaded({
     required this.shelves,
@@ -48,6 +50,8 @@ class YoutubeLoaded extends YoutubeState {
     this.selectedTopic,
     this.availableTopics = const [],
     this.isFullyLoaded = false,
+    this.activeShelfKey,
+    this.activeShelfBusy = false,
   });
 
   factory YoutubeLoaded.initial() => const YoutubeLoaded(
@@ -61,6 +65,8 @@ class YoutubeLoaded extends YoutubeState {
     selectedTopic: null,
     availableTopics: [],
     isFullyLoaded: false,
+    activeShelfKey: null,
+    activeShelfBusy: false,
   );
 
   // Serialization methods for hydrated_bloc
@@ -101,6 +107,8 @@ class YoutubeLoaded extends YoutubeState {
     String? selectedTopic,
     List<String>? availableTopics,
     bool? isFullyLoaded,
+    String? activeShelfKey,
+    bool? activeShelfBusy,
   }) {
     return YoutubeLoaded(
       shelves: shelves ?? this.shelves,
@@ -114,6 +122,8 @@ class YoutubeLoaded extends YoutubeState {
       selectedTopic: selectedTopic ?? this.selectedTopic,
       availableTopics: availableTopics ?? this.availableTopics,
       isFullyLoaded: isFullyLoaded ?? this.isFullyLoaded,
+      activeShelfKey: activeShelfKey ?? this.activeShelfKey,
+      activeShelfBusy: activeShelfBusy ?? this.activeShelfBusy,
     );
   }
 
@@ -125,6 +135,10 @@ class YoutubeLoaded extends YoutubeState {
     hasMore,
     loadingMore,
     nextCursor,
+    expandedShelfKey,
+    selectedTopic,
+    activeShelfKey,
+    activeShelfBusy,
   ];
 }
 

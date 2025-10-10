@@ -99,7 +99,8 @@ class _DesktopTopicMenuState extends State<_DesktopTopicMenu> {
     final size = MediaQuery.of(context).size;
     final menuWidth = size.width.clamp(280.0, 420.0) * 0.9;
     final menuHeight = (size.height * 0.7).clamp(280.0, 560.0);
-    final group = widget.selectedTopic ?? '';
+    const String _allTopicsValue = '__all__';
+    final group = widget.selectedTopic ?? _allTopicsValue;
 
     return MenuAnchor(
       controller: _menuController,
@@ -133,15 +134,11 @@ class _DesktopTopicMenuState extends State<_DesktopTopicMenu> {
                         itemBuilder: (context, index) {
                           if (index == 0) {
                             return RadioListTile<String>(
-                              value: '',
+                              value: _allTopicsValue,
                               groupValue: group,
                               title: const Text('All topics'),
                               onChanged: (_) {
-                                if (group.isEmpty) {
-                                  widget.onSelect(null);
-                                } else {
-                                  widget.onSelect(null);
-                                }
+                                widget.onSelect(null);
                                 _menuController.close();
                               },
                             );

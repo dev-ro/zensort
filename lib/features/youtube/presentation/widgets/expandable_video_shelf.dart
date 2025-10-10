@@ -11,6 +11,7 @@ class ExpandableVideoShelf extends StatelessWidget {
   final VoidCallback? onExpand; // Trigger initial load on expand
   final bool isLoading;
   final bool hasMore;
+  final bool showBusy;
 
   const ExpandableVideoShelf({
     super.key,
@@ -22,6 +23,7 @@ class ExpandableVideoShelf extends StatelessWidget {
     this.onExpand,
     this.isLoading = false,
     this.hasMore = false,
+    this.showBusy = false,
   });
 
   @override
@@ -65,7 +67,7 @@ class ExpandableVideoShelf extends StatelessWidget {
                     return false;
                   },
                   child: SingleChildScrollView(
-                    child: ResponsiveVideoGrid(videos: videos),
+                    child: ResponsiveVideoGrid(videos: videos, isBusy: showBusy),
                   ),
                 ),
               );
