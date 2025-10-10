@@ -49,30 +49,7 @@ class ExpandableVideoShelf extends StatelessWidget {
             ),
           )
         else ...[
-          LayoutBuilder(
-            builder: (context, constraints) {
-              // Constrain inner scroll to viewport height so shelves can individually infinite-scroll
-              final maxHeight = MediaQuery.of(context).size.height * 0.7;
-              return ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: maxHeight),
-                child: NotificationListener<ScrollNotification>(
-                  onNotification: (notification) {
-                    if (notification.metrics.pixels >=
-                            notification.metrics.maxScrollExtent * 0.7 &&
-                        hasMore &&
-                        onEndReached != null &&
-                        !isLoading) {
-                      onEndReached!();
-                    }
-                    return false;
-                  },
-                  child: SingleChildScrollView(
-                    child: ResponsiveVideoGrid(videos: videos, isBusy: showBusy),
-                  ),
-                ),
-              );
-            },
-          ),
+          ResponsiveVideoGrid(videos: videos, isBusy: showBusy),
           if (isLoading)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 12.0),

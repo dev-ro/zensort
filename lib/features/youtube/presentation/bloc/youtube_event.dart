@@ -35,14 +35,6 @@ class LoadUnlikedVideos extends YoutubeEvent {}
 
 class LoadAllVideosEager extends YoutubeEvent {}
 
-class TopicFilterChanged extends YoutubeEvent {
-  final String? topic; // null clears filter
-  const TopicFilterChanged(this.topic);
-
-  @override
-  List<Object> get props => [topic ?? ''];
-}
-
 class _YoutubeSyncProgressUpdated extends YoutubeEvent {
   final SyncProgress progress;
 

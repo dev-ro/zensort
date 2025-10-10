@@ -53,10 +53,6 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
       _onLoadAllVideosForSearch,
       transformer: droppable(),
     );
-    on<TopicFilterChanged>(
-      _onTopicFilterChanged,
-      transformer: _debounceRestartable(const Duration(milliseconds: 150)),
-    );
     on<LoadUnlikedVideos>(_onLoadUnlikedVideos, transformer: droppable());
     on<LoadAllVideosEager>(_onLoadAllVideosEager, transformer: droppable());
 
@@ -214,24 +210,55 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
 
   List<VideoShelf> _buildBaseShelves(List<LikedVideo> allVideos) {
     final shelves = <VideoShelf>[];
+
+    // 1. All Videos shelf (always first)
     if (allVideos.isNotEmpty) {
       shelves.add(VideoShelf(title: 'All Videos', videos: allVideos));
     }
 
-    // Group by categoryTitle
+    // 2. Group by categoryTitle
     final Map<String, List<LikedVideo>> byCategory = {};
     for (final v in allVideos) {
       final title = (v.categoryTitle ?? '').trim();
       if (title.isEmpty) continue;
       byCategory.putIfAbsent(title, () => <LikedVideo>[]).add(v);
     }
-    for (final entry in byCategory.entries) {
-      if (entry.value.isNotEmpty) {
-        shelves.add(VideoShelf(title: entry.key, videos: entry.value));
+
+    // 3. Priority categories in order: Music, Movies, Shows
+    final priorityCategories = ['Music', 'Movies', 'Shows'];
+    for (final category in priorityCategories) {
+      if (byCategory.containsKey(category)) {
+        shelves.add(VideoShelf(title: category, videos: byCategory[category]!));
+        byCategory.remove(category);
       }
     }
 
-    // Special shelves remain
+    // 4. Other categories alphabetically
+    final otherCategories = byCategory.keys.toList()..sort();
+    for (final category in otherCategories) {
+      shelves.add(VideoShelf(title: category, videos: byCategory[category]!));
+    }
+
+    // 5. Group by topic tags (prefixed with "Topic - ")
+    final Map<String, List<LikedVideo>> byTopic = {};
+    for (final v in allVideos) {
+      for (final tag in v.topicTags) {
+        final trimmedTag = tag.trim();
+        if (trimmedTag.isNotEmpty) {
+          byTopic.putIfAbsent(trimmedTag, () => <LikedVideo>[]).add(v);
+        }
+      }
+    }
+
+    // Add topic shelves alphabetically
+    final topicNames = byTopic.keys.toList()..sort();
+    for (final topicName in topicNames) {
+      shelves.add(
+        VideoShelf(title: 'Topic - $topicName', videos: byTopic[topicName]!),
+      );
+    }
+
+    // 6. Special shelves at the bottom
     final unavailableVideos = allVideos
         .where((v) => v.title == 'Private video' || v.title == 'Deleted video')
         .toList();
@@ -248,19 +275,8 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
         VideoShelf(title: 'Legacy Music Uploads', videos: legacyMusic),
       );
     }
-    return shelves;
-  }
 
-  List<String> _deriveAvailableTopics(List<LikedVideo> videos) {
-    final set = <String>{};
-    for (final v in videos) {
-      for (final tag in v.topicTags) {
-        final t = tag.trim();
-        if (t.isNotEmpty) set.add(t);
-      }
-    }
-    final list = set.toList()..sort();
-    return list;
+    return shelves;
   }
 
   List<LikedVideo> _filterVideos(List<LikedVideo> allVideos, String query) {
@@ -345,7 +361,6 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
           // We don't know hasMore until we fetch a page cursor; start optimistic
           hasMore: true,
           loadingMore: false,
-          availableTopics: _deriveAvailableTopics(allVideos),
         ),
       );
     } else {
@@ -360,7 +375,6 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
           searchQuery: currentQuery,
           hasMore: true,
           loadingMore: false,
-          availableTopics: _deriveAvailableTopics(allVideos),
         ),
       );
     }
@@ -450,7 +464,6 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
           allVideos: videos,
           shelves: shelves,
           isFullyLoaded: true,
-          availableTopics: _deriveAvailableTopics(videos),
         );
       },
       onError: (_, __) => current,
@@ -504,7 +517,6 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
           allVideos: allVideos,
           shelves: shelves,
           isFullyLoaded: true,
-          availableTopics: _deriveAvailableTopics(allVideos),
         ),
       );
     } catch (e) {
@@ -522,45 +534,24 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
         ? state as YoutubeLoaded
         : YoutubeLoaded.initial();
     final key = event.shelfKey;
-    emit(current.copyWith(
-      expandedShelfKey: key,
-      activeShelfKey: key,
-      activeShelfBusy: key != null,
-    ));
+    emit(
+      current.copyWith(
+        expandedShelfKey: key,
+        activeShelfKey: key,
+        activeShelfBusy: key != null,
+      ),
+    );
     if (key != null) {
       // Clear the busy flag after the next microtask/frame to allow UI to show a quick indicator
       Future.microtask(() {
-        final now = this.state is YoutubeLoaded ? this.state as YoutubeLoaded : null;
+        final now = this.state is YoutubeLoaded
+            ? this.state as YoutubeLoaded
+            : null;
         if (now != null && now.activeShelfKey == key) {
           emit(now.copyWith(activeShelfBusy: false));
         }
       });
     }
-  }
-
-  void _onTopicFilterChanged(
-    TopicFilterChanged event,
-    Emitter<YoutubeState> emit,
-  ) {
-    final current = state is YoutubeLoaded
-        ? state as YoutubeLoaded
-        : YoutubeLoaded.initial();
-    final topic = event.topic;
-    final all = current.allVideos;
-    if (topic == null || topic.isEmpty) {
-      final shelves = _buildBaseShelves(all);
-      emit(current.copyWith(shelves: shelves, selectedTopic: null));
-      return;
-    }
-    // Filter by topicTags
-    final lowered = topic.toLowerCase();
-    final filtered = all
-        .where((v) => v.topicTags.any((t) => t.toLowerCase() == lowered))
-        .toList();
-    final shelves = <VideoShelf>[
-      VideoShelf(title: 'Filtered by $topic', videos: filtered),
-    ];
-    emit(current.copyWith(shelves: shelves, selectedTopic: topic));
   }
 
   Future<void> _onLoadUnlikedVideos(

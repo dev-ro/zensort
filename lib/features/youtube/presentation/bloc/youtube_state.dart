@@ -32,8 +32,6 @@ class YoutubeLoaded extends YoutubeState {
   final bool loadingMore;
   final String? nextCursor;
   final String? expandedShelfKey; // title as key for now
-  final String? selectedTopic;
-  final List<String> availableTopics;
   final bool isFullyLoaded;
   final String? activeShelfKey;
   final bool activeShelfBusy;
@@ -47,8 +45,6 @@ class YoutubeLoaded extends YoutubeState {
     this.loadingMore = false,
     this.nextCursor,
     this.expandedShelfKey,
-    this.selectedTopic,
-    this.availableTopics = const [],
     this.isFullyLoaded = false,
     this.activeShelfKey,
     this.activeShelfBusy = false,
@@ -62,8 +58,6 @@ class YoutubeLoaded extends YoutubeState {
     hasMore: false,
     loadingMore: false,
     expandedShelfKey: null,
-    selectedTopic: null,
-    availableTopics: [],
     isFullyLoaded: false,
     activeShelfKey: null,
     activeShelfBusy: false,
@@ -81,8 +75,6 @@ class YoutubeLoaded extends YoutubeState {
       hasMore: false,
       loadingMore: false,
       expandedShelfKey: json['expandedShelfKey'] as String?,
-      selectedTopic: json['selectedTopic'] as String?,
-      availableTopics: const [],
       isFullyLoaded: false,
     );
   }
@@ -91,7 +83,6 @@ class YoutubeLoaded extends YoutubeState {
     return {
       'searchQuery': searchQuery,
       if (expandedShelfKey != null) 'expandedShelfKey': expandedShelfKey,
-      if (selectedTopic != null) 'selectedTopic': selectedTopic,
     };
   }
 
@@ -104,8 +95,6 @@ class YoutubeLoaded extends YoutubeState {
     bool? loadingMore,
     String? nextCursor,
     String? expandedShelfKey,
-    String? selectedTopic,
-    List<String>? availableTopics,
     bool? isFullyLoaded,
     String? activeShelfKey,
     bool? activeShelfBusy,
@@ -119,8 +108,6 @@ class YoutubeLoaded extends YoutubeState {
       loadingMore: loadingMore ?? this.loadingMore,
       nextCursor: nextCursor ?? this.nextCursor,
       expandedShelfKey: expandedShelfKey ?? this.expandedShelfKey,
-      selectedTopic: selectedTopic ?? this.selectedTopic,
-      availableTopics: availableTopics ?? this.availableTopics,
       isFullyLoaded: isFullyLoaded ?? this.isFullyLoaded,
       activeShelfKey: activeShelfKey ?? this.activeShelfKey,
       activeShelfBusy: activeShelfBusy ?? this.activeShelfBusy,
@@ -136,7 +123,6 @@ class YoutubeLoaded extends YoutubeState {
     loadingMore,
     nextCursor,
     expandedShelfKey,
-    selectedTopic,
     activeShelfKey,
     activeShelfBusy,
   ];

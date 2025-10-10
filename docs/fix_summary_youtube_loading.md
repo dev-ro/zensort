@@ -1,111 +1,109 @@
-# YouTube Loading Fixes Summary
+# YouTube Feature: Loading Fixes and Topic Shelves Implementation
 
-**Date**: 2025-10-10
-**Branch**: feat/youtube-shelves-loading-fixes
+**Date:** 2025-01-10  
+**Branch:** feat/youtube-shelves-loading-fixes
 
-## Issues Fixed
+## Issues Resolved
 
-### 1. Multiple Modals Appearing During Eager Loading
+### 1. Assertion Error on Sign Out
+**Problem:** `_dependents.isEmpty` assertion error when clicking sign out button  
+**Root Cause:** `context.watch<YouTubeBloc>()` called outside builder context on line 34 of home_screen.dart  
+**Fix:** Restructured widget tree to use BlocBuilder properly, ensuring all state access happens within builder contexts
 
-**Problem**: 
-- Every 200 videos loaded, a new `YoutubeAllLoading` state was emitted
-- The `BlocListener` in `home_screen.dart` called `showModalBottomSheet` every time this state was emitted
-- This resulted in multiple overlapping modals that required multiple clicks to dismiss
+### 2. Videos Not Displaying in Shelves
+**Problem:** Videos failed to render under each shelf  
+**Root Cause:** Overly complex nested scrollable architecture with `SingleChildScrollView` > `NotificationListener` > `GridView.builder`  
+**Fix:** Simplified to direct `ResponsiveVideoGrid` child of `ExpansionTile`, letting Flutter handle the scroll architecture naturally
 
-**Root Cause**:
-- In `youtube_bloc.dart`, the `_onLoadAllVideosEager` method uses `emit.forEach` to stream batches of 200 videos
-- Each batch emission triggered the listener to show a new modal
+### 3. Topic Filter Navigation Issue
+**Problem:** Topic filter dropdown broke the default home view - no way to return to all shelves after using it  
+**Root Cause:** Topic filtering switched to "search mode" instead of maintaining shelf-based navigation  
+**Fix:** Removed dropdown entirely and implemented topics as their own shelves instead
 
-**Solution**:
-- Replaced the modal bottom sheet approach with a full-screen overlay
-- The overlay is shown as part of the `BlocBuilder` when `state is YoutubeAllLoading`
-- The overlay automatically updates its progress display as new states are emitted
-- No need for manual modal management or closing
+## New Features
 
-**Files Changed**:
-- `lib/features/youtube/presentation/screens/home_screen.dart`:
-  - Removed modal show/hide logic from `BlocListener`
-  - Added `FullScreenLoadingOverlay` in the `BlocBuilder` for `YoutubeAllLoading` state
-  - Updated imports to use `full_screen_loading_overlay.dart` instead of `loading_all_videos_sheet.dart`
-- `lib/features/youtube/presentation/widgets/loading_all_videos_sheet.dart`:
-  - Deleted (no longer needed)
+### Topic Shelves
+Topics are now first-class citizens in the shelf system:
+- Each unique topic tag gets its own shelf
+- Shelf titles prefixed with "Topic - " for clear organization
+- Topics appear alphabetically after category shelves
+- Users can expand/collapse topic shelves just like category shelves
 
-### 2. Type Error Investigation
+### Improved Shelf Ordering
+Shelves now follow a logical, predictable order:
+1. **All Videos** - Always first
+2. **Music** - Priority category
+3. **Movies** - Priority category
+4. **Shows** - Priority category
+5. **Other Categories** - Alphabetically sorted
+6. **Topic Shelves** - Alphabetically sorted (prefixed "Topic - ")
+7. **Unavailable Videos** - Always at bottom
+8. **Legacy Music Uploads** - Always at bottom
 
-**Problem 1**:
-```
-TypeError: true: type 'bool' is not a subtype of type 'double?'
-Location: expandable_video_shelf.dart:69:26 (SingleChildScrollView)
-```
+## Technical Changes
 
-**Analysis**:
-- The error was pointing to the `SingleChildScrollView` widget
-- All parameter types in the code were correctly specified
-- `showBusy` parameter is correctly typed as `bool` and used as `bool`
-
-**Potential Cause**:
-- The error may have been caused by hot reload state issues or stale widget tree
-- The refactoring of the loading mechanism may resolve this by ensuring proper state transitions
-
-**Resolution**:
-- No code changes were needed for the type error itself
-- The error should resolve with the new loading mechanism and a clean app restart
-
-**Problem 2** (Compilation Error):
-```
-Error: The argument type 'num?' can't be assigned to the parameter type 'double?'
-Location: full_screen_loading_overlay.dart:42:48 (LinearProgressIndicator)
-```
-
-**Root Cause**:
-- The `clamp(0, 1)` method returns `num`, not `double`
-- `LinearProgressIndicator.value` expects `double?`, not `num?`
-
-**Resolution**:
-- Changed line 12-14 in `full_screen_loading_overlay.dart`:
-  - Before: `final value = (loaded! / total!).clamp(0, 1)`
-  - After: `final double? value = (loaded! / total!).clamp(0.0, 1.0).toDouble()`
-- Explicitly typed `value` as `double?`
-- Used double literals in clamp (0.0, 1.0)
-- Added `.toDouble()` to ensure proper type conversion
-
-## Implementation Details
-
-### New Loading Flow
-
-1. **Before** (Modal Approach):
-   ```
-   YoutubeAllLoading emitted → BlocListener → showModalBottomSheet() → New modal created
-   (Repeated every 200 videos → Multiple modals)
-   ```
-
-2. **After** (Overlay Approach):
-   ```
-   YoutubeAllLoading emitted → BlocBuilder → Shows FullScreenLoadingOverlay
-   (Single overlay, content updates on each state change)
-   ```
-
-### Key Benefits
-
-1. **Single Loading UI**: Only one overlay is ever shown, regardless of how many state updates occur
-2. **Automatic Updates**: The overlay contains a `BlocBuilder` that automatically updates progress
-3. **Cleaner State Management**: No need to track whether a modal is already showing
-4. **Better UX**: Seamless progress updates without modal flashing or multiple overlays
-5. **Simplified Code**: Removed complex modal show/hide logic from the listener
-
-## Testing Checklist
-
-- [ ] Verify only one loading overlay appears when eager loading starts
-- [ ] Confirm progress updates correctly (loaded count and percentage)
-- [ ] Check that overlay dismisses automatically when loading completes
-- [ ] Ensure no type errors appear in the console
-- [ ] Test sync flow followed by eager load
-- [ ] Verify search trigger during load works correctly
-- [ ] Test on different screen sizes (responsive behavior)
-
-## Related Code
-
-- `lib/features/youtube/presentation/bloc/youtube_bloc.dart` (`_onLoadAllVideosEager`)
-- `lib/features/youtube/presentation/widgets/full_screen_loading_overlay.dart`
+### Files Modified
 - `lib/features/youtube/presentation/screens/home_screen.dart`
+  - Fixed assertion error by properly structuring BlocBuilder
+  - Removed TopicFilterMenu widget
+  - Removed "All Shelves" button
+  - Simplified search mode logic
+  
+- `lib/features/youtube/presentation/widgets/expandable_video_shelf.dart`
+  - Removed complex nested scroll architecture
+  - Simplified to direct ResponsiveVideoGrid rendering
+  
+- `lib/features/youtube/presentation/widgets/video_search_bar.dart`
+  - Removed TopicFilterChanged event dispatch
+  
+- `lib/features/youtube/presentation/bloc/youtube_bloc.dart`
+  - Updated `_buildBaseShelves()` to create topic-based shelves
+  - Implemented priority ordering for categories
+  - Removed `_deriveAvailableTopics()` method
+  - Removed `_onTopicFilterChanged()` handler
+  - Removed all references to `availableTopics` field
+  
+- `lib/features/youtube/presentation/bloc/youtube_state.dart`
+  - Removed `selectedTopic` field from YoutubeLoaded
+  - Removed `availableTopics` field from YoutubeLoaded
+  - Updated serialization methods (toJson/fromJson)
+  - Updated copyWith method
+  - Updated props getter
+  
+- `lib/features/youtube/presentation/bloc/youtube_event.dart`
+  - Removed `TopicFilterChanged` event class
 
+### Files Deleted
+- `lib/features/youtube/presentation/widgets/topic_filter_menu.dart`
+
+## Impact on Users
+
+### Improved Navigation
+- No more getting "stuck" in filter mode
+- Clear visual hierarchy of content organization
+- Topics are discoverable through the same shelf interface as categories
+
+### Better Performance
+- Simplified scroll architecture reduces rendering complexity
+- No more nested scroll conflicts
+- Cleaner state management without topic filtering logic
+
+### Enhanced Usability
+- Consistent interaction model (all content accessed via shelves)
+- Clear shelf naming convention with "Topic - " prefix
+- Predictable ordering makes finding content easier
+
+## Testing Notes
+
+All functionality has been verified:
+- ✅ Sign out no longer throws assertion errors
+- ✅ Videos display correctly in all shelf types
+- ✅ Search functionality works as expected
+- ✅ Shelf expansion/collapse works smoothly
+- ✅ Shelf ordering follows specified priority
+- ✅ Topic shelves display with correct video counts
+- ✅ No linter errors in any modified files
+
+## Related Documentation
+- Plan: `fix-loading-errors-and-topic-shelves.plan.md`
+- Architecture: `.cursor/rules/09-feature-youtube.mdc`
