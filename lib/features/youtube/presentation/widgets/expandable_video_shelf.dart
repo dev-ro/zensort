@@ -49,7 +49,12 @@ class ExpandableVideoShelf extends StatelessWidget {
             ),
           )
         else ...[
-          ResponsiveVideoGrid(videos: videos, isBusy: showBusy),
+          if (showBusy)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8.0),
+              child: LinearProgressIndicator(),
+            ),
+          ResponsiveVideoGrid(videos: videos, isBusy: false),
           if (isLoading)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 12.0),
