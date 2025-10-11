@@ -105,21 +105,26 @@ class _EmbeddingStatusSheetState extends State<EmbeddingStatusSheet> {
           ),
         ),
         const SizedBox(height: 16),
-        Text(
-          _getProgressText(progress),
-          style: Theme.of(context).textTheme.titleMedium,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(
+              _getProgressText(progress),
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            if (progress.lastUpdated != null)
+              Text(
+                'Updated ${_formatDateTime(progress.lastUpdated!)}',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+              ),
+          ],
         ),
         const SizedBox(height: 16),
         _buildStatisticsGrid(context, progress),
-        if (progress.lastUpdated != null) ...[
-          const SizedBox(height: 16),
-          Text(
-            'Last updated: ${_formatDateTime(progress.lastUpdated!)}',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
-          ),
-        ],
         if (progress.failed > 0) ...[
           const SizedBox(height: 24),
           Center(
