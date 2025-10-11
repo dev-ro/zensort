@@ -36,8 +36,12 @@ class YoutubeSyncSuccess extends YoutubeState {}
 class EmbeddingCalculationInProgress extends YoutubeState {}
 
 class EmbeddingCalculationSuccess extends YoutubeState {
-  // TODO: Define properties to hold progress data if needed
-  const EmbeddingCalculationSuccess();
+  final EmbeddingProgress progress;
+
+  const EmbeddingCalculationSuccess(this.progress);
+
+  @override
+  List<Object> get props => [progress];
 }
 
 class EmbeddingCalculationFailure extends YoutubeState {

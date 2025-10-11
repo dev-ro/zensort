@@ -203,10 +203,8 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
   ) async {
     emit(EmbeddingCalculationInProgress());
     try {
-      await _youtubeRepository.calculateEmbeddingProgress();
-      // TODO: We need a way to get the result back to the UI.
-      // For now, let's assume the watchEmbeddingProgress stream will update.
-      emit(const EmbeddingCalculationSuccess());
+      final progress = await _youtubeRepository.calculateEmbeddingProgress();
+      emit(EmbeddingCalculationSuccess(progress));
     } catch (e) {
       emit(EmbeddingCalculationFailure(e.toString()));
     }

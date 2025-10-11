@@ -73,7 +73,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       context: context,
                       isScrollControlled: true,
                       backgroundColor: Colors.transparent,
-                      builder: (context) => const EmbeddingStatusSheet(),
+                      builder: (_) => BlocProvider.value(
+                        value: BlocProvider.of<YouTubeBloc>(context),
+                        child: const EmbeddingStatusSheet(),
+                      ),
                     );
                   },
                 ),
