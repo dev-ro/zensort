@@ -1643,14 +1643,25 @@ def get_embedding_progress(req: https_fn.CallableRequest) -> dict:
     db = _firestore().Client()
 
     try:
-        liked_videos_ref = db.collection("users").document(user_id).collection("likedVideos")
+        liked_videos_ref = (
+            db.collection("users").document(user_id).collection("likedVideos")
+        )
         liked_video_ids = [doc.id for doc in liked_videos_ref.stream()]
     except Exception as e:
         logger.error(f"Failed to fetch liked videos for user {user_id}: {e}")
-        raise https_fn.HttpsError(code=https_fn.FunctionsErrorCode.INTERNAL, message="Could not fetch user's liked videos.")
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INTERNAL,
+            message="Could not fetch user's liked videos.",
+        )
 
     if not liked_video_ids:
-        return {"total": 0, "completed": 0, "pending": 0, "failed": 0, "last_updated": None}
+        return {
+            "total": 0,
+            "completed": 0,
+            "pending": 0,
+            "failed": 0,
+            "last_updated": None,
+        }
 
     total = len(liked_video_ids)
     videos_ref = db.collection("videos")
@@ -1659,8 +1670,10 @@ def get_embedding_progress(req: https_fn.CallableRequest) -> dict:
         """Runs a count query in chunks by fetching only document IDs."""
         count = 0
         for i in range(0, len(liked_video_ids), 30):
-            chunk_ids = liked_video_ids[i:i + 30]
-            query = query_builder(chunk_ids).select([])  # Fetch no fields, just the doc snapshot
+            chunk_ids = liked_video_ids[i : i + 30]
+            query = query_builder(chunk_ids).select(
+                []
+            )  # Fetch no fields, just the doc snapshot
             docs = query.stream()
             count += len(list(docs))
         return count
@@ -1669,7 +1682,7 @@ def get_embedding_progress(req: https_fn.CallableRequest) -> dict:
         """Finds the most recent 'embedding_updated_at' timestamp in chunks."""
         latest_update = None
         for i in range(0, len(liked_video_ids), 30):
-            chunk_ids = liked_video_ids[i:i + 30]
+            chunk_ids = liked_video_ids[i : i + 30]
             query = (
                 videos_ref.where("__name__", "in", chunk_ids)
                 .order_by("embedding_updated_at", direction="DESCENDING")
@@ -1690,22 +1703,29 @@ def get_embedding_progress(req: https_fn.CallableRequest) -> dict:
             # Run all aggregations in parallel
             completed_future = executor.submit(
                 run_count_in_chunks,
-                lambda chunk: videos_ref.where("__name__", "in", chunk).where("embedding_status", "in", ["complete", "not_applicable"])
+                lambda chunk: videos_ref.where("__name__", "in", chunk).where(
+                    "embedding_status", "in", ["complete", "not_applicable"]
+                ),
             )
             failed_future = executor.submit(
                 run_count_in_chunks,
-                lambda chunk: videos_ref.where("__name__", "in", chunk).where("embedding_status", "==", "failed")
+                lambda chunk: videos_ref.where("__name__", "in", chunk).where(
+                    "embedding_status", "==", "failed"
+                ),
             )
             latest_update_future = executor.submit(get_latest_update_in_chunks)
 
             completed_count = completed_future.result()
             failed_count = failed_future.result()
             latest_update = latest_update_future.result()
-            
+
     except Exception as e:
         logger.error(f"Error during parallel aggregation for user {user_id}: {e}")
-        raise https_fn.HttpsError(code=https_fn.FunctionsErrorCode.INTERNAL, message="Failed to calculate embedding progress.")
-    
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INTERNAL,
+            message="Failed to calculate embedding progress.",
+        )
+
     pending_count = total - completed_count - failed_count
 
     return {
