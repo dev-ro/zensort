@@ -131,11 +131,11 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
       );
 
       // Also set up the embedding progress stream
-      final progressStream = _youtubeRepository.getEmbeddingProgressStream();
-      final currentState = state;
-      if (currentState is YoutubeLoaded) {
-        emit(currentState.copyWith(embeddingProgressStream: progressStream));
-      }
+      // final progressStream = _youtubeRepository.watchEmbeddingProgress();
+      // final currentState = state;
+      // if (currentState is YoutubeLoaded) {
+      //   emit(currentState.copyWith(embeddingProgressStream: progressStream));
+      // }
     } else if (authState is AuthUnauthenticated) {
       // Reset the latches when user becomes unauthenticated
       _isInitialLoadDispatched = false;

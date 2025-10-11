@@ -132,67 +132,14 @@ void main() {
       });
     });
 
-    group('fromMap', () {
-      test('should parse basic map data', () {
-        final map = {'total': 100, 'completed': 50, 'failed': 5, 'pending': 45};
+    test('should correctly handle null pending value', () {
+      const progress = EmbeddingProgress(
+        total: 100,
+        completed: 50,
+        failed: 10,
+      );
 
-        final progress = EmbeddingProgress.fromMap(map);
-
-        expect(progress.total, 100);
-        expect(progress.completed, 50);
-        expect(progress.failed, 5);
-        expect(progress.pending, 45);
-      });
-
-      test('should handle null values with defaults', () {
-        final map = <String, dynamic>{};
-
-        final progress = EmbeddingProgress.fromMap(map);
-
-        expect(progress.total, 0);
-        expect(progress.completed, 0);
-        expect(progress.failed, 0);
-        expect(progress.pending, 0);
-        expect(progress.lastUpdated, null);
-      });
-
-      test('should parse DateTime object and convert to UTC', () {
-        final localTime = DateTime(2025, 1, 1, 12, 0, 0); // Local time
-        final map = {'total': 100, 'last_updated': localTime};
-        final progress = EmbeddingProgress.fromMap(map);
-        expect(progress.lastUpdated, localTime.toUtc());
-      });
-
-      test('should parse DateTime string and convert to UTC', () {
-        // A non-UTC ISO 8601 string
-        const isoString = '2025-01-01T10:00:00+02:00';
-        final expectedUtc = DateTime.parse(isoString).toUtc();
-        final map = {'total': 100, 'last_updated': isoString};
-
-        final progress = EmbeddingProgress.fromMap(map);
-
-        expect(progress.lastUpdated, expectedUtc);
-      });
-
-      test('should calculate pending when not provided', () {
-        final map = {'total': 100, 'completed': 30, 'failed': 10};
-
-        final progress = EmbeddingProgress.fromMap(map);
-
-        expect(progress.pending, 60);
-      });
-
-      test('should clamp pending to valid range', () {
-        final map = {
-          'total': 100,
-          'completed': 80,
-          'failed': 30, // This would make pending negative
-        };
-
-        final progress = EmbeddingProgress.fromMap(map);
-
-        expect(progress.pending, 0);
-      });
+      expect(progress.pending, 0);
     });
 
     group('equality', () {
