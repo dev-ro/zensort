@@ -18,8 +18,8 @@ class _EmbeddingStatusSheetState extends State<EmbeddingStatusSheet> {
     // Get the repository once
     final youtubeRepository = context.read<YoutubeRepository>();
 
-    return StreamBuilder<EmbeddingProgress>(
-      stream: youtubeRepository.getEmbeddingProgressStream(),
+    return FutureBuilder<EmbeddingProgress>(
+      future: youtubeRepository.getEmbeddingProgress(),
       builder: (context, snapshot) {
         final progress = snapshot.data;
         final error = snapshot.error;
@@ -105,24 +105,19 @@ class _EmbeddingStatusSheetState extends State<EmbeddingStatusSheet> {
           ),
         ),
         const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Text(
-              _getProgressText(progress),
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            if (progress.lastUpdated != null)
-              Text(
-                'Updated ${_formatDateTime(progress.lastUpdated!)}',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
-              ),
-          ],
+        Text(
+          _getProgressText(progress),
+          style: Theme.of(context).textTheme.titleMedium,
         ),
+        if (progress.lastUpdated != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            'Updated ${_formatDateTime(progress.lastUpdated!)}',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+          ),
+        ],
         const SizedBox(height: 16),
         _buildStatisticsGrid(context, progress),
         if (progress.failed > 0) ...[

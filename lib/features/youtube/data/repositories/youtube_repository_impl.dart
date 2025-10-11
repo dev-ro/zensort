@@ -368,27 +368,72 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
   }
 
   @override
-  Stream<EmbeddingProgress> getEmbeddingProgressStream() {
+  Future<EmbeddingProgress> getEmbeddingProgress() async {
     final user = _auth.currentUser;
     if (user == null) {
-      // Return a stream that emits a default progress when user is not authenticated
-      return Stream.value(const EmbeddingProgress());
+      // Return a default progress when user is not authenticated
+      return const EmbeddingProgress();
     }
 
-    return _firestore
+    // 1. Get all liked video IDs for the user
+    final likedVideosQuery = await _firestore
         .collection('users')
         .doc(user.uid)
-        .collection('embeddingProgress')
-        .doc('current')
-        .snapshots()
-        .map((snapshot) {
-          if (!snapshot.exists || snapshot.data() == null) {
-            // Return default progress when document doesn't exist
-            return const EmbeddingProgress();
-          }
+        .collection('likedVideos')
+        .get();
+    final likedVideoIds = likedVideosQuery.docs.map((doc) => doc.id).toList();
 
-          return EmbeddingProgress.fromMap(snapshot.data()!);
-        });
+    if (likedVideoIds.isEmpty) {
+      return const EmbeddingProgress(total: 0, completed: 0, pending: 0, failed: 0);
+    }
+
+    // 2. Query the /videos collection in batches for each status
+    final total = likedVideoIds.length;
+    int completed = 0;
+    int pending = 0;
+    int failed = 0;
+
+    for (var i = 0; i < likedVideoIds.length; i += 30) {
+      final chunk = likedVideoIds.sublist(
+        i,
+        i + 30 > likedVideoIds.length ? likedVideoIds.length : i + 30,
+      );
+
+      // Firestore 'in' query is limited to 30 items
+      final videosQuery = _firestore
+          .collection('videos')
+          .where(FieldPath.documentId, whereIn: chunk);
+
+      final videosSnapshot = await videosQuery.get();
+      for (final doc in videosSnapshot.docs) {
+        final status = doc.data()['embedding_status'] as String?;
+        switch (status) {
+          case 'complete':
+          case 'not_applicable':
+            completed++;
+            break;
+          case 'pending':
+            pending++;
+            break;
+          case 'failed':
+            failed++;
+            break;
+          default:
+            // Videos might not have a status yet if sync just happened
+            // We can treat them as pending.
+            pending++;
+            break;
+        }
+      }
+    }
+
+    return EmbeddingProgress(
+      total: total,
+      completed: completed,
+      pending: pending,
+      failed: failed,
+      lastUpdated: DateTime.now().toUtc(),
+    );
   }
 
   @override
