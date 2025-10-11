@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -368,17 +370,42 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
   }
 
   @override
-  Stream<EmbeddingProgress> watchEmbeddingProgress() async* {
-    // Yield the first result immediately to avoid a loading lag for the user.
-    yield await getEmbeddingProgress();
+  Stream<EmbeddingProgress> watchEmbeddingProgress() {
+    late StreamController<EmbeddingProgress> controller;
+    Timer? timer;
 
-    // Then, periodically yield subsequent updates. The `async*` stream will
-    // naturally pause between yields and will stop producing values if the
-    // listener cancels their subscription.
-    while (true) {
-      await Future.delayed(const Duration(seconds: 5));
-      yield await getEmbeddingProgress();
+    void tick(_) async {
+      try {
+        final progress = await getEmbeddingProgress();
+        if (!controller.isClosed) {
+          controller.add(progress);
+        }
+      } catch (e, s) {
+        if (!controller.isClosed) {
+          controller.addError(e, s);
+        }
+      }
     }
+
+    void start() {
+      // Tick immediately on listen, then start the periodic timer.
+      tick(null);
+      timer = Timer.periodic(const Duration(seconds: 5), tick);
+    }
+
+    void stop() {
+      timer?.cancel();
+      timer = null;
+    }
+
+    controller = StreamController<EmbeddingProgress>(
+      onListen: start,
+      onCancel: stop,
+      onResume: start,
+      onPause: stop,
+    );
+
+    return controller.stream;
   }
 
   Future<EmbeddingProgress> getEmbeddingProgress() async {
