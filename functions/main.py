@@ -1646,7 +1646,8 @@ def get_embedding_progress(req: https_fn.CallableRequest) -> dict:
         liked_videos_ref = (
             db.collection("users").document(user_id).collection("likedVideos")
         )
-        liked_video_ids = [doc.id for doc in liked_videos_ref.stream()]
+        # Optimization: Fetch only document IDs, not full documents.
+        liked_video_ids = [doc.id for doc in liked_videos_ref.select([]).stream()]
     except Exception as e:
         logger.error(f"Failed to fetch liked videos for user {user_id}: {e}")
         raise https_fn.HttpsError(
@@ -1663,19 +1664,22 @@ def get_embedding_progress(req: https_fn.CallableRequest) -> dict:
             "last_updated": None,
         }
 
-    total = len(liked_video_ids)
+    # Optimization: Use count() aggregation for total.
+    total_query = liked_videos_ref.count()
+    total_result = total_query.get()
+    total = total_result[0][0].value
     videos_ref = db.collection("videos")
 
     def run_count_in_chunks(query_builder) -> int:
-        """Runs a count query in chunks by fetching only document IDs."""
+        """Runs a count aggregation query in chunks."""
         count = 0
+        # Firestore 'in' query has a limit of 30 items.
         for i in range(0, len(liked_video_ids), 30):
             chunk_ids = liked_video_ids[i : i + 30]
-            query = query_builder(chunk_ids).select(
-                []
-            )  # Fetch no fields, just the doc snapshot
-            docs = query.stream()
-            count += len(list(docs))
+            query = query_builder(chunk_ids)
+            count_query = query.count()
+            result = count_query.get()
+            count += result[0][0].value
         return count
 
     def get_latest_update_in_chunks() -> datetime | None:
