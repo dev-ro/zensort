@@ -9,21 +9,45 @@ abstract class YoutubeState extends Equatable {
 
 final class YoutubeInitial extends YoutubeState {}
 
-final class YoutubeSyncing extends YoutubeState {}
+final class YoutubeSyncing extends YoutubeState {
+  final String? message;
+
+  const YoutubeSyncing([this.message]);
+
+  @override
+  List<Object?> get props => [message];
+}
 
 final class YoutubeLoading extends YoutubeState {}
 
 final class YoutubeSyncProgress extends YoutubeState {
   final int syncedCount;
   final int totalCount;
+  final String? message;
 
-  const YoutubeSyncProgress(this.syncedCount, this.totalCount);
+  const YoutubeSyncProgress(this.syncedCount, this.totalCount, [this.message]);
 
   @override
-  List<Object> get props => [syncedCount, totalCount];
+  List<Object?> get props => [syncedCount, totalCount, message];
 }
 
 class YoutubeSyncSuccess extends YoutubeState {}
+
+class EmbeddingCalculationInProgress extends YoutubeState {}
+
+class EmbeddingCalculationSuccess extends YoutubeState {
+  // TODO: Define properties to hold progress data if needed
+  const EmbeddingCalculationSuccess();
+}
+
+class EmbeddingCalculationFailure extends YoutubeState {
+  final String error;
+
+  const EmbeddingCalculationFailure(this.error);
+
+  @override
+  List<Object> get props => [error];
+}
 
 class YoutubeLoaded extends YoutubeState {
   final List<VideoShelf> shelves;

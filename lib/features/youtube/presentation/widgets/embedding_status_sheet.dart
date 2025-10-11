@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:zensort/features/youtube/domain/entities/embedding_progress.dart';
-import 'package:zensort/features/youtube/presentation/bloc/embedding_progress_cubit.dart';
+import 'package:zensort/features/youtube/presentation/bloc/youtube_bloc.dart';
 import 'package:zensort/theme.dart';
 
 class EmbeddingStatusSheet extends StatelessWidget {
@@ -9,90 +9,110 @@ class EmbeddingStatusSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Header
-          Container(
-            padding: const EdgeInsets.all(16),
+    return BlocProvider(
+      create: (context) =>
+          YouTubeBloc(context.read(), context.read())
+            ..add(CalculateEmbeddingProgress()),
+      child: BlocBuilder<YouTubeBloc, YoutubeState>(
+        builder: (context, state) {
+          return Container(
             decoration: BoxDecoration(
-              gradient: ZenSortTheme.primaryGradient,
+              color: Theme.of(context).colorScheme.surface,
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(16),
               ),
             ),
-            child: Row(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.analytics, color: Colors.white, size: 24),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Text(
-                    'Embedding Progress',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close, color: Colors.white),
+                _buildHeader(context),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: _buildContent(context, state),
                 ),
               ],
             ),
-          ),
+          );
+        },
+      ),
+    );
+  }
 
-          // Content
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: BlocBuilder<EmbeddingProgressCubit, EmbeddingProgress>(
-              builder: (context, progress) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Progress Bar
-                    LinearProgressIndicator(
-                      value: progress.percentComplete,
-                      backgroundColor: Colors.grey[300],
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        ZenSortTheme.primaryColor,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Progress Text
-                    Text(
-                      _getProgressText(progress),
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Statistics Grid
-                    _buildStatisticsGrid(context, progress),
-
-                    if (progress.lastUpdated != null) ...[
-                      const SizedBox(height: 16),
-                      Text(
-                        'Last updated: ${_formatDateTime(progress.lastUpdated!)}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                    ],
-                  ],
-                );
-              },
+  Widget _buildHeader(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: ZenSortTheme.primaryGradient,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.analytics, color: Colors.white, size: 24),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'Embedding Progress',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
             ),
+          ),
+          IconButton(
+            onPressed: () => Navigator.of(context).pop(),
+            icon: const Icon(Icons.close, color: Colors.white),
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildContent(BuildContext context, YoutubeState state) {
+    if (state is EmbeddingCalculationInProgress) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (state is EmbeddingCalculationFailure) {
+      return Text('Error: ${state.error}');
+    }
+
+    if (state is EmbeddingCalculationSuccess) {
+      // This is a placeholder. You'll need to update this part to
+      // actually get the progress data from your state.
+      final progress = EmbeddingProgress(); // Placeholder
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          LinearProgressIndicator(
+            value: progress.percentComplete,
+            backgroundColor: Colors.grey[300],
+            valueColor: const AlwaysStoppedAnimation<Color>(
+              ZenSortTheme.primaryColor,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            _getProgressText(progress),
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 16),
+          _buildStatisticsGrid(context, progress),
+          if (progress.failed > 0) ...[
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                context.read<YouTubeBloc>().add(RetryFailedEmbeddings());
+              },
+              child: const Text('Retry Failed'),
+            ),
+          ],
+        ],
+      );
+    }
+
+    return const Center(child: Text('Press the button to calculate progress.'));
   }
 
   Widget _buildStatisticsGrid(
@@ -154,9 +174,9 @@ class EmbeddingStatusSheet extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: color.withAlpha(25),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        border: Border.all(color: color.withAlpha(75)),
       ),
       child: Column(
         children: [
@@ -183,29 +203,9 @@ class EmbeddingStatusSheet extends StatelessWidget {
 
   String _getProgressText(EmbeddingProgress progress) {
     if (progress.total == 0) {
-      return 'No embeddings in progress';
+      return 'No videos to process.';
     }
-
-    if (progress.isComplete) {
-      return 'Embedding process completed!';
-    }
-
     final percentage = (progress.percentComplete * 100).toStringAsFixed(1);
     return 'Processing embeddings: $percentage% complete';
-  }
-
-  String _formatDateTime(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-
-    if (difference.inMinutes < 1) {
-      return 'Just now';
-    } else if (difference.inMinutes < 60) {
-      return '${difference.inMinutes}m ago';
-    } else if (difference.inHours < 24) {
-      return '${difference.inHours}h ago';
-    } else {
-      return '${difference.inDays}d ago';
-    }
   }
 }

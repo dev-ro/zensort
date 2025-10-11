@@ -24,4 +24,8 @@ abstract class YoutubeRepository {
 
   // Watch embedding progress in real-time
   Stream<EmbeddingProgress> watchEmbeddingProgress();
+
+  // On-demand embedding calculation
+  Future<EmbeddingProgress> calculateEmbeddingProgress();
+  Future<int> retryFailedEmbeddings();
 }

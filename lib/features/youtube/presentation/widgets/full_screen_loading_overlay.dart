@@ -13,8 +13,8 @@ class FullScreenLoadingOverlay extends StatelessWidget {
         ? (loaded! / total!).clamp(0.0, 1.0).toDouble()
         : null;
 
-    return ColoredBox(
-      color: theme.colorScheme.surface.withOpacity(0.96),
+    return Container(
+      color: Colors.black.withAlpha(150),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),

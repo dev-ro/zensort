@@ -35,6 +35,10 @@ class LoadUnlikedVideos extends YoutubeEvent {}
 
 class LoadAllVideosEager extends YoutubeEvent {}
 
+class CalculateEmbeddingProgress extends YoutubeEvent {}
+
+class RetryFailedEmbeddings extends YoutubeEvent {}
+
 class _YoutubeSyncProgressUpdated extends YoutubeEvent {
   final SyncProgress progress;
 

@@ -37,12 +37,10 @@ class _HomeScreenState extends State<HomeScreen> {
           if (state is Authenticated && state.accessToken != null) {
             // Token refresh successful - reset flag and trigger sync
             _isWaitingForTokenRefresh = false;
-            print('Token refreshed! Automatically triggering sync...');
             context.read<YouTubeBloc>().add(SyncLikedVideos());
           } else if (state is AuthError) {
             // Token refresh failed - reset flag and show error
             _isWaitingForTokenRefresh = false;
-            print('Token refresh failed: ${state.message}');
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
@@ -55,7 +53,6 @@ class _HomeScreenState extends State<HomeScreen> {
           } else if (state is AuthUnauthenticated) {
             // User became unauthenticated during refresh - reset flag
             _isWaitingForTokenRefresh = false;
-            print('User became unauthenticated during token refresh');
           }
         }
       },
@@ -86,31 +83,15 @@ class _HomeScreenState extends State<HomeScreen> {
                       ? null
                       : () async {
                           try {
-                            print('Sync button pressed.');
-
                             // Check authentication status from central state authority - AuthBloc
                             final authState = context.read<AuthBloc>().state;
 
                             if (authState is Authenticated) {
-                              print(
-                                'User is authenticated. Checking for access token...',
-                              );
-
                               if (authState.accessToken != null) {
-                                print(
-                                  'Access token available. First 20 chars: ${authState.accessToken!.substring(0, 20)}...',
-                                );
-                                print(
-                                  'Dispatching SyncLikedVideos event to YouTubeBloc...',
-                                );
                                 context.read<YouTubeBloc>().add(
                                   SyncLikedVideos(),
                                 );
                               } else {
-                                print(
-                                  'No access token available. Attempting silent refresh...',
-                                );
-
                                 // Set flag to automatically sync after token refresh
                                 setState(() {
                                   _isWaitingForTokenRefresh = true;
@@ -132,11 +113,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                 );
                               }
                             } else {
-                              print('User is not authenticated. Cannot sync.');
+                              // User not authenticated
                             }
                           } catch (e) {
-                            print('Error in sync button onPressed: $e');
-                            print('Stack trace: ${StackTrace.current}');
+                            // Catcherall for errors
                           }
                         },
                 ),
@@ -181,19 +161,24 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
     if (state is YoutubeSyncing) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            GradientLoader(),
-            SizedBox(height: 16),
-            Text('Syncing your library...'),
+            const GradientLoader(),
+            const SizedBox(height: 16),
+            Text(state.message ?? 'Syncing your library...'),
           ],
         ),
       );
     }
-    if (state is YoutubeLoading || state is YoutubeInitial) {
+    if (state is YoutubeLoading) {
       return const Center(child: GradientLoader());
+    }
+    if (state is YoutubeInitial) {
+      return const Center(
+        child: Text('Welcome! Please sync your liked videos.'),
+      );
     }
     if (state is YoutubeSyncProgress) {
       return Column(
@@ -210,7 +195,8 @@ class _HomeScreenState extends State<HomeScreen> {
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Text(
-              'Synced ${state.syncedCount} of ${state.totalCount} videos',
+              state.message ??
+                  'Synced ${state.syncedCount} of ${state.totalCount} videos',
             ),
           ),
           const Expanded(child: Center(child: GradientLoader())),
@@ -294,6 +280,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       );
     }
-    return const Center(child: Text('Welcome! Please sync your videos.'));
+    return const Center(child: Text('An unknown state occurred.'));
   }
 }

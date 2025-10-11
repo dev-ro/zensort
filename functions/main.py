@@ -858,13 +858,6 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
     try:
         logger.info(f"Starting efficient sync for user {user_id}")
 
-        # Automatically retry failed embeddings at the start of a sync
-        retried_count = _retry_failed_embeddings_for_user(user_id, db)
-        if retried_count > 0:
-            logger.info(
-                f"Automatically retried {retried_count} failed embeddings for user {user_id}"
-            )
-
         # Step 0: Create Sync Job Document for Progress Tracking
         logger.info("Step 0: Creating sync job document for progress tracking")
         sync_start_time = datetime.now(timezone.utc)
@@ -1275,8 +1268,7 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
         )
 
         # Step G: Update Embedding Progress from Source of Truth
-        logger.info("Step G: Updating embedding progress from source of truth")
-        update_embedding_progress(user_id, db)
+        logger.info("Step G: Embedding progress calculation is now on-demand.")
 
         logger.info(f"Sync completed successfully for user {user_id}")
 
@@ -2019,7 +2011,39 @@ def _retry_failed_embeddings_for_user(user_id: str, db: Any) -> int:
 
 
 @https_fn.on_call()
-def retry_failed_embeddings(req: https_fn.CallableRequest) -> dict:
+def calculate_embedding_progress(req: https_fn.CallableRequest) -> dict:
+    """
+    On-demand function to calculate embedding progress for a user and return it.
+    """
+    user_id = req.data.get("user_id")
+    if not user_id:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            message="The function must be called with a valid 'user_id'.",
+        )
+    db = _firestore().Client()
+    update_embedding_progress(user_id, db)
+
+    # Return the latest progress
+    progress_ref = (
+        db.collection("users")
+        .document(user_id)
+        .collection("embeddingProgress")
+        .document("current")
+    )
+    progress_doc = progress_ref.get()
+    if progress_doc.exists:
+        progress_data = progress_doc.to_dict()
+        # Convert datetime to string for JSON
+        if "last_updated" in progress_data and progress_data["last_updated"]:
+            progress_data["last_updated"] = progress_data["last_updated"].isoformat()
+        return {"success": True, "progress": progress_data}
+    else:
+        return {"success": True, "progress": None}
+
+
+@https_fn.on_call()
+def trigger_retry_failed_embeddings(req: https_fn.CallableRequest) -> dict:
     user_id = req.data.get("user_id")
     if not user_id:
         raise https_fn.HttpsError(
