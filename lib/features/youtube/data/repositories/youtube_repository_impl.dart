@@ -373,8 +373,13 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
   Stream<EmbeddingProgress> watchEmbeddingProgress() {
     late StreamController<EmbeddingProgress> controller;
     Timer? timer;
+    bool isPolling = false;
 
     void tick(_) async {
+      // Prevent concurrent execution if the previous poll is still running.
+      if (isPolling) return;
+      isPolling = true;
+
       try {
         final progress = await _getEmbeddingProgress();
         if (!controller.isClosed) {
@@ -384,10 +389,15 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
         if (!controller.isClosed) {
           controller.addError(e, s);
         }
+      } finally {
+        isPolling = false;
       }
     }
 
     void start() {
+      // Prevent multiple timers from being created.
+      if (timer != null) return;
+      
       // Tick immediately on listen, then start the periodic timer.
       tick(null);
       timer = Timer.periodic(const Duration(seconds: 5), tick);
