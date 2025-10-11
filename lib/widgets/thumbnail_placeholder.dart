@@ -32,10 +32,7 @@ class ThumbnailPlaceholder extends StatelessWidget {
               'assets/images/zensort_logo.svg',
               width: logoSize,
               height: logoSize,
-              colorFilter: ColorFilter.mode(
-                Colors.grey[600]!,
-                BlendMode.srcIn,
-              ),
+              colorFilter: ColorFilter.mode(Colors.grey[600]!, BlendMode.srcIn),
             ),
             const SizedBox(height: 4),
             Text(
@@ -51,4 +48,4 @@ class ThumbnailPlaceholder extends StatelessWidget {
       ),
     );
   }
-} 
+}

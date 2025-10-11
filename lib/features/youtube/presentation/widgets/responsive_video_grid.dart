@@ -31,7 +31,8 @@ class ResponsiveVideoGrid extends StatelessWidget {
 
         return GridView.builder(
           shrinkWrap: true, // Required for ExpansionTile
-          physics: const NeverScrollableScrollPhysics(), // Parent ListView handles scrolling
+          physics:
+              const NeverScrollableScrollPhysics(), // Parent ListView handles scrolling
           gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
             maxCrossAxisExtent: maxExtent,
             mainAxisSpacing: 12.0,

@@ -3,7 +3,7 @@ import 'package:zensort/features/youtube/domain/entities/video_shelf.dart';
 import 'package:zensort/features/youtube/presentation/widgets/video_grid_card.dart';
 
 /// A sliver-based video shelf that provides true lazy rendering for large video collections.
-/// 
+///
 /// This widget eliminates the shrinkWrap performance issues by using SliverGrid
 /// within a CustomScrollView, enabling efficient rendering of 2000+ videos.
 class VideoShelfSliver extends StatelessWidget {
@@ -25,9 +25,7 @@ class VideoShelfSliver extends StatelessWidget {
     return SliverMainAxisGroup(
       slivers: [
         // Shelf header
-        SliverToBoxAdapter(
-          child: _buildShelfHeader(context),
-        ),
+        SliverToBoxAdapter(child: _buildShelfHeader(context)),
         // Videos grid (only when expanded)
         if (isExpanded) ..._buildVideoGrid(context),
       ],
@@ -36,7 +34,7 @@ class VideoShelfSliver extends StatelessWidget {
 
   Widget _buildShelfHeader(BuildContext context) {
     final titleStyle = Theme.of(context).textTheme.titleLarge;
-    
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
@@ -58,9 +56,7 @@ class VideoShelfSliver extends StatelessWidget {
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
             const SizedBox(width: 8),
-            Icon(
-              isExpanded ? Icons.expand_less : Icons.expand_more,
-            ),
+            Icon(isExpanded ? Icons.expand_less : Icons.expand_more),
           ],
         ),
         onTap: () => onExpansionChanged?.call(!isExpanded),
@@ -94,9 +90,12 @@ class VideoShelfSliver extends StatelessWidget {
             if (constraints.crossAxisExtent <= 420) maxExtent = 320.0;
 
             // Estimate childAspectRatio: 16:9 thumbnail + ~96px text/padding area
-            double estimateAspect(double width) => width / (width * 9 / 16 + 96);
-            final sampleWidth = (constraints.crossAxisExtent / (constraints.crossAxisExtent / maxExtent).ceil())
-                .clamp(220.0, maxExtent);
+            double estimateAspect(double width) =>
+                width / (width * 9 / 16 + 96);
+            final sampleWidth =
+                (constraints.crossAxisExtent /
+                        (constraints.crossAxisExtent / maxExtent).ceil())
+                    .clamp(220.0, maxExtent);
             final childAspectRatio = estimateAspect(sampleWidth.toDouble());
 
             return SliverGrid(
@@ -106,13 +105,10 @@ class VideoShelfSliver extends StatelessWidget {
                 crossAxisSpacing: 12.0,
                 childAspectRatio: childAspectRatio,
               ),
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  // TRUE lazy rendering - only visible items build
-                  return VideoGridCard(video: shelf.videos[index]);
-                },
-                childCount: shelf.videos.length,
-              ),
+              delegate: SliverChildBuilderDelegate((context, index) {
+                // TRUE lazy rendering - only visible items build
+                return VideoGridCard(video: shelf.videos[index]);
+              }, childCount: shelf.videos.length),
             );
           },
         ),
