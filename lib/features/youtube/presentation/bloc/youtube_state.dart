@@ -69,20 +69,23 @@ class YoutubeLoaded extends YoutubeState {
   factory YoutubeLoaded.fromJson(Map<String, dynamic> json) {
     final query = (json['searchQuery'] as String?) ?? '';
     final isFullyLoaded = json['isFullyLoaded'] as bool? ?? false;
-    
+
     // Deserialize cached videos if available
     final allVideosJson = json['allVideos'] as List<dynamic>?;
     final allVideos = allVideosJson != null
         ? allVideosJson
-            .map((videoJson) => LikedVideo.fromJson(videoJson as Map<String, dynamic>))
-            .toList()
+              .map(
+                (videoJson) =>
+                    LikedVideo.fromJson(videoJson as Map<String, dynamic>),
+              )
+              .toList()
         : <LikedVideo>[];
-    
+
     // Build shelves from cached videos if available
     final shelves = allVideos.isNotEmpty
         ? _buildBaseShelvesFromVideos(allVideos)
         : <VideoShelf>[];
-    
+
     return YoutubeLoaded(
       shelves: shelves,
       allVideos: allVideos,
@@ -90,7 +93,8 @@ class YoutubeLoaded extends YoutubeState {
       searchQuery: query,
       hasMore: false,
       loadingMore: false,
-      expandedShelfKey: null, // Always start collapsed for faster initial render
+      expandedShelfKey:
+          null, // Always start collapsed for faster initial render
       isFullyLoaded: isFullyLoaded,
     );
   }
@@ -99,7 +103,8 @@ class YoutubeLoaded extends YoutubeState {
     return {
       'searchQuery': searchQuery,
       'isFullyLoaded': isFullyLoaded,
-      if (allVideos.isNotEmpty) 'allVideos': allVideos.map((video) => video.toJson()).toList(),
+      if (allVideos.isNotEmpty)
+        'allVideos': allVideos.map((video) => video.toJson()).toList(),
     };
   }
 

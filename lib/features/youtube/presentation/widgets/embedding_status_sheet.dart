@@ -190,7 +190,7 @@ class EmbeddingStatusSheet extends StatelessWidget {
       return 'Embedding process completed!';
     }
 
-    final percentage = (progress.percentComplete * 100).round();
+    final percentage = (progress.percentComplete * 100).toStringAsFixed(1);
     return 'Processing embeddings: $percentage% complete';
   }
 
