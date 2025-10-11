@@ -61,7 +61,7 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       child: BlocBuilder<YouTubeBloc, YoutubeState>(
         builder: (context, youtubeState) {
-          final isSyncing = youtubeState is YoutubeSyncProgress;
+          final isSyncing = youtubeState is YoutubeSyncProgress || youtubeState is YoutubeSyncing;
 
           return Scaffold(
             appBar: AppBar(
@@ -178,6 +178,18 @@ class _HomeScreenState extends State<HomeScreen> {
         total: state.totalCount,
       );
     }
+    if (state is YoutubeSyncing) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            GradientLoader(),
+            SizedBox(height: 16),
+            Text('Syncing your library...'),
+          ],
+        ),
+      );
+    }
     if (state is YoutubeLoading || state is YoutubeInitial) {
       return const Center(child: GradientLoader());
     }
@@ -260,7 +272,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   );
                                 },
                               );
-                            }).toList(),
+                            }),
                             // Load more indicator
                             if (state.loadingMore)
                               const SliverToBoxAdapter(

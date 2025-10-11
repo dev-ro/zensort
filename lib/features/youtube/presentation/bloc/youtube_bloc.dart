@@ -76,47 +76,18 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
         authState.accessToken != null &&
         !_isInitialLoadDispatched) {
       print(
-        'User authenticated with access token - checking for cached videos',
+        'User authenticated with access token - initiating sync/load sequence.',
       );
       _isInitialLoadDispatched = true;
 
-      // Check if we have cached videos from hydrated state
-      final currentState = state;
-      print('Current state type: ${currentState.runtimeType}');
-      print('Is YoutubeLoaded: ${currentState is YoutubeLoaded}');
-      if (currentState is YoutubeLoaded) {
-        print('Cached videos count: ${currentState.allVideos.length}');
-        print('Is fully loaded: ${currentState.isFullyLoaded}');
-        print('Shelves count: ${currentState.shelves.length}');
-      }
-      
-      if (currentState is YoutubeLoaded && 
-          currentState.allVideos.isNotEmpty && 
-          currentState.isFullyLoaded) {
-        print('✅ Found cached videos (${currentState.allVideos.length} videos) - loading immediately');
-        
-        // Emit cached state immediately for instant access
-        emit(currentState);
-        
-        // Set up streams for reactive updates
-        _setupStreams();
-        
-        // Perform background sync check (silent)
-        _performBackgroundSyncCheck();
-        
-        return;
-      } else {
-        print('❌ No cached videos found or not fully loaded - starting fresh load');
-      }
+      // Immediately transition to a syncing or loading state to give user feedback.
+      emit(YoutubeSyncing()); // New state to indicate sync check is happening.
 
-      print('No cached videos found - starting fresh load');
-      emit(YoutubeLoading());
-
-      // Cancel existing subscriptions
+      // Cancel any existing subscriptions to prevent artifacts.
       _syncProgressSubscription?.cancel();
       _likedVideosSubscription?.cancel();
 
-      // Set up sync progress monitoring (non-blocking)
+      // Set up sync progress monitoring first.
       _syncProgressSubscription = _youtubeRepository
           .getSyncProgressStream()
           .listen(
@@ -126,28 +97,45 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
               emit(YoutubeFailure(error.toString()));
             },
           );
-
-      // Make sync/eager load decision BEFORE setting up video stream
+      
+      // *** New Synchronous Sync-then-Load Logic ***
       try {
+        print('Step 1: Checking for remote/local video mismatch.');
         final remote = await _youtubeRepository.fetchRemoteLikedVideosTotal();
         final local = await _youtubeRepository.fetchLocalLikedVideosCount();
+        print('Remote total: $remote, Local total: $local');
+
         if (remote > local) {
-          add(SyncLikedVideos());
+          print('Step 2: Mismatch detected. Triggering synchronous video sync.');
+          // The UI is already showing YoutubeSyncing or YoutubeSyncProgress.
+          // We now await the completion of the sync.
+          await _youtubeRepository.syncLikedVideos();
+          print('Sync operation completed.');
+          // After a successful sync, we will proceed to load all videos eagerly.
+          add(LoadAllVideosEager());
         } else {
+          print('Step 2: No mismatch. Proceeding to load all videos eagerly.');
+          // If no sync is needed, we can move directly to loading all videos.
           add(LoadAllVideosEager());
         }
-      } catch (_) {
+      } catch (e) {
+        print('Error during sync check or operation: $e');
+        // If the sync check or the sync itself fails, emit a failure state.
+        // The user can then manually retry.
+        emit(YoutubeFailure('Failed to synchronize videos: ${e.toString()}'));
+        // Fallback to loading whatever is available locally.
         add(LoadAllVideosEager());
       }
-
-      // NOW set up reactive liked videos stream (after decision made)
+      
+      // Set up the reactive liked videos stream AFTER the sync decision.
+      // This stream will now primarily handle real-time UI updates post-initial-load.
       _likedVideosSubscription = _youtubeRepository.watchLikedVideos().listen(
         (videos) {
           print('watchLikedVideos stream emitted ${videos.length} videos');
           add(_LikedVideosUpdated(videos));
-          // Also load unliked videos once per session after we have a baseline
           if (!_hasVerifiedRemoteTotal) {
             add(LoadUnlikedVideos());
+             _hasVerifiedRemoteTotal = true; // Mark as verified
           }
         },
         onError: (error) {
@@ -155,6 +143,7 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
           add(_LikedVideosError(error.toString()));
         },
       );
+
     } else if (authState is AuthUnauthenticated) {
       print('User unauthenticated - clearing state and resetting latch');
       // Reset the latches when user becomes unauthenticated
@@ -549,8 +538,8 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     if (key != null) {
       // Clear the busy flag after the next microtask/frame to allow UI to show a quick indicator
       Future.microtask(() {
-        final now = this.state is YoutubeLoaded
-            ? this.state as YoutubeLoaded
+        final now = state is YoutubeLoaded
+            ? state as YoutubeLoaded
             : null;
         if (now != null && now.activeShelfKey == key) {
           emit(now.copyWith(activeShelfBusy: false));

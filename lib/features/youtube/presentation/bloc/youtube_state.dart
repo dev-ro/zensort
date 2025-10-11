@@ -7,11 +7,13 @@ abstract class YoutubeState extends Equatable {
   List<Object?> get props => [];
 }
 
-class YoutubeInitial extends YoutubeState {}
+final class YoutubeInitial extends YoutubeState {}
 
-class YoutubeLoading extends YoutubeState {}
+final class YoutubeSyncing extends YoutubeState {}
 
-class YoutubeSyncProgress extends YoutubeState {
+final class YoutubeLoading extends YoutubeState {}
+
+final class YoutubeSyncProgress extends YoutubeState {
   final int syncedCount;
   final int totalCount;
 
