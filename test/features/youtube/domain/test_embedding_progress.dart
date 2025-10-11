@@ -133,11 +133,7 @@ void main() {
     });
 
     test('should correctly handle null pending value', () {
-      const progress = EmbeddingProgress(
-        total: 100,
-        completed: 50,
-        failed: 10,
-      );
+      const progress = EmbeddingProgress(total: 100, completed: 50, failed: 10);
 
       expect(progress.pending, 0);
     });
