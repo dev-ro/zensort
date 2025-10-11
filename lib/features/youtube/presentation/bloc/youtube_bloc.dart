@@ -97,7 +97,7 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
               emit(YoutubeFailure(error.toString()));
             },
           );
-      
+
       // *** New Synchronous Sync-then-Load Logic ***
       try {
         print('Step 1: Checking for remote/local video mismatch.');
@@ -106,7 +106,9 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
         print('Remote total: $remote, Local total: $local');
 
         if (remote > local) {
-          print('Step 2: Mismatch detected. Triggering synchronous video sync.');
+          print(
+            'Step 2: Mismatch detected. Triggering synchronous video sync.',
+          );
           // The UI is already showing YoutubeSyncing or YoutubeSyncProgress.
           // We now await the completion of the sync.
           await _youtubeRepository.syncLikedVideos();
@@ -126,7 +128,7 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
         // Fallback to loading whatever is available locally.
         add(LoadAllVideosEager());
       }
-      
+
       // Set up the reactive liked videos stream AFTER the sync decision.
       // This stream will now primarily handle real-time UI updates post-initial-load.
       _likedVideosSubscription = _youtubeRepository.watchLikedVideos().listen(
@@ -135,7 +137,7 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
           add(_LikedVideosUpdated(videos));
           if (!_hasVerifiedRemoteTotal) {
             add(LoadUnlikedVideos());
-             _hasVerifiedRemoteTotal = true; // Mark as verified
+            _hasVerifiedRemoteTotal = true; // Mark as verified
           }
         },
         onError: (error) {
@@ -143,7 +145,6 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
           add(_LikedVideosError(error.toString()));
         },
       );
-
     } else if (authState is AuthUnauthenticated) {
       print('User unauthenticated - clearing state and resetting latch');
       // Reset the latches when user becomes unauthenticated
@@ -538,9 +539,7 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     if (key != null) {
       // Clear the busy flag after the next microtask/frame to allow UI to show a quick indicator
       Future.microtask(() {
-        final now = state is YoutubeLoaded
-            ? state as YoutubeLoaded
-            : null;
+        final now = state is YoutubeLoaded ? state as YoutubeLoaded : null;
         if (now != null && now.activeShelfKey == key) {
           emit(now.copyWith(activeShelfBusy: false));
         }
@@ -623,9 +622,11 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
       print('Performing background sync check...');
       final remote = await _youtubeRepository.fetchRemoteLikedVideosTotal();
       final local = await _youtubeRepository.fetchLocalLikedVideosCount();
-      
+
       if (remote > local) {
-        print('Background check: Remote has more videos ($remote vs $local) - triggering sync');
+        print(
+          'Background check: Remote has more videos ($remote vs $local) - triggering sync',
+        );
         add(SyncLikedVideos());
       } else {
         print('Background check: Local is up to date ($local videos)');
@@ -644,7 +645,7 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
       print('JSON keys: ${json.keys.toList()}');
       final stateType = json['stateType'] as String?;
       print('State type: $stateType');
-      
+
       if (stateType == 'YoutubeLoaded') {
         print('✅ Deserializing YoutubeLoaded state');
         final result = YoutubeLoaded.fromJson(json);

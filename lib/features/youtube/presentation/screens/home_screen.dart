@@ -61,7 +61,9 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       child: BlocBuilder<YouTubeBloc, YoutubeState>(
         builder: (context, youtubeState) {
-          final isSyncing = youtubeState is YoutubeSyncProgress || youtubeState is YoutubeSyncing;
+          final isSyncing =
+              youtubeState is YoutubeSyncProgress ||
+              youtubeState is YoutubeSyncing;
 
           return Scaffold(
             appBar: AppBar(
@@ -259,11 +261,14 @@ class _HomeScreenState extends State<HomeScreen> {
                           slivers: [
                             // Build slivers for each shelf
                             ...state.shelves.map((shelf) {
-                              final isExpanded = shelf.title == state.expandedShelfKey;
+                              final isExpanded =
+                                  shelf.title == state.expandedShelfKey;
                               return VideoShelfSliver(
                                 shelf: shelf,
                                 isExpanded: isExpanded,
-                                showBusy: state.activeShelfKey == shelf.title && state.activeShelfBusy,
+                                showBusy:
+                                    state.activeShelfKey == shelf.title &&
+                                    state.activeShelfBusy,
                                 onExpansionChanged: (expanded) {
                                   context.read<YouTubeBloc>().add(
                                     ShelfExpansionChanged(
@@ -278,7 +283,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               const SliverToBoxAdapter(
                                 child: Padding(
                                   padding: EdgeInsets.symmetric(vertical: 12.0),
-                                  child: Center(child: CircularProgressIndicator()),
+                                  child: Center(
+                                    child: CircularProgressIndicator(),
+                                  ),
                                 ),
                               ),
                           ],
