@@ -7,13 +7,13 @@ class EmbeddingProgress extends Equatable {
   final int pending;
   final DateTime? lastUpdated;
 
-  const EmbeddingProgress({
+  EmbeddingProgress({
     this.total = 0,
     this.completed = 0,
     this.failed = 0,
-    this.pending = 0,
+    int? pending,
     this.lastUpdated,
-  });
+  }) : pending = pending ?? (total - completed - failed).clamp(0, total);
 
   bool get isComplete {
     if (total == 0) return true;

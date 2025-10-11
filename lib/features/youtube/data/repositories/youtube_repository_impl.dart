@@ -423,7 +423,7 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
   Future<EmbeddingProgress> _getEmbeddingProgress() async {
     final user = _auth.currentUser;
     if (user == null) {
-      return const EmbeddingProgress();
+      return EmbeddingProgress();
     }
 
     try {

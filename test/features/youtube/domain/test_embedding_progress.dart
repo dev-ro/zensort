@@ -4,7 +4,7 @@ import 'package:zensort/features/youtube/domain/entities/embedding_progress.dart
 void main() {
   group('EmbeddingProgress', () {
     test('should create with default values', () {
-      const progress = EmbeddingProgress();
+      final progress = EmbeddingProgress();
 
       expect(progress.total, 0);
       expect(progress.completed, 0);
@@ -14,7 +14,7 @@ void main() {
     });
 
     test('should create with custom values', () {
-      const progress = EmbeddingProgress(
+      final progress = EmbeddingProgress(
         total: 100,
         completed: 50,
         failed: 5,
@@ -31,14 +31,14 @@ void main() {
 
     group('isComplete', () {
       test('should return true when total is 0', () {
-        const progress = EmbeddingProgress(total: 0);
+        final progress = EmbeddingProgress(total: 0);
         expect(progress.isComplete, true);
       });
 
       test(
         'should return true when pending is 0 and completed + failed >= total',
         () {
-          const progress = EmbeddingProgress(
+          final progress = EmbeddingProgress(
             total: 100,
             completed: 80,
             failed: 20,
@@ -49,7 +49,7 @@ void main() {
       );
 
       test('should return false when pending > 0', () {
-        const progress = EmbeddingProgress(
+        final progress = EmbeddingProgress(
           total: 100,
           completed: 50,
           failed: 10,
@@ -59,7 +59,7 @@ void main() {
       });
 
       test('should return false when completed + failed < total', () {
-        const progress = EmbeddingProgress(
+        final progress = EmbeddingProgress(
           total: 100,
           completed: 30,
           failed: 10,
@@ -71,39 +71,39 @@ void main() {
 
     group('percentComplete', () {
       test('should return 1.0 when total is 0', () {
-        const progress = EmbeddingProgress(total: 0);
+        final progress = EmbeddingProgress(total: 0);
         expect(progress.percentComplete, 1.0);
       });
 
       test('should return 0.0 when completed is 0', () {
-        const progress = EmbeddingProgress(total: 100, completed: 0);
+        final progress = EmbeddingProgress(total: 100, completed: 0);
         expect(progress.percentComplete, 0.0);
       });
 
       test('should return 0.5 when completed is half of total', () {
-        const progress = EmbeddingProgress(total: 100, completed: 50);
+        final progress = EmbeddingProgress(total: 100, completed: 50);
         expect(progress.percentComplete, 0.5);
       });
 
       test('should return 1.0 when completed equals total', () {
-        const progress = EmbeddingProgress(total: 100, completed: 100);
+        final progress = EmbeddingProgress(total: 100, completed: 100);
         expect(progress.percentComplete, 1.0);
       });
 
       test('should clamp to 0.0 when completed is negative', () {
-        const progress = EmbeddingProgress(total: 100, completed: -10);
+        final progress = EmbeddingProgress(total: 100, completed: -10);
         expect(progress.percentComplete, 0.0);
       });
 
       test('should clamp to 1.0 when completed exceeds total', () {
-        const progress = EmbeddingProgress(total: 100, completed: 150);
+        final progress = EmbeddingProgress(total: 100, completed: 150);
         expect(progress.percentComplete, 1.0);
       });
     });
 
     group('copyWith', () {
       test('should return new instance with updated values', () {
-        const original = EmbeddingProgress(
+        final original = EmbeddingProgress(
           total: 100,
           completed: 50,
           failed: 5,
@@ -119,7 +119,7 @@ void main() {
       });
 
       test('should return same instance when no changes', () {
-        const original = EmbeddingProgress(
+        final original = EmbeddingProgress(
           total: 100,
           completed: 50,
           failed: 5,
@@ -133,20 +133,26 @@ void main() {
     });
 
     test('should correctly handle null pending value', () {
-      const progress = EmbeddingProgress(total: 100, completed: 50, failed: 10);
+      final progress = EmbeddingProgress(total: 100, completed: 50, failed: 10);
 
       expect(progress.pending, 0);
     });
 
+    test('should calculate pending when it is not provided', () {
+      final progress = EmbeddingProgress(total: 100, completed: 50, failed: 10);
+
+      expect(progress.pending, 40);
+    });
+
     group('equality', () {
       test('should be equal when all fields match', () {
-        const progress1 = EmbeddingProgress(
+        final progress1 = EmbeddingProgress(
           total: 100,
           completed: 50,
           failed: 5,
           pending: 45,
         );
-        const progress2 = EmbeddingProgress(
+        final progress2 = EmbeddingProgress(
           total: 100,
           completed: 50,
           failed: 5,
@@ -157,8 +163,8 @@ void main() {
       });
 
       test('should not be equal when fields differ', () {
-        const progress1 = EmbeddingProgress(total: 100, completed: 50);
-        const progress2 = EmbeddingProgress(total: 100, completed: 60);
+        final progress1 = EmbeddingProgress(total: 100, completed: 50);
+        final progress2 = EmbeddingProgress(total: 100, completed: 60);
 
         expect(progress1, isNot(progress2));
       });
