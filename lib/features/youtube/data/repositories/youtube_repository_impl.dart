@@ -368,12 +368,17 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
   }
 
   @override
-  Stream<EmbeddingProgress> watchEmbeddingProgress() {
-    // This stream will periodically fetch the progress on-demand.
-    // This is more efficient than a constant Firestore listener on a large number of documents.
-    return Stream.periodic(const Duration(seconds: 5), (_) {
-      return getEmbeddingProgress();
-    }).asyncMap((future) => future);
+  Stream<EmbeddingProgress> watchEmbeddingProgress() async* {
+    // Yield the first result immediately to avoid a loading lag for the user.
+    yield await getEmbeddingProgress();
+
+    // Then, periodically yield subsequent updates. The `async*` stream will
+    // naturally pause between yields and will stop producing values if the
+    // listener cancels their subscription.
+    while (true) {
+      await Future.delayed(const Duration(seconds: 5));
+      yield await getEmbeddingProgress();
+    }
   }
 
   Future<EmbeddingProgress> getEmbeddingProgress() async {
