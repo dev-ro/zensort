@@ -61,7 +61,9 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       child: BlocBuilder<YouTubeBloc, YoutubeState>(
         builder: (context, youtubeState) {
-          final isSyncing = youtubeState is YoutubeSyncProgress;
+          final isSyncing =
+              youtubeState is YoutubeSyncProgress ||
+              youtubeState is YoutubeSyncing;
 
           return Scaffold(
             appBar: AppBar(
@@ -178,6 +180,18 @@ class _HomeScreenState extends State<HomeScreen> {
         total: state.totalCount,
       );
     }
+    if (state is YoutubeSyncing) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            GradientLoader(),
+            SizedBox(height: 16),
+            Text('Syncing your library...'),
+          ],
+        ),
+      );
+    }
     if (state is YoutubeLoading || state is YoutubeInitial) {
       return const Center(child: GradientLoader());
     }
@@ -247,11 +261,14 @@ class _HomeScreenState extends State<HomeScreen> {
                           slivers: [
                             // Build slivers for each shelf
                             ...state.shelves.map((shelf) {
-                              final isExpanded = shelf.title == state.expandedShelfKey;
+                              final isExpanded =
+                                  shelf.title == state.expandedShelfKey;
                               return VideoShelfSliver(
                                 shelf: shelf,
                                 isExpanded: isExpanded,
-                                showBusy: state.activeShelfKey == shelf.title && state.activeShelfBusy,
+                                showBusy:
+                                    state.activeShelfKey == shelf.title &&
+                                    state.activeShelfBusy,
                                 onExpansionChanged: (expanded) {
                                   context.read<YouTubeBloc>().add(
                                     ShelfExpansionChanged(
@@ -260,13 +277,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                   );
                                 },
                               );
-                            }).toList(),
+                            }),
                             // Load more indicator
                             if (state.loadingMore)
                               const SliverToBoxAdapter(
                                 child: Padding(
                                   padding: EdgeInsets.symmetric(vertical: 12.0),
-                                  child: Center(child: CircularProgressIndicator()),
+                                  child: Center(
+                                    child: CircularProgressIndicator(),
+                                  ),
                                 ),
                               ),
                           ],
