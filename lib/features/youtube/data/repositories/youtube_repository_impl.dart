@@ -394,25 +394,26 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
       }
     }
 
-    void start() {
-      // Prevent multiple timers from being created.
-      if (timer != null) return;
-      
-      // Tick immediately on listen, then start the periodic timer.
-      tick(null);
+    void startTimer() {
+      // Idempotent start to prevent multiple concurrent timers.
+      if (timer != null && timer!.isActive) return;
       timer = Timer.periodic(const Duration(seconds: 5), tick);
     }
 
-    void stop() {
+    void stopTimer() {
       timer?.cancel();
       timer = null;
     }
 
     controller = StreamController<EmbeddingProgress>(
-      onListen: start,
-      onCancel: stop,
-      onResume: start,
-      onPause: stop,
+      onListen: () {
+        // Fire first event immediately, then start the recurring timer.
+        tick(null);
+        startTimer();
+      },
+      onCancel: stopTimer,
+      onResume: startTimer, // Just restart the timer, don't fire an immediate event.
+      onPause: stopTimer,
     );
 
     return controller.stream;
@@ -427,14 +428,15 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
     try {
       final callable = FirebaseFunctions.instance.httpsCallable(
         'get_embedding_progress',
-        options: HttpsCallableOptions(timeout: const Duration(seconds: 60)),
+        options: HttpsCallableOptions(timeout: const Duration(seconds: 65)),
       );
       final result = await callable.call({'user_id': user.uid});
       final data = result.data as Map<String, dynamic>;
 
       DateTime? lastUpdated;
-      if (data['last_updated'] != null) {
-        lastUpdated = DateTime.parse(data['last_updated'] as String);
+      final lastUpdatedString = data['last_updated'];
+      if (lastUpdatedString != null && lastUpdatedString is String) {
+        lastUpdated = DateTime.tryParse(lastUpdatedString)?.toUtc();
       }
 
       return EmbeddingProgress(
