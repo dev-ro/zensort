@@ -13,14 +13,28 @@ class EmbeddingStatusSheet extends StatefulWidget {
 }
 
 class _EmbeddingStatusSheetState extends State<EmbeddingStatusSheet> {
+  Stream<EmbeddingProgress>? _progressStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _progressStream = context.read<YoutubeRepository>().watchEmbeddingProgress();
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Get the repository once
-    final youtubeRepository = context.read<YoutubeRepository>();
-
-    return FutureBuilder<EmbeddingProgress>(
-      future: youtubeRepository.getEmbeddingProgress(),
+    return StreamBuilder<EmbeddingProgress>(
+      stream: _progressStream,
       builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(32.0),
+              child: GradientLoader(),
+            ),
+          );
+        }
+
         final progress = snapshot.data;
         final error = snapshot.error;
 

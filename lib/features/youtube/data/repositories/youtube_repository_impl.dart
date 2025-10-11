@@ -368,6 +368,14 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
   }
 
   @override
+  Stream<EmbeddingProgress> watchEmbeddingProgress() {
+    // This stream will periodically fetch the progress on-demand.
+    // This is more efficient than a constant Firestore listener on a large number of documents.
+    return Stream.periodic(const Duration(seconds: 5), (_) {
+      return getEmbeddingProgress();
+    }).asyncMap((future) => future);
+  }
+
   Future<EmbeddingProgress> getEmbeddingProgress() async {
     final user = _auth.currentUser;
     if (user == null) {
@@ -398,7 +406,8 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
     int pending = 0;
     int failed = 0;
     DateTime? latestUpdate;
-    final likedVideoIdsList = likedVideoIds.toList(); // Convert once for efficiency
+    final likedVideoIdsList = likedVideoIds
+        .toList(); // Convert once for efficiency
 
     for (var i = 0; i < likedVideoIdsList.length; i += 30) {
       final chunk = likedVideoIdsList.sublist(
