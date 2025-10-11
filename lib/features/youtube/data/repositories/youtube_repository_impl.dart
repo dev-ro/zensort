@@ -406,56 +406,50 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
         i + 30 > likedVideoIdsList.length ? likedVideoIdsList.length : i + 30,
       );
 
-      try {
-        // Firestore 'in' query is limited to 30 items
-        final videosQuery = _firestore
-            .collection('videos')
-            .where(FieldPath.documentId, whereIn: chunk);
+      // Firestore 'in' query is limited to 30 items
+      final videosQuery = _firestore
+          .collection('videos')
+          .where(FieldPath.documentId, whereIn: chunk);
 
-        final videosSnapshot = await videosQuery.get();
-        final foundIds = <String>{};
+      final videosSnapshot = await videosQuery.get();
+      final foundIds = <String>{};
 
-        for (final doc in videosSnapshot.docs) {
-          foundIds.add(doc.id);
-          final data = doc.data();
-          final status = data['embedding_status'] as String?;
+      for (final doc in videosSnapshot.docs) {
+        foundIds.add(doc.id);
+        final data = doc.data();
+        final status = data['embedding_status'] as String?;
 
-          switch (status) {
-            case 'complete':
-            case 'not_applicable':
-              completed++;
-              break;
-            case 'pending':
-              pending++;
-              break;
-            case 'failed':
-              failed++;
-              break;
-            default:
-              // Videos might not have a status yet if sync just happened
-              // We can treat them as pending.
-              pending++;
-              break;
-          }
-
-          // Track the latest update timestamp
-          final updatedAtTimestamp = data['embedding_updated_at'] as Timestamp?;
-          if (updatedAtTimestamp != null) {
-            final updatedAt = updatedAtTimestamp.toDate();
-            if (latestUpdate == null || updatedAt.isAfter(latestUpdate)) {
-              latestUpdate = updatedAt;
-            }
-          }
+        switch (status) {
+          case 'complete':
+          case 'not_applicable':
+            completed++;
+            break;
+          case 'pending':
+            pending++;
+            break;
+          case 'failed':
+            failed++;
+            break;
+          default:
+            // Videos might not have a status yet if sync just happened
+            // We can treat them as pending.
+            pending++;
+            break;
         }
 
-        // Account for liked videos not yet present in the /videos collection
-        final notFoundCount = chunk.where((id) => !foundIds.contains(id)).length;
-        pending += notFoundCount;
-      } catch (e) {
-        // If a batch query fails, log the error and count the whole chunk as pending.
-        print('Error fetching embedding progress for a chunk: $e');
-        pending += chunk.length;
+        // Track the latest update timestamp
+        final updatedAtTimestamp = data['embedding_updated_at'] as Timestamp?;
+        if (updatedAtTimestamp != null) {
+          final updatedAt = updatedAtTimestamp.toDate();
+          if (latestUpdate == null || updatedAt.isAfter(latestUpdate)) {
+            latestUpdate = updatedAt;
+          }
+        }
       }
+
+      // Account for liked videos not yet present in the /videos collection
+      final notFoundCount = chunk.where((id) => !foundIds.contains(id)).length;
+      pending += notFoundCount;
     }
 
     return EmbeddingProgress(
