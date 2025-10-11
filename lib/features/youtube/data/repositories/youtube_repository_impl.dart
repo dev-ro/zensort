@@ -381,10 +381,15 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
         .doc(user.uid)
         .collection('likedVideos')
         .get();
-    final likedVideoIds = likedVideosQuery.docs.map((doc) => doc.id).toList();
+    final likedVideoIds = likedVideosQuery.docs.map((doc) => doc.id).toSet();
 
     if (likedVideoIds.isEmpty) {
-      return const EmbeddingProgress(total: 0, completed: 0, pending: 0, failed: 0);
+      return const EmbeddingProgress(
+        total: 0,
+        completed: 0,
+        pending: 0,
+        failed: 0,
+      );
     }
 
     // 2. Query the /videos collection in batches for each status
@@ -392,12 +397,13 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
     int completed = 0;
     int pending = 0;
     int failed = 0;
+    DateTime? latestUpdate;
 
     for (var i = 0; i < likedVideoIds.length; i += 30) {
-      final chunk = likedVideoIds.sublist(
-        i,
-        i + 30 > likedVideoIds.length ? likedVideoIds.length : i + 30,
-      );
+      final chunk = likedVideoIds.toList().sublist(
+            i,
+            i + 30 > likedVideoIds.length ? likedVideoIds.length : i + 30,
+          );
 
       // Firestore 'in' query is limited to 30 items
       final videosQuery = _firestore
@@ -405,8 +411,13 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
           .where(FieldPath.documentId, whereIn: chunk);
 
       final videosSnapshot = await videosQuery.get();
+      final foundIds = <String>{};
+
       for (final doc in videosSnapshot.docs) {
-        final status = doc.data()['embedding_status'] as String?;
+        foundIds.add(doc.id);
+        final data = doc.data();
+        final status = data['embedding_status'] as String?;
+
         switch (status) {
           case 'complete':
           case 'not_applicable':
@@ -424,7 +435,20 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
             pending++;
             break;
         }
+
+        // Track the latest update timestamp
+        final updatedAtTimestamp = data['embedding_updated_at'] as Timestamp?;
+        if (updatedAtTimestamp != null) {
+          final updatedAt = updatedAtTimestamp.toDate();
+          if (latestUpdate == null || updatedAt.isAfter(latestUpdate)) {
+            latestUpdate = updatedAt;
+          }
+        }
       }
+      
+      // Account for liked videos not yet present in the /videos collection
+      final notFoundCount = chunk.where((id) => !foundIds.contains(id)).length;
+      pending += notFoundCount;
     }
 
     return EmbeddingProgress(
@@ -432,7 +456,7 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
       completed: completed,
       pending: pending,
       failed: failed,
-      lastUpdated: DateTime.now().toUtc(),
+      lastUpdated: latestUpdate,
     );
   }
 
