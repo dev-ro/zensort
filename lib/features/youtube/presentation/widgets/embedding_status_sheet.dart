@@ -18,7 +18,9 @@ class _EmbeddingStatusSheetState extends State<EmbeddingStatusSheet> {
   @override
   void initState() {
     super.initState();
-    _progressStream = context.read<YoutubeRepository>().watchEmbeddingProgress();
+    _progressStream = context
+        .read<YoutubeRepository>()
+        .watchEmbeddingProgress();
   }
 
   @override
@@ -26,7 +28,8 @@ class _EmbeddingStatusSheetState extends State<EmbeddingStatusSheet> {
     return StreamBuilder<EmbeddingProgress>(
       stream: _progressStream,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
           return const Center(
             child: Padding(
               padding: EdgeInsets.all(32.0),
