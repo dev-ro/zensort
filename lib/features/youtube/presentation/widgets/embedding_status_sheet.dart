@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:zensort/features/youtube/domain/entities/embedding_progress.dart';
-import 'package:zensort/features/youtube/presentation/bloc/youtube_bloc.dart';
+import 'package:zensort/features/youtube/domain/repositories/youtube_repository.dart';
 import 'package:zensort/theme.dart';
+import 'package:zensort/widgets/gradient_loader.dart';
 
 class EmbeddingStatusSheet extends StatefulWidget {
   const EmbeddingStatusSheet({super.key});
@@ -13,22 +14,16 @@ class EmbeddingStatusSheet extends StatefulWidget {
 
 class _EmbeddingStatusSheetState extends State<EmbeddingStatusSheet> {
   @override
-  void initState() {
-    super.initState();
-    context.read<YouTubeBloc>().add(CalculateEmbeddingProgress());
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return BlocConsumer<YouTubeBloc, YoutubeState>(
-      listener: (context, state) {
-        if (state is EmbeddingCalculationFailure) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Error: ${state.error}')));
-        }
-      },
-      builder: (context, state) {
+    // Get the repository once
+    final youtubeRepository = context.read<YoutubeRepository>();
+
+    return StreamBuilder<EmbeddingProgress>(
+      stream: youtubeRepository.getEmbeddingProgressStream(),
+      builder: (context, snapshot) {
+        final progress = snapshot.data;
+        final error = snapshot.error;
+
         return Container(
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface,
@@ -40,7 +35,7 @@ class _EmbeddingStatusSheetState extends State<EmbeddingStatusSheet> {
               _buildHeader(context),
               Padding(
                 padding: const EdgeInsets.all(16),
-                child: _buildContent(context, state),
+                child: _buildContent(context, progress, error),
               ),
             ],
           ),
@@ -49,7 +44,7 @@ class _EmbeddingStatusSheetState extends State<EmbeddingStatusSheet> {
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
+  Widget _buildHeader(BuildContext fromContext) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -71,7 +66,7 @@ class _EmbeddingStatusSheetState extends State<EmbeddingStatusSheet> {
             ),
           ),
           IconButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(fromContext).pop(),
             icon: const Icon(Icons.close, color: Colors.white),
           ),
         ],
@@ -79,18 +74,25 @@ class _EmbeddingStatusSheetState extends State<EmbeddingStatusSheet> {
     );
   }
 
-  Widget _buildContent(BuildContext context, YoutubeState state) {
-    if (state is EmbeddingCalculationInProgress ||
-        state is! EmbeddingCalculationSuccess) {
-      return const Center(
+  Widget _buildContent(
+    BuildContext context,
+    EmbeddingProgress? progress,
+    Object? error,
+  ) {
+    if (error != null) {
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(32.0),
-          child: CircularProgressIndicator(),
+          padding: const EdgeInsets.all(32.0),
+          child: Text('Error loading progress: $error'),
         ),
       );
     }
 
-    final progress = state.progress;
+    if (progress == null) {
+      return const Center(
+        child: Padding(padding: EdgeInsets.all(32.0), child: GradientLoader()),
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -124,8 +126,26 @@ class _EmbeddingStatusSheetState extends State<EmbeddingStatusSheet> {
             child: ElevatedButton.icon(
               icon: const Icon(Icons.refresh),
               label: const Text('Retry Failed'),
-              onPressed: () {
-                context.read<YouTubeBloc>().add(RetryFailedEmbeddings());
+              onPressed: () async {
+                final scaffoldMessenger = ScaffoldMessenger.of(context);
+                try {
+                  await context
+                      .read<YoutubeRepository>()
+                      .retryFailedEmbeddings();
+                  scaffoldMessenger.showSnackBar(
+                    const SnackBar(
+                      content: Text('Retrying failed videos...'),
+                      backgroundColor: Colors.blue,
+                    ),
+                  );
+                } catch (e) {
+                  scaffoldMessenger.showSnackBar(
+                    SnackBar(
+                      content: Text('Failed to retry videos: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
               },
             ),
           ),

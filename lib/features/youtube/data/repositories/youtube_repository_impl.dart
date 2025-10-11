@@ -368,7 +368,7 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
   }
 
   @override
-  Stream<EmbeddingProgress> watchEmbeddingProgress() {
+  Stream<EmbeddingProgress> getEmbeddingProgressStream() {
     final user = _auth.currentUser;
     if (user == null) {
       // Return a stream that emits a default progress when user is not authenticated
@@ -392,30 +392,13 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
   }
 
   @override
-  Future<EmbeddingProgress> calculateEmbeddingProgress() async {
+  Future<void> retryFailedEmbeddings() async {
     final user = _auth.currentUser;
     if (user == null) throw Exception('User not authenticated');
 
     final callable = FirebaseFunctions.instance.httpsCallable(
-      'calculate_embedding_progress',
+      'retry_failed_embeddings',
     );
-    final result = await callable.call({'user_id': user.uid});
-    if (result.data['success'] == true && result.data['progress'] != null) {
-      return EmbeddingProgress.fromMap(result.data['progress']);
-    } else {
-      return const EmbeddingProgress();
-    }
-  }
-
-  @override
-  Future<int> retryFailedEmbeddings() async {
-    final user = _auth.currentUser;
-    if (user == null) throw Exception('User not authenticated');
-
-    final callable = FirebaseFunctions.instance.httpsCallable(
-      'trigger_retry_failed_embeddings',
-    );
-    final result = await callable.call({'user_id': user.uid});
-    return (result.data['retried'] as int?) ?? 0;
+    await callable.call({'user_id': user.uid});
   }
 }

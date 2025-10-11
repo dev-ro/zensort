@@ -53,8 +53,6 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
     );
     on<LoadUnlikedVideos>(_onLoadUnlikedVideos, transformer: droppable());
     on<LoadAllVideosEager>(_onLoadAllVideosEager, transformer: droppable());
-    on<CalculateEmbeddingProgress>(_onCalculateEmbeddingProgress);
-    on<RetryFailedEmbeddings>(_onRetryFailedEmbeddings);
 
     // Listen to AuthBloc's stable authentication state (hierarchical flow)
     // Repository -> AuthBloc -> YouTubeBloc
@@ -131,6 +129,20 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
           add(_LikedVideosError(error.toString()));
         },
       );
+
+      // Also set up the embedding progress stream
+      final progressStream = _youtubeRepository.getEmbeddingProgressStream();
+      final currentState = state;
+      if (currentState is YoutubeLoaded) {
+        emit(currentState.copyWith(embeddingProgressStream: progressStream));
+      } else {
+        // If not loaded yet, emit a loaded state with the stream
+        emit(
+          YoutubeLoaded.initial().copyWith(
+            embeddingProgressStream: progressStream,
+          ),
+        );
+      }
     } else if (authState is AuthUnauthenticated) {
       // Reset the latches when user becomes unauthenticated
       _isInitialLoadDispatched = false;
@@ -195,33 +207,6 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
       if (lastLoaded != null) {
         emit(lastLoaded);
       }
-    }
-  }
-
-  Future<void> _onCalculateEmbeddingProgress(
-    CalculateEmbeddingProgress event,
-    Emitter<YoutubeState> emit,
-  ) async {
-    emit(EmbeddingCalculationInProgress());
-    try {
-      final progress = await _youtubeRepository.calculateEmbeddingProgress();
-      emit(EmbeddingCalculationSuccess(progress));
-    } catch (e) {
-      emit(EmbeddingCalculationFailure(e.toString()));
-    }
-  }
-
-  Future<void> _onRetryFailedEmbeddings(
-    RetryFailedEmbeddings event,
-    Emitter<YoutubeState> emit,
-  ) async {
-    // Possibly emit a state to show retrying is in progress
-    try {
-      await _youtubeRepository.retryFailedEmbeddings();
-      // Re-trigger progress calculation to show updated numbers
-      add(CalculateEmbeddingProgress());
-    } catch (e) {
-      emit(EmbeddingCalculationFailure(e.toString()));
     }
   }
 

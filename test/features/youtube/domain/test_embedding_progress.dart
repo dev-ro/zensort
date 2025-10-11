@@ -14,7 +14,6 @@ void main() {
     });
 
     test('should create with custom values', () {
-      final now = DateTime.now();
       const progress = EmbeddingProgress(
         total: 100,
         completed: 50,
@@ -218,7 +217,6 @@ void main() {
 
     group('equality', () {
       test('should be equal when all fields match', () {
-        final now = DateTime.now();
         const progress1 = EmbeddingProgress(
           total: 100,
           completed: 50,
