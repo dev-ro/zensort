@@ -162,7 +162,6 @@ class YoutubeLoaded extends YoutubeState {
     expandedShelfKey,
     activeShelfKey,
     activeShelfBusy,
-    embeddingProgressStream,
   ];
 }
 
