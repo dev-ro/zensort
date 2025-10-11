@@ -176,7 +176,7 @@ class YouTubeBloc extends HydratedBloc<YoutubeEvent, YoutubeState> {
   ) {
     final progress = event.progress;
 
-    if (progress.status == SyncStatus.in_progress) {
+    if (progress.status == SyncStatus.inProgress) {
       emit(
         YoutubeSyncProgress(
           progress.syncedCount,
