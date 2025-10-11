@@ -412,7 +412,8 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
         startTimer();
       },
       onCancel: stopTimer,
-      onResume: startTimer, // Just restart the timer, don't fire an immediate event.
+      onResume:
+          startTimer, // Just restart the timer, don't fire an immediate event.
       onPause: stopTimer,
     );
 
