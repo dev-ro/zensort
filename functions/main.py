@@ -1643,27 +1643,41 @@ def get_embedding_progress(req: https_fn.CallableRequest) -> dict:
 
     # 1. Get all liked video IDs efficiently
     try:
-        liked_videos_ref = db.collection("users").document(user_id).collection("likedVideos")
+        liked_videos_ref = (
+            db.collection("users").document(user_id).collection("likedVideos")
+        )
         liked_video_ids = {doc.id for doc in liked_videos_ref.stream()}
     except Exception as e:
         logger.error(f"Failed to fetch liked videos for user {user_id}: {e}")
-        raise https_fn.HttpsError(code=https_fn.FunctionsErrorCode.INTERNAL, message="Could not fetch user's liked videos.")
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INTERNAL,
+            message="Could not fetch user's liked videos.",
+        )
 
     if not liked_video_ids:
-        return {"total": 0, "completed": 0, "pending": 0, "failed": 0, "last_updated": None}
+        return {
+            "total": 0,
+            "completed": 0,
+            "pending": 0,
+            "failed": 0,
+            "last_updated": None,
+        }
 
     total = len(liked_video_ids)
-    
+
     # Process in chunks of 30 due to Firestore 'in' query limitations
     liked_video_ids_list = list(liked_video_ids)
-    chunks = [liked_video_ids_list[i:i + 30] for i in range(0, len(liked_video_ids_list), 30)]
+    chunks = [
+        liked_video_ids_list[i : i + 30]
+        for i in range(0, len(liked_video_ids_list), 30)
+    ]
 
     def process_chunk(chunk_ids: list[str]) -> tuple[int, int, int, datetime | None]:
         """Queries a single chunk of video IDs and returns aggregated counts."""
         videos_ref = db.collection("videos")
         query = videos_ref.where("__name__", "in", chunk_ids)
         docs = query.stream()
-        
+
         chunk_completed = 0
         chunk_pending = 0
         chunk_failed = 0
@@ -1689,11 +1703,11 @@ def get_embedding_progress(req: https_fn.CallableRequest) -> dict:
             if updated_at_ts and isinstance(updated_at_ts, datetime):
                 if chunk_latest_update is None or updated_at_ts > chunk_latest_update:
                     chunk_latest_update = updated_at_ts
-        
+
         # Liked videos not yet in the /videos collection are also pending
         not_found_count = len(chunk_ids) - found_ids_count
         chunk_pending += not_found_count
-        
+
         return (chunk_completed, chunk_pending, chunk_failed, chunk_latest_update)
 
     completed = 0
@@ -1715,7 +1729,10 @@ def get_embedding_progress(req: https_fn.CallableRequest) -> dict:
                         latest_update = lu
     except Exception as e:
         logger.error(f"Error processing chunks for user {user_id}: {e}")
-        raise https_fn.HttpsError(code=https_fn.FunctionsErrorCode.INTERNAL, message="Failed to calculate embedding progress.")
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INTERNAL,
+            message="Failed to calculate embedding progress.",
+        )
 
     return {
         "total": total,

@@ -28,7 +28,8 @@ class _EmbeddingStatusSheetState extends State<EmbeddingStatusSheet> {
     return StreamBuilder<EmbeddingProgress>(
       stream: _progressStream,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
           return Center(
             child: Padding(
               padding: const EdgeInsets.all(32.0),
