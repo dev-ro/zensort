@@ -1273,6 +1273,10 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
                 "completedAt": datetime.now(timezone.utc),
             }
         )
+        
+        # Step G: Update Embedding Progress from Source of Truth
+        logger.info("Step G: Updating embedding progress from source of truth")
+        update_embedding_progress(user_id, db)
 
         logger.info(f"Sync completed successfully for user {user_id}")
 
@@ -1316,92 +1320,85 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
         )
 
 
-def update_embedding_progress(user_id):
-    db = _firestore().Client()
+def update_embedding_progress(user_id: str, db: Any) -> None:
+    """
+    Calculates and updates the embedding progress for a user based on the
+    source of truth (the 'embedding' field and video titles), not the potentially
+    stale 'embedding_status' field. It corrects status discrepancies on the fly.
+    """
+    logger.info(f"Starting source-of-truth embedding progress update for user {user_id}")
+    
     # Get all videoIds liked by this user
-    # Using .get() instead of .stream() for better performance when processing all documents
-    liked_videos_ref = (
-        db.collection("users").document(user_id).collection("likedVideos")
-    )
-    liked_video_docs = liked_videos_ref.get()
+    liked_videos_ref = db.collection("users").document(user_id).collection("likedVideos")
+    liked_video_docs = list(liked_videos_ref.stream())
     video_ids = [doc.id for doc in liked_video_docs]
-    total = len(video_ids)
+    total_videos = len(video_ids)
 
-    if total == 0:
-        # No liked videos, set empty progress
-        progress_ref = (
-            db.collection("users")
-            .document(user_id)
-            .collection("embeddingProgress")
-            .document("current")
-        )
-        progress_ref.set(
-            {
-                "total": 0,
-                "completed": 0,
-                "failed": 0,
-                "pending": 0,
-                "last_updated": datetime.now(timezone.utc),
-            },
-            merge=True,
-        )
+    if total_videos == 0:
+        logger.info(f"User {user_id} has no liked videos. Resetting progress.")
+        progress_ref = db.collection("users").document(user_id).collection("embeddingProgress").document("current")
+        progress_ref.set({"total": 0, "completed": 0, "failed": 0, "pending": 0, "last_updated": datetime.now(timezone.utc)}, merge=True)
         return
 
-    # Use efficient Firestore queries with chunking (30 IDs per chunk due to 'in' query limitations)
-    completed = 0
-    failed = 0
-    pending = 0
+    completed_count = 0
+    failed_count = 0
+    pending_count = 0
+    batch = db.batch()
+    
+    # Process videos in chunks to stay within Firestore limits
+    chunk_size = 30
+    for i in range(0, total_videos, chunk_size):
+        chunk_ids = video_ids[i:i + chunk_size]
+        video_refs = [db.collection("videos").document(vid) for vid in chunk_ids]
+        video_docs = db.getAll(video_refs)
 
-    videos_ref = db.collection("videos")
-    chunk_size = 10  # Reduced to avoid disjunction limits
+        for doc in video_docs:
+            if not doc.exists:
+                pending_count += 1
+                continue
 
-    for i in range(0, len(video_ids), chunk_size):
-        video_id_chunk = video_ids[i : i + chunk_size]
+            video_data = doc.to_dict()
+            video_id = doc.id
+            current_status = video_data.get("embedding_status")
+            corrected_status = None
 
-        # Query for completed videos (complete status)
-        completed_query = videos_ref.where("__name__", "in", video_id_chunk).where(
-            "embedding_status", "==", "complete"
-        )
-        completed_docs = completed_query.get()
-        completed += len(completed_docs)
+            title = video_data.get("title", "")
+            if title in {"Private video", "Deleted video"}:
+                completed_count += 1
+                corrected_status = "not_applicable"
+            elif isinstance(video_data.get("embedding"), list) and len(video_data.get("embedding")) == EMBEDDING_DIMENSIONALITY:
+                completed_count += 1
+                corrected_status = "complete"
+            elif current_status == "failed":
+                failed_count += 1
+                corrected_status = "failed" # Trust 'failed' status unless embedding exists
+            else:
+                pending_count += 1
+                corrected_status = "pending"
 
-        # Query for not_applicable videos (private/deleted)
-        not_applicable_query = videos_ref.where("__name__", "in", video_id_chunk).where(
-            "embedding_status", "==", "not_applicable"
-        )
-        not_applicable_docs = not_applicable_query.get()
-        completed += len(not_applicable_docs)
+            # Correct the status in the /videos collection if it's incorrect
+            if current_status != corrected_status:
+                logger.info(f"Correcting status for video {video_id}: from '{current_status}' to '{corrected_status}'")
+                batch.update(doc.reference, {"embedding_status": corrected_status})
 
-        # Query for failed videos
-        failed_query = videos_ref.where("__name__", "in", video_id_chunk).where(
-            "embedding_status", "==", "failed"
-        )
-        failed_docs = failed_query.get()
-        failed += len(failed_docs)
+    # Commit any status corrections
+    try:
+        batch.commit()
+        logger.info(f"Committed status corrections for user {user_id}")
+    except Exception as e:
+        logger.error(f"Error committing status corrections for user {user_id}: {e}")
 
-        # Query for pending videos (embedding is null)
-        pending_query = videos_ref.where("__name__", "in", video_id_chunk).where(
-            "embedding", "==", None
-        )
-        pending_docs = pending_query.get()
-        pending += len(pending_docs)
-
-    progress_ref = (
-        db.collection("users")
-        .document(user_id)
-        .collection("embeddingProgress")
-        .document("current")
-    )
-    progress_ref.set(
-        {
-            "total": total,
-            "completed": completed,
-            "failed": failed,
-            "pending": pending,
-            "last_updated": datetime.now(timezone.utc),
-        },
-        merge=True,
-    )
+    # Final progress update
+    progress_ref = db.collection("users").document(user_id).collection("embeddingProgress").document("current")
+    progress_data = {
+        "total": total_videos,
+        "completed": completed_count,
+        "failed": failed_count,
+        "pending": pending_count,
+        "last_updated": datetime.now(timezone.utc),
+    }
+    progress_ref.set(progress_data, merge=True)
+    logger.info(f"Successfully updated embedding progress for user {user_id}: {progress_data}")
 
 
 @firestore_fn.on_document_written(document="videos/{videoId}")
