@@ -376,7 +376,7 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
 
     void tick(_) async {
       try {
-        final progress = await getEmbeddingProgress();
+        final progress = await _getEmbeddingProgress();
         if (!controller.isClosed) {
           controller.add(progress);
         }
@@ -408,98 +408,36 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
     return controller.stream;
   }
 
-  Future<EmbeddingProgress> getEmbeddingProgress() async {
+  Future<EmbeddingProgress> _getEmbeddingProgress() async {
     final user = _auth.currentUser;
     if (user == null) {
-      // Return a default progress when user is not authenticated
       return const EmbeddingProgress();
     }
 
-    // 1. Get all liked video IDs for the user
-    final likedVideosQuery = await _firestore
-        .collection('users')
-        .doc(user.uid)
-        .collection('likedVideos')
-        .get();
-    final likedVideoIds = likedVideosQuery.docs.map((doc) => doc.id).toSet();
-
-    if (likedVideoIds.isEmpty) {
-      return const EmbeddingProgress(
-        total: 0,
-        completed: 0,
-        pending: 0,
-        failed: 0,
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable(
+        'get_embedding_progress',
+        options: HttpsCallableOptions(timeout: const Duration(seconds: 60)),
       );
-    }
+      final result = await callable.call({'user_id': user.uid});
+      final data = result.data as Map<String, dynamic>;
 
-    // 2. Query the /videos collection in batches for each status
-    final total = likedVideoIds.length;
-    int completed = 0;
-    int pending = 0;
-    int failed = 0;
-    DateTime? latestUpdate;
-    final likedVideoIdsList = likedVideoIds
-        .toList(); // Convert once for efficiency
-
-    for (var i = 0; i < likedVideoIdsList.length; i += 30) {
-      final chunk = likedVideoIdsList.sublist(
-        i,
-        i + 30 > likedVideoIdsList.length ? likedVideoIdsList.length : i + 30,
-      );
-
-      // Firestore 'in' query is limited to 30 items
-      final videosQuery = _firestore
-          .collection('videos')
-          .where(FieldPath.documentId, whereIn: chunk);
-
-      final videosSnapshot = await videosQuery.get();
-      final foundIds = <String>{};
-
-      for (final doc in videosSnapshot.docs) {
-        foundIds.add(doc.id);
-        final data = doc.data();
-        final status = data['embedding_status'] as String?;
-
-        switch (status) {
-          case 'complete':
-          case 'not_applicable':
-            completed++;
-            break;
-          case 'pending':
-            pending++;
-            break;
-          case 'failed':
-            failed++;
-            break;
-          default:
-            // Videos might not have a status yet if sync just happened
-            // We can treat them as pending.
-            pending++;
-            break;
-        }
-
-        // Track the latest update timestamp
-        final updatedAtTimestamp = data['embedding_updated_at'] as Timestamp?;
-        if (updatedAtTimestamp != null) {
-          final updatedAt = updatedAtTimestamp.toDate();
-          if (latestUpdate == null || updatedAt.isAfter(latestUpdate)) {
-            latestUpdate = updatedAt;
-          }
-        }
+      DateTime? lastUpdated;
+      if (data['last_updated'] != null) {
+        lastUpdated = DateTime.parse(data['last_updated'] as String);
       }
 
-      // Account for liked videos not yet present in the /videos collection
-      final notFoundCount = chunk.where((id) => !foundIds.contains(id)).length;
-      pending += notFoundCount;
+      return EmbeddingProgress(
+        total: (data['total'] as num?)?.toInt() ?? 0,
+        completed: (data['completed'] as num?)?.toInt() ?? 0,
+        pending: (data['pending'] as num?)?.toInt() ?? 0,
+        failed: (data['failed'] as num?)?.toInt() ?? 0,
+        lastUpdated: lastUpdated,
+      );
+    } catch (e) {
+      // The error will be caught by the stream controller and added to the stream.
+      rethrow;
     }
-
-    return EmbeddingProgress(
-      total: total,
-      completed: completed,
-      pending: pending,
-      failed: failed,
-      lastUpdated: latestUpdate,
-    );
   }
 
   @override

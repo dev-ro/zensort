@@ -1624,3 +1624,103 @@ def retry_failed_embeddings(req: https_fn.CallableRequest) -> dict:
     batch.commit()
 
     return {"retried": len(failed_videos_to_retry)}
+
+
+@https_fn.on_call(timeout_sec=60)
+def get_embedding_progress(req: https_fn.CallableRequest) -> dict:
+    """
+    Calculates and returns the embedding progress for a given user.
+    This function is optimized to run aggregation queries in parallel on the server-side.
+    """
+    user_id = req.data.get("user_id")
+    if not user_id:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            message="The function must be called with a valid 'user_id'.",
+        )
+
+    db = _firestore().Client()
+
+    # 1. Get all liked video IDs efficiently
+    try:
+        liked_videos_ref = db.collection("users").document(user_id).collection("likedVideos")
+        liked_video_ids = {doc.id for doc in liked_videos_ref.stream()}
+    except Exception as e:
+        logger.error(f"Failed to fetch liked videos for user {user_id}: {e}")
+        raise https_fn.HttpsError(code=https_fn.FunctionsErrorCode.INTERNAL, message="Could not fetch user's liked videos.")
+
+    if not liked_video_ids:
+        return {"total": 0, "completed": 0, "pending": 0, "failed": 0, "last_updated": None}
+
+    total = len(liked_video_ids)
+    
+    # Process in chunks of 30 due to Firestore 'in' query limitations
+    liked_video_ids_list = list(liked_video_ids)
+    chunks = [liked_video_ids_list[i:i + 30] for i in range(0, len(liked_video_ids_list), 30)]
+
+    def process_chunk(chunk_ids: list[str]) -> tuple[int, int, int, datetime | None]:
+        """Queries a single chunk of video IDs and returns aggregated counts."""
+        videos_ref = db.collection("videos")
+        query = videos_ref.where("__name__", "in", chunk_ids)
+        docs = query.stream()
+        
+        chunk_completed = 0
+        chunk_pending = 0
+        chunk_failed = 0
+        chunk_latest_update = None
+        found_ids_count = 0
+
+        for doc in docs:
+            found_ids_count += 1
+            data = doc.to_dict() or {}
+            status = data.get("embedding_status")
+
+            if status in ("complete", "not_applicable"):
+                chunk_completed += 1
+            elif status == "pending":
+                chunk_pending += 1
+            elif status == "failed":
+                chunk_failed += 1
+            else:
+                # Default to pending if status is missing
+                chunk_pending += 1
+
+            updated_at_ts = data.get("embedding_updated_at")
+            if updated_at_ts and isinstance(updated_at_ts, datetime):
+                if chunk_latest_update is None or updated_at_ts > chunk_latest_update:
+                    chunk_latest_update = updated_at_ts
+        
+        # Liked videos not yet in the /videos collection are also pending
+        not_found_count = len(chunk_ids) - found_ids_count
+        chunk_pending += not_found_count
+        
+        return (chunk_completed, chunk_pending, chunk_failed, chunk_latest_update)
+
+    completed = 0
+    pending = 0
+    failed = 0
+    latest_update = None
+
+    try:
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            # Schedule all chunks to be processed in parallel
+            futures = [executor.submit(process_chunk, chunk) for chunk in chunks]
+            for future in as_completed(futures):
+                c, p, f, lu = future.result()  # result() will re-raise exceptions
+                completed += c
+                pending += p
+                failed += f
+                if lu:
+                    if latest_update is None or lu > latest_update:
+                        latest_update = lu
+    except Exception as e:
+        logger.error(f"Error processing chunks for user {user_id}: {e}")
+        raise https_fn.HttpsError(code=https_fn.FunctionsErrorCode.INTERNAL, message="Failed to calculate embedding progress.")
+
+    return {
+        "total": total,
+        "completed": completed,
+        "pending": pending,
+        "failed": failed,
+        "last_updated": latest_update.isoformat() if latest_update else None,
+    }

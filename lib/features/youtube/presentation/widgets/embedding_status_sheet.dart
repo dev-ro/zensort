@@ -28,12 +28,28 @@ class _EmbeddingStatusSheetState extends State<EmbeddingStatusSheet> {
     return StreamBuilder<EmbeddingProgress>(
       stream: _progressStream,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting &&
-            !snapshot.hasData) {
-          return const Center(
+        if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+          return Center(
             child: Padding(
-              padding: EdgeInsets.all(32.0),
-              child: GradientLoader(),
+              padding: const EdgeInsets.all(32.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const GradientLoader(),
+                  const SizedBox(height: 24),
+                  Text(
+                    'Calculating Progress...',
+                    style: Theme.of(context).textTheme.titleMedium,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'This may take a moment for large video libraries.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
             ),
           );
         }
