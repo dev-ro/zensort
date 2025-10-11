@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:equatable/equatable.dart';
 
 class EmbeddingProgress extends Equatable {
@@ -25,7 +26,6 @@ class EmbeddingProgress extends Equatable {
     final ratio = completed / total;
     if (ratio < 0) return 0.0;
     if (ratio > 1) return 1.0;
-    // Round to 1 decimal place (tenth)
     return (ratio * 1000).round() / 1000;
   }
 
@@ -49,27 +49,15 @@ class EmbeddingProgress extends Equatable {
     DateTime? parsed;
     final raw = map['last_updated'];
     if (raw != null) {
-      if (raw is DateTime) {
+      if (raw is Timestamp) {
+        parsed = raw.toDate();
+      } else if (raw is DateTime) {
         parsed = raw.toUtc();
       } else if (raw is String) {
         try {
           parsed = DateTime.parse(raw).toUtc();
         } catch (_) {
-          parsed = null;
-        }
-      } else {
-        // Support Firestore Timestamp without importing it in domain layer
-        final tsSecs = (raw is Map && raw['seconds'] is int)
-            ? raw['seconds'] as int
-            : null;
-        final tsNanos = (raw is Map && raw['nanoseconds'] is int)
-            ? raw['nanoseconds'] as int
-            : null;
-        if (tsSecs != null) {
-          parsed = DateTime.fromMillisecondsSinceEpoch(
-            (tsSecs * 1000) + ((tsNanos ?? 0) ~/ 1000000),
-            isUtc: true,
-          );
+          // Ignore parse errors
         }
       }
     }

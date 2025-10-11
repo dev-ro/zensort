@@ -1,97 +1,161 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:zensort/features/youtube/domain/entities/embedding_progress.dart';
-import 'package:zensort/features/youtube/presentation/bloc/embedding_progress_cubit.dart';
+import 'package:zensort/features/youtube/domain/repositories/youtube_repository.dart';
 import 'package:zensort/theme.dart';
+import 'package:zensort/widgets/gradient_loader.dart';
 
-class EmbeddingStatusSheet extends StatelessWidget {
+class EmbeddingStatusSheet extends StatefulWidget {
   const EmbeddingStatusSheet({super.key});
 
   @override
+  State<EmbeddingStatusSheet> createState() => _EmbeddingStatusSheetState();
+}
+
+class _EmbeddingStatusSheetState extends State<EmbeddingStatusSheet> {
+  @override
   Widget build(BuildContext context) {
+    // Get the repository once
+    final youtubeRepository = context.read<YoutubeRepository>();
+
+    return StreamBuilder<EmbeddingProgress>(
+      stream: youtubeRepository.getEmbeddingProgressStream(),
+      builder: (context, snapshot) {
+        final progress = snapshot.data;
+        final error = snapshot.error;
+
+        return Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildHeader(context),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: _buildContent(context, progress, error),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildHeader(BuildContext fromContext) {
     return Container(
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
+        gradient: ZenSortTheme.primaryGradient,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      child: Row(
         children: [
-          // Header
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              gradient: ZenSortTheme.primaryGradient,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(16),
+          const Icon(Icons.analytics, color: Colors.white, size: 24),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'Embedding Progress',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
               ),
             ),
-            child: Row(
-              children: [
-                const Icon(Icons.analytics, color: Colors.white, size: 24),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Text(
-                    'Embedding Progress',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close, color: Colors.white),
-                ),
-              ],
-            ),
           ),
+          IconButton(
+            onPressed: () => Navigator.of(fromContext).pop(),
+            icon: const Icon(Icons.close, color: Colors.white),
+          ),
+        ],
+      ),
+    );
+  }
 
-          // Content
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: BlocBuilder<EmbeddingProgressCubit, EmbeddingProgress>(
-              builder: (context, progress) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Progress Bar
-                    LinearProgressIndicator(
-                      value: progress.percentComplete,
-                      backgroundColor: Colors.grey[300],
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        ZenSortTheme.primaryColor,
-                      ),
+  Widget _buildContent(
+    BuildContext context,
+    EmbeddingProgress? progress,
+    Object? error,
+  ) {
+    if (error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Text('Error loading progress: $error'),
+        ),
+      );
+    }
+
+    if (progress == null) {
+      return const Center(
+        child: Padding(padding: EdgeInsets.all(32.0), child: GradientLoader()),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        LinearProgressIndicator(
+          value: progress.percentComplete,
+          backgroundColor: Colors.grey[300],
+          valueColor: const AlwaysStoppedAnimation<Color>(
+            ZenSortTheme.primaryColor,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(
+              _getProgressText(progress),
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            if (progress.lastUpdated != null)
+              Text(
+                'Updated ${_formatDateTime(progress.lastUpdated!)}',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+              ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _buildStatisticsGrid(context, progress),
+        if (progress.failed > 0) ...[
+          const SizedBox(height: 24),
+          Center(
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry Failed'),
+              onPressed: () async {
+                final scaffoldMessenger = ScaffoldMessenger.of(context);
+                try {
+                  await context
+                      .read<YoutubeRepository>()
+                      .retryFailedEmbeddings();
+                  scaffoldMessenger.showSnackBar(
+                    const SnackBar(
+                      content: Text('Retrying failed videos...'),
+                      backgroundColor: Colors.blue,
                     ),
-                    const SizedBox(height: 16),
-
-                    // Progress Text
-                    Text(
-                      _getProgressText(progress),
-                      style: Theme.of(context).textTheme.titleMedium,
+                  );
+                } catch (e) {
+                  scaffoldMessenger.showSnackBar(
+                    SnackBar(
+                      content: Text('Failed to retry videos: $e'),
+                      backgroundColor: Colors.red,
                     ),
-                    const SizedBox(height: 16),
-
-                    // Statistics Grid
-                    _buildStatisticsGrid(context, progress),
-
-                    if (progress.lastUpdated != null) ...[
-                      const SizedBox(height: 16),
-                      Text(
-                        'Last updated: ${_formatDateTime(progress.lastUpdated!)}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                    ],
-                  ],
-                );
+                  );
+                }
               },
             ),
           ),
         ],
-      ),
+      ],
     );
   }
 
@@ -154,9 +218,9 @@ class EmbeddingStatusSheet extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: color.withAlpha(25),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        border: Border.all(color: color.withAlpha(75)),
       ),
       child: Column(
         children: [
@@ -183,13 +247,11 @@ class EmbeddingStatusSheet extends StatelessWidget {
 
   String _getProgressText(EmbeddingProgress progress) {
     if (progress.total == 0) {
-      return 'No embeddings in progress';
+      return 'No videos to process.';
     }
-
     if (progress.isComplete) {
-      return 'Embedding process completed!';
+      return 'Embedding process complete!';
     }
-
     final percentage = (progress.percentComplete * 100).toStringAsFixed(1);
     return 'Processing embeddings: $percentage% complete';
   }

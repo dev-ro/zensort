@@ -9,18 +9,26 @@ abstract class YoutubeState extends Equatable {
 
 final class YoutubeInitial extends YoutubeState {}
 
-final class YoutubeSyncing extends YoutubeState {}
+final class YoutubeSyncing extends YoutubeState {
+  final String? message;
+
+  const YoutubeSyncing([this.message]);
+
+  @override
+  List<Object?> get props => [message];
+}
 
 final class YoutubeLoading extends YoutubeState {}
 
 final class YoutubeSyncProgress extends YoutubeState {
   final int syncedCount;
   final int totalCount;
+  final String? message;
 
-  const YoutubeSyncProgress(this.syncedCount, this.totalCount);
+  const YoutubeSyncProgress(this.syncedCount, this.totalCount, [this.message]);
 
   @override
-  List<Object> get props => [syncedCount, totalCount];
+  List<Object?> get props => [syncedCount, totalCount, message];
 }
 
 class YoutubeSyncSuccess extends YoutubeState {}
@@ -37,6 +45,7 @@ class YoutubeLoaded extends YoutubeState {
   final bool isFullyLoaded;
   final String? activeShelfKey;
   final bool activeShelfBusy;
+  final Stream<EmbeddingProgress> embeddingProgressStream;
 
   const YoutubeLoaded({
     required this.shelves,
@@ -50,12 +59,13 @@ class YoutubeLoaded extends YoutubeState {
     this.isFullyLoaded = false,
     this.activeShelfKey,
     this.activeShelfBusy = false,
+    this.embeddingProgressStream = const Stream.empty(),
   });
 
-  factory YoutubeLoaded.initial() => const YoutubeLoaded(
-    shelves: [],
-    allVideos: [],
-    unlikedVideos: [],
+  factory YoutubeLoaded.initial() => YoutubeLoaded(
+    shelves: const [],
+    allVideos: const [],
+    unlikedVideos: const [],
     searchQuery: '',
     hasMore: false,
     loadingMore: false,
@@ -63,6 +73,7 @@ class YoutubeLoaded extends YoutubeState {
     isFullyLoaded: false,
     activeShelfKey: null,
     activeShelfBusy: false,
+    embeddingProgressStream: const Stream.empty(),
   );
 
   // Serialization methods for hydrated_bloc
@@ -96,6 +107,7 @@ class YoutubeLoaded extends YoutubeState {
       expandedShelfKey:
           null, // Always start collapsed for faster initial render
       isFullyLoaded: isFullyLoaded,
+      embeddingProgressStream: const Stream.empty(), // Cannot serialize streams
     );
   }
 
@@ -120,6 +132,7 @@ class YoutubeLoaded extends YoutubeState {
     bool? isFullyLoaded,
     String? activeShelfKey,
     bool? activeShelfBusy,
+    Stream<EmbeddingProgress>? embeddingProgressStream,
   }) {
     return YoutubeLoaded(
       shelves: shelves ?? this.shelves,
@@ -133,6 +146,8 @@ class YoutubeLoaded extends YoutubeState {
       isFullyLoaded: isFullyLoaded ?? this.isFullyLoaded,
       activeShelfKey: activeShelfKey ?? this.activeShelfKey,
       activeShelfBusy: activeShelfBusy ?? this.activeShelfBusy,
+      embeddingProgressStream:
+          embeddingProgressStream ?? this.embeddingProgressStream,
     );
   }
 
@@ -147,6 +162,7 @@ class YoutubeLoaded extends YoutubeState {
     expandedShelfKey,
     activeShelfKey,
     activeShelfBusy,
+    embeddingProgressStream,
   ];
 }
 

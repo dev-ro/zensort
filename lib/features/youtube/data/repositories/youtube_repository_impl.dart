@@ -18,16 +18,12 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
   @override
   Future<void> syncLikedVideos() async {
     try {
-      print('=== YouTubeRepositoryImpl.syncLikedVideos() called ===');
-      print('Current user: ${_auth.currentUser?.uid}');
-
       final user = _auth.currentUser;
       if (user == null) {
         throw Exception("User is not authenticated.");
       }
 
       // Get the YouTube access token from the auth repository
-      print('Getting access token from auth repository...');
       final accessToken = await _authRepository.getAccessToken();
 
       if (accessToken == null) {
@@ -36,52 +32,30 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
         );
       }
 
-      print('Access token obtained, calling Cloud Functions...');
-      print('Access token first 20 chars: ${accessToken.substring(0, 20)}...');
       await _syncWithToken(accessToken);
-      print('Cloud Function sync completed successfully');
     } catch (e) {
-      print('Error in YouTubeRepositoryImpl.syncLikedVideos(): $e');
-      print('Stack trace: ${StackTrace.current}');
       rethrow;
     }
   }
 
   Future<void> _syncWithToken(String accessToken) async {
-    print('=== _syncWithToken() called ===');
-
     final user = _auth.currentUser;
     if (user == null) {
       throw Exception("User is not authenticated.");
     }
 
-    print(
-      'Payload being sent: {access_token: ${accessToken.substring(0, 20)}..., user_id: ${user.uid}}',
-    );
-
     // First get total count
-    print('Calling get_liked_videos_total...');
     final getTotalVideosCallable = FirebaseFunctions.instance.httpsCallable(
       'get_liked_videos_total',
     );
-    final totalResult = await getTotalVideosCallable.call({
-      'access_token': accessToken,
-    });
-    final totalVideos = totalResult.data['total'];
-    print('Total videos to sync: $totalVideos');
+    await getTotalVideosCallable.call({'access_token': accessToken});
 
     // Then sync the videos
-    print('Calling sync_youtube_liked_videos...');
     final syncCallable = FirebaseFunctions.instance.httpsCallable(
       'sync_youtube_liked_videos',
       options: HttpsCallableOptions(timeout: const Duration(minutes: 9)),
     );
-    final syncResult = await syncCallable.call({
-      'access_token': accessToken,
-      'user_id': user.uid,
-    });
-    final syncedVideos = syncResult.data['synced'];
-    print('Videos synced: $syncedVideos');
+    await syncCallable.call({'access_token': accessToken, 'user_id': user.uid});
   }
 
   @override
@@ -394,7 +368,7 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
   }
 
   @override
-  Stream<EmbeddingProgress> watchEmbeddingProgress() {
+  Stream<EmbeddingProgress> getEmbeddingProgressStream() {
     final user = _auth.currentUser;
     if (user == null) {
       // Return a stream that emits a default progress when user is not authenticated
@@ -415,5 +389,16 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
 
           return EmbeddingProgress.fromMap(snapshot.data()!);
         });
+  }
+
+  @override
+  Future<void> retryFailedEmbeddings() async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('User not authenticated');
+
+    final callable = FirebaseFunctions.instance.httpsCallable(
+      'retry_failed_embeddings',
+    );
+    await callable.call({'user_id': user.uid});
   }
 }

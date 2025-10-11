@@ -21,6 +21,9 @@ from typing import Generator, Any
 from urllib.parse import unquote
 from openai import OpenAI
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from google.cloud.firestore_v1.base_query import FieldFilter
+from google.cloud.firestore_v1.field_path import FieldPath
+from firebase_admin.firestore import firestore
 
 
 # Set up logging
@@ -232,151 +235,6 @@ def _get_category_map_for_locale(
     except Exception as e:
         logger.error(f"Failed to resolve category map for {region_code}/{hl}: {e}")
         return {}
-
-
-@https_fn.on_call(timeout_sec=540)
-def backfill_liked_categories(req: https_fn.CallableRequest) -> dict:
-    """
-    Backfill /users/{uid}/likedVideos docs with categoryId/categoryTitle using
-    authoritative /videos/{id}.categoryId and localized titles per user locale.
-    Does not touch embeddings or /videos beyond reads.
-    Batch process with pagination cursors.
-    Expected request data:
-      - user_id: string (required)
-      - access_token: string (required, for YouTube category map)
-      - page_size: int (optional, default 200)
-      - start_after: string videoId (optional)
-    """
-    user_id = req.data.get("user_id")
-    access_token = req.data.get("access_token")
-    page_size = int(req.data.get("page_size", 200))
-    start_after = req.data.get("start_after")
-
-    if not user_id or not access_token:
-        raise https_fn.HttpsError(
-            code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-            message="Missing user_id or access_token",
-        )
-
-    try:
-        db = _firestore().Client()
-        user_locale = _get_user_locale(db, user_id)
-        region_code, hl = _parse_locale_to_region_hl(user_locale)
-        category_map = _get_category_map_for_locale(access_token, region_code, hl, db)
-
-        liked_ref = db.collection("users").document(user_id).collection("likedVideos")
-        query = liked_ref.order_by("__name__").limit(page_size)
-        if start_after:
-            sad = liked_ref.document(start_after).get()
-            if sad.exists:
-                query = query.start_after(sad)
-
-        docs = query.get()
-        if not docs:
-            return {"processed": 0, "nextStartAfter": None, "done": True}
-
-        batch = db.batch()
-        last_id = None
-        processed = 0
-
-        for doc in docs:
-            last_id = doc.id
-            data = doc.to_dict() or {}
-            # Skip if already has both fields
-            if isinstance(data.get("categoryId"), str) and isinstance(
-                data.get("categoryTitle"), str
-            ):
-                continue
-
-            # Read authoritative categoryId from /videos
-            vdoc = db.collection("videos").document(doc.id).get()
-            if not vdoc.exists:
-                continue
-            vdata = vdoc.to_dict() or {}
-            cid = vdata.get("categoryId")
-            if not isinstance(cid, str) or not cid:
-                continue
-
-            ctitle = category_map.get(str(cid))
-            update = {"categoryId": cid}
-            if ctitle:
-                update["categoryTitle"] = ctitle
-            batch.set(doc.reference, update, merge=True)
-            processed += 1
-
-        batch.commit()
-        return {
-            "processed": processed,
-            "nextStartAfter": last_id,
-            "done": len(docs) < page_size,
-        }
-    except Exception as e:
-        logger.error(f"backfill_liked_categories error: {e}")
-        raise https_fn.HttpsError(
-            code=https_fn.FunctionsErrorCode.INTERNAL,
-            message=f"Backfill failed: {str(e)}",
-        )
-
-
-@https_fn.on_request()
-def test_secret_manager(req) -> Any:
-    """
-    Debug function to test Secret Manager integration and OpenAI API key retrieval.
-    Returns environment information and success/failure status.
-    """
-    try:
-        # Get project ID and function target from environment (use consistent variable names)
-        project_id = os.environ.get("GCP_PROJECT", "Not found")
-        function_region = os.environ.get("FUNCTION_REGION", "Not found")
-        function_target = os.environ.get("K_SERVICE", "Not found")
-
-        # Try to get the OpenAI API key
-        api_key = _get_openai_api_key()
-
-        # If we got here, it worked - create a safe response
-        # Only return the first and last 4 chars of the key for verification
-        key_preview = f"{api_key[:4]}...{api_key[-4:]}" if api_key else "No key found"
-
-        return (
-            json.dumps(
-                {
-                    "status": "success",
-                    "environment": {
-                        "project_id": project_id,
-                        "function_region": function_region,
-                        "function_target": function_target,
-                    },
-                    "secret_manager": {
-                        "key_retrieved": bool(api_key),
-                        "key_preview": key_preview,
-                    },
-                }
-            ),
-            200,
-            {"Content-Type": "application/json"},
-        )
-
-    except Exception as e:
-        logger.error(f"Debug function error: {str(e)}")
-        # Use the same consistent environment variable names in error response
-        project_id = os.environ.get("GCP_PROJECT", "Not found")
-        function_region = os.environ.get("FUNCTION_REGION", "Not found")
-        function_target = os.environ.get("K_SERVICE", "Not found")
-        return (
-            json.dumps(
-                {
-                    "status": "error",
-                    "error": str(e),
-                    "environment": {
-                        "project_id": project_id,
-                        "function_region": function_region,
-                        "function_target": function_target,
-                    },
-                }
-            ),
-            500,
-            {"Content-Type": "application/json"},
-        )
 
 
 @https_fn.on_call()
@@ -760,54 +618,6 @@ def get_existing_video_ids(video_ids: list[str]) -> set[str]:
         return set()  # Fail safe - assume none exist to avoid data loss
 
 
-def get_videos_missing_enrichment(video_ids: list[str]) -> list[str]:
-    """
-    From a list of existing video IDs, return the subset that is missing
-    the authoritative enrichment fields (categoryId, topicCategories).
-
-    Skips private/deleted placeholder videos.
-    """
-    if not video_ids:
-        return []
-
-    try:
-        db = _firestore().Client()
-        videos_collection = db.collection("videos")
-
-        doc_refs = [videos_collection.document(video_id) for video_id in video_ids]
-        docs = db.get_all(doc_refs)
-
-        missing_ids: list[str] = []
-        for doc in docs:
-            if not getattr(doc, "exists", False):
-                continue
-            data = doc.to_dict() or {}
-            title = (data.get("title") or "").strip()
-            if is_private_legacy_video(title):
-                # Do not attempt to enrich placeholders for private/deleted videos
-                continue
-
-            has_category_id = isinstance(data.get("categoryId"), str) and bool(
-                (data.get("categoryId") or "").strip()
-            )
-            topics = data.get("topicCategories")
-            has_topics = isinstance(topics, list) and len(topics) > 0
-            if not (has_category_id and has_topics):
-                missing_ids.append(doc.id)
-
-        logger.info(
-            f"Detected {len(missing_ids)} existing videos needing enrichment out of {len(video_ids)} checked"
-        )
-        return missing_ids
-
-    except Exception as e:
-        logger.error(
-            f"Error determining videos missing enrichment: {type(e).__name__}: {str(e)}"
-        )
-        # Fail safe: if detection fails, don't enrich to avoid excessive API calls
-        return []
-
-
 @https_fn.on_call(timeout_sec=540)  # 9 minutes timeout for large syncs
 def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
     """
@@ -858,13 +668,6 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
     try:
         logger.info(f"Starting efficient sync for user {user_id}")
 
-        # Automatically retry failed embeddings at the start of a sync
-        retried_count = _retry_failed_embeddings_for_user(user_id, db)
-        if retried_count > 0:
-            logger.info(
-                f"Automatically retried {retried_count} failed embeddings for user {user_id}"
-            )
-
         # Step 0: Create Sync Job Document for Progress Tracking
         logger.info("Step 0: Creating sync job document for progress tracking")
         sync_start_time = datetime.now(timezone.utc)
@@ -913,19 +716,11 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
             vid_id for vid_id in all_video_ids if vid_id not in existing_video_ids
         ]
 
-        # Additionally, detect existing videos missing enrichment and fetch details for them too
-        logger.info("Checking existing videos for missing enrichment fields")
-        existing_ids_list = list(existing_video_ids)
-        enrichment_candidates = get_videos_missing_enrichment(existing_ids_list)
-        logger.info(
-            f"Found {len(enrichment_candidates)} existing videos needing enrichment"
-        )
-
         # Step C: Batch fetch details for NEW videos and enrichment candidates
         logger.info(
             "Step C: Batch fetching details for new videos and enrichment candidates"
         )
-        ids_to_fetch = new_video_ids + enrichment_candidates
+        ids_to_fetch = new_video_ids
         video_details: list[Video] = []
         if ids_to_fetch:
             video_details = fetch_video_details(access_token, ids_to_fetch)
@@ -1119,46 +914,6 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
 
             batch.set(video_doc_ref, video_data)
 
-        # Enrich existing videos that were missing authoritative fields (merge-only updates)
-        if enrichment_candidates:
-            enriched_count = 0
-            for vid in enrichment_candidates:
-                video = video_details_map.get(vid)
-                if not video:
-                    continue
-                video_doc_ref = db.collection("videos").document(video.videoId)
-                update_data = {}
-                if getattr(video, "categoryId", None) is not None:
-                    cid_str = str(getattr(video, "categoryId", "") or "").strip()
-                    update_data["categoryId"] = video.categoryId
-                    if cid_str:
-                        update_data["categoryTitleUS"] = category_map_us.get(cid_str)
-                if getattr(video, "topicCategories", None) is not None:
-                    topics_raw = list(getattr(video, "topicCategories") or [])
-                    update_data["topicCategories"] = topics_raw
-                    cleaned = []
-                    seen = set()
-                    for t in topics_raw:
-                        norm = _normalize_topic_from_url(t)
-                        if not norm:
-                            continue
-                        if norm in seen:
-                            continue
-                        seen.add(norm)
-                        cleaned.append(norm)
-                    if cleaned:
-                        update_data["topicTags"] = cleaned[:5]
-                if getattr(video, "thumbnailUrl", None):
-                    update_data["thumbnailUrl"] = video.thumbnailUrl
-
-                # Merge to avoid overwriting unrelated fields like embeddings
-                batch.set(video_doc_ref, update_data, merge=True)
-                enriched_count += 1
-
-            logger.info(
-                f"Scheduled merge updates for {enriched_count} existing videos needing enrichment"
-            )
-
         # Add currently liked videos (newly liked + still liked) to user's liked videos subcollection
         # Using the correct likedAt timestamps from Step A. Keep link docs minimal.
         for video_item in all_video_items:
@@ -1174,6 +929,7 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
                 )
                 # Prepare minimal relation payload (link-only)
                 relation_data = {
+                    "videoId": video_id,
                     "likedAt": video_item["likedAt"],
                     "syncedAt": sync_timestamp,
                 }
@@ -1274,9 +1030,24 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
             }
         )
 
-        # Step G: Update Embedding Progress from Source of Truth
-        logger.info("Step G: Updating embedding progress from source of truth")
-        update_embedding_progress(user_id, db)
+        # Step G: Initialize Embedding Progress
+        logger.info("Step G: Initializing embedding progress")
+        if new_video_ids:
+            progress_ref = (
+                db.collection("users")
+                .document(user_id)
+                .collection("embeddingProgress")
+                .document("current")
+            )
+            total_videos = len(all_video_ids)
+            progress_ref.set(
+                {
+                    "total": total_videos,
+                    "pending": firestore.Increment(len(new_video_ids)),
+                    "last_updated": datetime.now(timezone.utc),
+                },
+                merge=True,
+            )
 
         logger.info(f"Sync completed successfully for user {user_id}")
 
@@ -1320,119 +1091,6 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
         )
 
 
-def update_embedding_progress(user_id: str, db: Any) -> None:
-    """
-    Calculates and updates the embedding progress for a user based on the
-    source of truth (the 'embedding' field and video titles), not the potentially
-    stale 'embedding_status' field. It corrects status discrepancies on the fly.
-    """
-    logger.info(
-        f"Starting source-of-truth embedding progress update for user {user_id}"
-    )
-
-    # Get all videoIds liked by this user
-    liked_videos_ref = (
-        db.collection("users").document(user_id).collection("likedVideos")
-    )
-    liked_video_docs = list(liked_videos_ref.stream())
-    video_ids = [doc.id for doc in liked_video_docs]
-    total_videos = len(video_ids)
-
-    if total_videos == 0:
-        logger.info(f"User {user_id} has no liked videos. Resetting progress.")
-        progress_ref = (
-            db.collection("users")
-            .document(user_id)
-            .collection("embeddingProgress")
-            .document("current")
-        )
-        progress_ref.set(
-            {
-                "total": 0,
-                "completed": 0,
-                "failed": 0,
-                "pending": 0,
-                "last_updated": datetime.now(timezone.utc),
-            },
-            merge=True,
-        )
-        return
-
-    completed_count = 0
-    failed_count = 0
-    pending_count = 0
-    batch = db.batch()
-
-    # Process videos in chunks to stay within Firestore limits
-    chunk_size = 30
-    for i in range(0, total_videos, chunk_size):
-        chunk_ids = video_ids[i : i + chunk_size]
-        video_refs = [db.collection("videos").document(vid) for vid in chunk_ids]
-        video_docs = db.get_all(video_refs)
-
-        for doc in video_docs:
-            if not doc.exists:
-                pending_count += 1
-                continue
-
-            video_data = doc.to_dict()
-            video_id = doc.id
-            current_status = video_data.get("embedding_status")
-            corrected_status = None
-
-            title = video_data.get("title", "")
-            if title in {"Private video", "Deleted video"}:
-                completed_count += 1
-                corrected_status = "not_applicable"
-            elif (
-                isinstance(video_data.get("embedding"), list)
-                and len(video_data.get("embedding")) == EMBEDDING_DIMENSIONALITY
-            ):
-                completed_count += 1
-                corrected_status = "complete"
-            elif current_status == "failed":
-                failed_count += 1
-                corrected_status = (
-                    "failed"  # Trust 'failed' status unless embedding exists
-                )
-            else:
-                pending_count += 1
-                corrected_status = "pending"
-
-            # Correct the status in the /videos collection if it's incorrect
-            if current_status != corrected_status:
-                logger.info(
-                    f"Correcting status for video {video_id}: from '{current_status}' to '{corrected_status}'"
-                )
-                batch.update(doc.reference, {"embedding_status": corrected_status})
-
-    # Commit any status corrections
-    try:
-        batch.commit()
-        logger.info(f"Committed status corrections for user {user_id}")
-    except Exception as e:
-        logger.error(f"Error committing status corrections for user {user_id}: {e}")
-
-    # Final progress update
-    progress_ref = (
-        db.collection("users")
-        .document(user_id)
-        .collection("embeddingProgress")
-        .document("current")
-    )
-    progress_data = {
-        "total": total_videos,
-        "completed": completed_count,
-        "failed": failed_count,
-        "pending": pending_count,
-        "last_updated": datetime.now(timezone.utc),
-    }
-    progress_ref.set(progress_data, merge=True)
-    logger.info(
-        f"Successfully updated embedding progress for user {user_id}: {progress_data}"
-    )
-
-
 @firestore_fn.on_document_written(document="videos/{videoId}")
 def create_video_embedding(event) -> None:
     """
@@ -1440,43 +1098,40 @@ def create_video_embedding(event) -> None:
     Triggered by onWrite on /videos/{videoId} documents.
     """
     video_data = None  # Ensure video_data is always defined
+    video_id = event.params["videoId"]
     try:
-        logger.info(f"Processing embedding for video: {event.params['videoId']}")
+        logger.info(f"Processing embedding for video: {video_id}")
 
         # Get the video document data from the 'after' snapshot
         video_data = (
             event.data.after.to_dict() if event.data and event.data.after else None
         )
         if not video_data:
-            logger.warning(f"No data found for video {event.params['videoId']}")
+            logger.warning(f"No data found for video {video_id}")
             return
 
         # Handle private or deleted videos by marking them as not applicable
         title = video_data.get("title", "")
         private_legacy_titles = {"Private video", "Deleted video"}
         if title in private_legacy_titles:
-            logger.info(
-                f"Skipping embedding for '{title}' video {event.params['videoId']}"
-            )
+            logger.info(f"Skipping embedding for '{title}' video {video_id}")
             _update_embedding_status(
-                event.params["videoId"], "not_applicable", error=f"Video is '{title}'"
+                video_id, "not_applicable", error=f"Video is '{title}'"
             )
-            _update_progress_for_all_users(event.params["videoId"])
+            _update_progress_for_all_users(video_id, "completed")
             return
 
         # Skip if this is a batch update from the backfill process
         if "backfill_completed_at" in video_data:
             logger.info(
-                f"Video {event.params['videoId']} is being updated by batch process, skipping individual processing"
+                f"Video {video_id} is being updated by batch process, skipping individual processing"
             )
             return
 
         # Idempotency check: Skip if embedding is already complete
         embedding_status = video_data.get("embedding_status")
         if embedding_status == "complete":
-            logger.info(
-                f"Video {event.params['videoId']} already has completed embedding, skipping"
-            )
+            logger.info(f"Video {video_id} already has completed embedding, skipping")
             return
 
         # Process if: status is pending, OR this is new video creation, OR video has no embedding
@@ -1487,7 +1142,7 @@ def create_video_embedding(event) -> None:
             and not _is_new_video_creation(event)
         ):
             logger.info(
-                f"Video {event.params['videoId']} is not pending embedding processing, skipping"
+                f"Video {video_id} is not pending embedding processing, skipping"
             )
             return
 
@@ -1497,12 +1152,10 @@ def create_video_embedding(event) -> None:
         channel_title = video_data.get("channelTitle", "").strip()
 
         if not title and not description and not channel_title:
-            logger.warning(f"No text content found for video {event.params['videoId']}")
-            _update_embedding_status(
-                event.params["videoId"], "failed", error="No text content"
-            )
+            logger.warning(f"No text content found for video {video_id}")
+            _update_embedding_status(video_id, "failed", error="No text content")
             # Update progress for all users who have liked this video
-            _update_progress_for_all_users(event.params["videoId"])
+            _update_progress_for_all_users(video_id, "failed")
             return
 
         # Combine text fields for embedding including category and topics
@@ -1514,7 +1167,7 @@ def create_video_embedding(event) -> None:
         logger.info(f"Prepared text for embedding (length: {len(combined_text)})")
 
         # Update status to processing
-        _update_embedding_status(event.params["videoId"], "processing")
+        _update_embedding_status(video_id, "processing")
 
         # Initialize OpenAI client once
         try:
@@ -1523,27 +1176,25 @@ def create_video_embedding(event) -> None:
         except Exception as e:
             logger.error(f"Failed to initialize OpenAI client: {str(e)}")
             _update_embedding_status(
-                event.params["videoId"],
+                video_id,
                 "failed",
                 error=f"OpenAI client initialization failed: {str(e)}",
             )
-            _update_progress_for_all_users(event.params["videoId"])
+            _update_progress_for_all_users(video_id, "failed")
             return
 
         # Generate embedding using the pre-initialized client
         try:
             embedding_vector = _generate_embedding(openai_client, combined_text)
         except Exception as e:
-            logger.error(
-                f"Error generating embedding for video {event.params['videoId']}: {str(e)}"
-            )
-            _update_embedding_status(event.params["videoId"], "failed", error=str(e))
-            _update_progress_for_all_users(event.params["videoId"])
+            logger.error(f"Error generating embedding for video {video_id}: {str(e)}")
+            _update_embedding_status(video_id, "failed", error=str(e))
+            _update_progress_for_all_users(video_id, "failed")
             return
 
         # Update document with embedding and mark as complete
         db = _firestore().Client()
-        video_ref = db.collection("videos").document(event.params["videoId"])
+        video_ref = db.collection("videos").document(video_id)
         video_ref.update(
             {
                 "embedding": embedding_vector,
@@ -1552,33 +1203,54 @@ def create_video_embedding(event) -> None:
             }
         )
 
-        logger.info(
-            f"Successfully generated embedding for video {event.params['videoId']}"
-        )
+        logger.info(f"Successfully generated embedding for video {video_id}")
 
         # Update progress for all users who have liked this video
-        _update_progress_for_all_users(event.params["videoId"])
+        _update_progress_for_all_users(video_id, "completed")
 
     except Exception as e:
-        logger.error(
-            f"Error processing embedding for video {event.params['videoId']}: {str(e)}"
-        )
-        _update_embedding_status(event.params["videoId"], "failed", error=str(e))
-        _update_progress_for_all_users(event.params["videoId"])
+        logger.error(f"Error processing embedding for video {video_id}: {str(e)}")
+        _update_embedding_status(video_id, "failed", error=str(e))
+        _update_progress_for_all_users(video_id, "failed")
 
 
-def _update_progress_for_all_users(video_id):
-    """For a given video_id, update embedding progress for all users who have liked it."""
+def _update_progress_for_all_users(video_id: str, status: str):
+    """
+    For a given video_id, atomically update the embedding progress for all users
+    who have liked it.
+    """
     db = _firestore().Client()
-    # Query all users who have liked this video
     users_ref = db.collection("users")
-    user_docs = users_ref.stream()
-    for user_doc in user_docs:
-        liked_video_ref = (
-            users_ref.document(user_doc.id).collection("likedVideos").document(video_id)
+
+    # Find all users who have liked this video by querying the likedVideos subcollection.
+    # NOTE: This query requires a composite index on the 'likedVideos' collection group.
+    # Firestore will provide a link to create it in the error logs if it's missing.
+    # The index should be on the 'videoId' field (ascending).
+    user_query = db.collection_group("likedVideos").where(
+        filter=FieldFilter("videoId", "==", video_id)
+    )
+    liked_user_docs = user_query.stream()
+
+    for doc in liked_user_docs:
+        user_id = doc.reference.parent.parent.id
+        logger.info(f"Updating progress for user {user_id} for video {video_id}")
+        progress_ref = (
+            users_ref.document(user_id)
+            .collection("embeddingProgress")
+            .document("current")
         )
-        if liked_video_ref.get().exists:
-            update_embedding_progress(user_doc.id, db)
+
+        update_data = {
+            "pending": firestore.Increment(-1),
+            "last_updated": datetime.now(timezone.utc),
+        }
+
+        if status == "completed":
+            update_data["completed"] = firestore.Increment(1)
+        elif status == "failed":
+            update_data["failed"] = firestore.Increment(1)
+
+        progress_ref.update(update_data)
 
 
 @https_fn.on_request(timeout_sec=300)
@@ -1953,71 +1625,6 @@ def _update_embedding_status(
         )
 
 
-def _retry_failed_embeddings_for_user(user_id: str, db: Any) -> int:
-    """
-    Finds all videos liked by a user with a 'failed' embedding status,
-    resets them to 'pending' using an efficient batch write, and returns the count.
-    """
-    # Import DELETE_FIELD locally to work with the lazy-loaded firestore module
-    # and satisfy the linter.
-    from google.cloud.firestore import DELETE_FIELD
-
-    # Step 1: Get all video IDs from the user's likedVideos subcollection
-    liked_videos_ref = (
-        db.collection("users").document(user_id).collection("likedVideos")
-    )
-    liked_video_docs = liked_videos_ref.stream()
-    liked_video_ids = [doc.id for doc in liked_video_docs]
-
-    if not liked_video_ids:
-        logger.info(
-            f"User {user_id} has no liked videos to check for failed embeddings."
-        )
-        return 0
-
-    logger.info(
-        f"Checking {len(liked_video_ids)} liked videos for failed embeddings for user {user_id}."
-    )
-
-    videos_to_retry_refs = []
-    videos_ref = db.collection("videos")
-
-    # Step 2: Query all videos with failed embedding status (no chunking needed since we're not using 'in' query)
-    failed_videos_query = videos_ref.where("embedding_status", "==", "failed")
-    failed_docs = failed_videos_query.stream()
-
-    for doc in failed_docs:
-        # Only retry videos that are liked by this user
-        if doc.id in liked_video_ids:
-            videos_to_retry_refs.append(doc.reference)
-
-    if not videos_to_retry_refs:
-        logger.info(f"No failed embeddings to retry for user {user_id}.")
-        return 0
-
-    logger.info(
-        f"Found {len(videos_to_retry_refs)} failed embeddings to retry for user {user_id}."
-    )
-
-    # Step 4: Use a batch write to reset the status for all failed videos
-    batch = db.batch()
-    for video_ref in videos_to_retry_refs:
-        batch.update(
-            video_ref,
-            {
-                "embedding_status": "pending",
-                "embedding_error": DELETE_FIELD,
-                "embedding_updated_at": datetime.now(timezone.utc),
-            },
-        )
-    batch.commit()
-
-    # Step 5: Update the user's overall embedding progress
-    update_embedding_progress(user_id, db)
-
-    return len(videos_to_retry_refs)
-
-
 @https_fn.on_call()
 def retry_failed_embeddings(req: https_fn.CallableRequest) -> dict:
     user_id = req.data.get("user_id")
@@ -2027,241 +1634,54 @@ def retry_failed_embeddings(req: https_fn.CallableRequest) -> dict:
             message="The function must be called with a valid 'user_id'.",
         )
     db = _firestore().Client()
-    retried_count = _retry_failed_embeddings_for_user(user_id, db)
-    return {"retried": retried_count}
 
+    # Get all liked video IDs for the user
+    liked_videos_ref = (
+        db.collection("users").document(user_id).collection("likedVideos")
+    )
+    liked_video_ids = [doc.id for doc in liked_videos_ref.stream()]
 
-@https_fn.on_request()
-def test_embedding_progress(req) -> Any:
-    """
-    Test function to trigger embedding progress calculation for a specific user.
-    Useful for testing the new efficient query logic.
-    """
-    try:
-        secret = req.args.get("secret")
-        if secret != "zensort-embedding-backfill-2024":
-            return ("Unauthorized", 401)
+    if not liked_video_ids:
+        return {"retried": 0}
 
-        user_id = req.args.get("user_id")
-        if not user_id:
-            return (
-                json.dumps({"success": False, "error": "user_id parameter required"}),
-                400,
-                {"Content-Type": "application/json"},
-            )
+    # Find which of the liked videos have a 'failed' status
+    videos_ref = db.collection("videos")
+    failed_videos_to_retry = []
 
-        logger.info(f"Testing embedding progress calculation for user: {user_id}")
-
-        # Trigger the progress calculation
-        db = _firestore().Client()
-        update_embedding_progress(user_id, db)
-
-        # Get the updated progress to return
-        progress_ref = (
-            db.collection("users")
-            .document(user_id)
-            .collection("embeddingProgress")
-            .document("current")
+    # Process in chunks of 30 due to 'in' query limitation
+    for i in range(0, len(liked_video_ids), 30):
+        chunk_ids = liked_video_ids[i : i + 30]
+        query = videos_ref.where("__name__", "in", chunk_ids).where(
+            "embedding_status", "==", "failed"
         )
-        progress_doc = progress_ref.get()
+        docs = query.stream()
+        for doc in docs:
+            failed_videos_to_retry.append(doc.reference)
 
-        if progress_doc.exists:
-            progress_data = progress_doc.to_dict()
-            # Convert datetime objects to strings for JSON serialization
-            if "last_updated" in progress_data and progress_data["last_updated"]:
-                progress_data["last_updated"] = progress_data[
-                    "last_updated"
-                ].isoformat()
+    if not failed_videos_to_retry:
+        return {"retried": 0}
 
-            return (
-                json.dumps(
-                    {
-                        "success": True,
-                        "message": f"Progress calculation completed for user {user_id}",
-                        "progress": progress_data,
-                    }
-                ),
-                200,
-                {"Content-Type": "application/json"},
-            )
-        else:
-            return (
-                json.dumps(
-                    {
-                        "success": True,
-                        "message": f"No progress data found for user {user_id}",
-                        "progress": None,
-                    }
-                ),
-                200,
-                {"Content-Type": "application/json"},
-            )
+    # Batch update the status to 'pending'
+    batch = db.batch()
+    for video_ref in failed_videos_to_retry:
+        batch.update(video_ref, {"embedding_status": "pending"})
 
-    except Exception as e:
-        logger.error(f"Error testing embedding progress: {str(e)}")
-        return (
-            json.dumps({"success": False, "error": str(e)}),
-            500,
-            {"Content-Type": "application/json"},
-        )
+    # Atomically update the progress counters
+    progress_ref = (
+        db.collection("users")
+        .document(user_id)
+        .collection("embeddingProgress")
+        .document("current")
+    )
+    batch.update(
+        progress_ref,
+        {
+            "failed": firestore.Increment(-len(failed_videos_to_retry)),
+            "pending": firestore.Increment(len(failed_videos_to_retry)),
+            "last_updated": datetime.now(timezone.utc),
+        },
+    )
 
+    batch.commit()
 
-@https_fn.on_request(timeout_sec=300)
-def backfill_embedding_null_field(req) -> Any:
-    """
-    One-time migration function to add embedding: null and embedding_status: "pending"
-    to all existing videos that are missing these fields.
-    Uses pagination to process all videos in batches.
-    """
-    try:
-        secret = req.args.get("secret")
-        if secret != "zensort-embedding-backfill-2024":
-            return ("Unauthorized", 401)
-
-        # Get pagination cursor for resuming from previous batch
-        start_after_id = req.args.get("start_after")
-        batch_number = int(req.args.get("batch", "1"))
-
-        logger.info(f"Starting embedding null field backfill - Batch #{batch_number}")
-        if start_after_id:
-            logger.info(f"Resuming from video ID: {start_after_id}")
-
-        db = _firestore().Client()
-        videos_collection = db.collection("videos")
-
-        # Build query with cursor support for pagination
-        videos_query = videos_collection.order_by("__name__").limit(100)
-
-        # Resume from where previous batch left off
-        if start_after_id:
-            start_after_doc = videos_collection.document(start_after_id).get()
-            if start_after_doc.exists:
-                videos_query = videos_query.start_after(start_after_doc)
-
-        videos_batch = videos_query.get()
-
-        logger.info(f"Retrieved {len(videos_batch)} videos for processing")
-
-        # Collect videos that need the null embedding field
-        videos_to_update = []
-        skipped_count = 0
-        last_doc_id = None
-
-        for video_doc in videos_batch:
-            last_doc_id = video_doc.id  # Track last processed document for pagination
-            video_data = video_doc.to_dict()
-
-            # Skip documents without data
-            if not video_data:
-                skipped_count += 1
-                continue
-
-            # Skip if video already has embedding field
-            if "embedding" in video_data:
-                skipped_count += 1
-                continue
-
-            # Skip videos that are private or deleted (they should have not_applicable status)
-            title = video_data.get("title", "").strip()
-            if title in {"Private video", "Deleted video"}:
-                logger.info(
-                    f"Skipping '{title}' video {video_doc.id} - should have not_applicable status"
-                )
-                skipped_count += 1
-                continue
-
-            videos_to_update.append(video_doc.reference)
-
-        processed_count = len(videos_to_update)
-
-        if processed_count == 0:
-            logger.info("No videos need embedding field backfill in this batch")
-            result_message = f"Batch #{batch_number}: No videos needed backfill, skipped {skipped_count} already processed"
-        else:
-            logger.info(f"Adding embedding fields to {processed_count} videos in batch")
-
-            # Use batch write to update all videos
-            batch = db.batch()
-            for video_ref in videos_to_update:
-                batch.update(
-                    video_ref,
-                    {
-                        "embedding": None,
-                        "embedding_status": "pending",
-                    },
-                )
-
-            batch.commit()
-            logger.info(
-                f"Successfully added embedding fields to {processed_count} videos"
-            )
-
-            result_message = f"Batch #{batch_number}: Successfully processed {processed_count} videos, skipped {skipped_count} already processed"
-
-        # Check if we need to continue processing more videos
-        has_more_videos = (
-            len(videos_batch) == 100
-        )  # If we got a full batch, more likely exist
-
-        logger.info(result_message)
-
-        # Auto-continuation: If we processed a full batch, trigger next batch
-        if has_more_videos and last_doc_id:
-            next_batch_number = batch_number + 1
-            continuation_url = f"https://us-central1-zensort-dev.cloudfunctions.net/backfill_embedding_null_field?secret={secret}&start_after={last_doc_id}&batch={next_batch_number}"
-
-            logger.info(
-                f"Full batch processed. Triggering continuation batch #{next_batch_number}"
-            )
-
-            # Trigger next batch asynchronously
-            try:
-                import threading
-
-                def trigger_next_batch():
-                    time.sleep(2)  # Brief delay to avoid overwhelming
-                    response = requests.get(continuation_url, timeout=10)
-                    logger.info(
-                        f"Triggered batch #{next_batch_number}: {response.status_code}"
-                    )
-
-                # Start continuation in background thread
-                thread = threading.Thread(target=trigger_next_batch)
-                thread.daemon = True
-                thread.start()
-
-                result_message += f" | Triggered batch #{next_batch_number}"
-
-            except Exception as e:
-                logger.error(f"Failed to trigger continuation: {e}")
-                result_message += f" | Manual continuation needed: {continuation_url}"
-
-        elif not has_more_videos:
-            logger.info(
-                "Embedding field backfill completed - no more videos to process"
-            )
-            result_message += " | Backfill completed"
-
-        return (
-            json.dumps(
-                {
-                    "success": True,
-                    "message": result_message,
-                    "batch_number": batch_number,
-                    "processed_count": processed_count,
-                    "skipped_count": skipped_count,
-                    "has_more_videos": has_more_videos,
-                    "last_doc_id": last_doc_id,
-                }
-            ),
-            200,
-            {"Content-Type": "application/json"},
-        )
-
-    except Exception as e:
-        logger.error(f"Error in embedding field backfill: {str(e)}")
-        return (
-            json.dumps({"success": False, "error": str(e)}),
-            500,
-            {"Content-Type": "application/json"},
-        )
+    return {"retried": len(failed_videos_to_retry)}

@@ -1,6 +1,11 @@
 import 'package:equatable/equatable.dart';
 
-enum SyncStatus { in_progress, completed, failed, none }
+enum SyncStatus {
+  none,
+  inProgress,
+  completed,
+  failed,
+}
 
 class SyncProgress extends Equatable {
   final int syncedCount;
@@ -27,7 +32,7 @@ class SyncProgress extends Equatable {
   static SyncStatus _statusFromString(String? status) {
     switch (status) {
       case 'in_progress':
-        return SyncStatus.in_progress;
+        return SyncStatus.inProgress;
       case 'completed':
         return SyncStatus.completed;
       case 'failed':
