@@ -1626,7 +1626,7 @@ def retry_failed_embeddings(req: https_fn.CallableRequest) -> dict:
     return {"retried": len(failed_videos_to_retry)}
 
 
-@https_fn.on_call(timeout_sec=60)
+@https_fn.on_call(timeout_sec=120)
 def get_embedding_progress(req: https_fn.CallableRequest) -> dict:
     """
     Calculates and returns the embedding progress for a given user using efficient
@@ -1641,13 +1641,18 @@ def get_embedding_progress(req: https_fn.CallableRequest) -> dict:
         )
 
     db = _firestore().Client()
+    logger.info(f"Starting get_embedding_progress for user_id: {user_id}")
 
     try:
         liked_videos_ref = (
             db.collection("users").document(user_id).collection("likedVideos")
         )
         # Optimization: Fetch only document IDs, not full documents.
+        logger.info(f"Fetching liked video IDs for user {user_id}...")
         liked_video_ids = [doc.id for doc in liked_videos_ref.select([]).stream()]
+        logger.info(
+            f"Fetched {len(liked_video_ids)} liked video IDs for user {user_id}."
+        )
     except Exception as e:
         logger.error(f"Failed to fetch liked videos for user {user_id}: {e}")
         raise https_fn.HttpsError(
@@ -1665,9 +1670,11 @@ def get_embedding_progress(req: https_fn.CallableRequest) -> dict:
         }
 
     # Optimization: Use count() aggregation for total.
+    logger.info("Calculating total liked videos...")
     total_query = liked_videos_ref.count()
     total_result = total_query.get()
     total = total_result[0][0].value
+    logger.info(f"Total liked videos calculated: {total}")
     videos_ref = db.collection("videos")
 
     def run_count_in_chunks(query_builder) -> int:
@@ -1705,6 +1712,9 @@ def get_embedding_progress(req: https_fn.CallableRequest) -> dict:
     try:
         with ThreadPoolExecutor(max_workers=3) as executor:
             # Run all aggregations in parallel
+            logger.info(
+                "Starting parallel aggregation for completed and failed counts."
+            )
             completed_future = executor.submit(
                 run_count_in_chunks,
                 lambda chunk: videos_ref.where("__name__", "in", chunk).where(
@@ -1720,8 +1730,11 @@ def get_embedding_progress(req: https_fn.CallableRequest) -> dict:
             latest_update_future = executor.submit(get_latest_update_in_chunks)
 
             completed_count = completed_future.result()
+            logger.info(f"Completed count: {completed_count}")
             failed_count = failed_future.result()
+            logger.info(f"Failed count: {failed_count}")
             latest_update = latest_update_future.result()
+            logger.info(f"Latest update timestamp: {latest_update}")
 
     except Exception as e:
         logger.error(f"Error during parallel aggregation for user {user_id}: {e}")
@@ -1732,6 +1745,10 @@ def get_embedding_progress(req: https_fn.CallableRequest) -> dict:
 
     pending_count = total - completed_count - failed_count
 
+    logger.info(
+        f"Final progress for user {user_id}: Total={total}, Completed={completed_count}, "
+        f"Pending={pending_count}, Failed={failed_count}"
+    )
     return {
         "total": total,
         "completed": completed_count,
