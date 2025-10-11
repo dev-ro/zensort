@@ -5,7 +5,7 @@ void main() {
   group('EmbeddingProgress', () {
     test('should create with default values', () {
       const progress = EmbeddingProgress();
-      
+
       expect(progress.total, 0);
       expect(progress.completed, 0);
       expect(progress.failed, 0);
@@ -21,7 +21,7 @@ void main() {
         pending: 45,
         lastUpdated: null,
       );
-      
+
       expect(progress.total, 100);
       expect(progress.completed, 50);
       expect(progress.failed, 5);
@@ -35,15 +35,18 @@ void main() {
         expect(progress.isComplete, true);
       });
 
-      test('should return true when pending is 0 and completed + failed >= total', () {
-        const progress = EmbeddingProgress(
-          total: 100,
-          completed: 80,
-          failed: 20,
-          pending: 0,
-        );
-        expect(progress.isComplete, true);
-      });
+      test(
+        'should return true when pending is 0 and completed + failed >= total',
+        () {
+          const progress = EmbeddingProgress(
+            total: 100,
+            completed: 80,
+            failed: 20,
+            pending: 0,
+          );
+          expect(progress.isComplete, true);
+        },
+      );
 
       test('should return false when pending > 0', () {
         const progress = EmbeddingProgress(
@@ -106,12 +109,9 @@ void main() {
           failed: 5,
           pending: 45,
         );
-        
-        final updated = original.copyWith(
-          completed: 60,
-          failed: 10,
-        );
-        
+
+        final updated = original.copyWith(completed: 60, failed: 10);
+
         expect(updated.total, 100);
         expect(updated.completed, 60);
         expect(updated.failed, 10);
@@ -125,24 +125,19 @@ void main() {
           failed: 5,
           pending: 45,
         );
-        
+
         final updated = original.copyWith();
-        
+
         expect(updated, original);
       });
     });
 
     group('fromMap', () {
       test('should parse basic map data', () {
-        final map = {
-          'total': 100,
-          'completed': 50,
-          'failed': 5,
-          'pending': 45,
-        };
-        
+        final map = {'total': 100, 'completed': 50, 'failed': 5, 'pending': 45};
+
         final progress = EmbeddingProgress.fromMap(map);
-        
+
         expect(progress.total, 100);
         expect(progress.completed, 50);
         expect(progress.failed, 5);
@@ -151,9 +146,9 @@ void main() {
 
       test('should handle null values with defaults', () {
         final map = <String, dynamic>{};
-        
+
         final progress = EmbeddingProgress.fromMap(map);
-        
+
         expect(progress.total, 0);
         expect(progress.completed, 0);
         expect(progress.failed, 0);
@@ -163,13 +158,10 @@ void main() {
 
       test('should parse DateTime string', () {
         final now = DateTime.now();
-        final map = {
-          'total': 100,
-          'last_updated': now.toIso8601String(),
-        };
-        
+        final map = {'total': 100, 'last_updated': now.toIso8601String()};
+
         final progress = EmbeddingProgress.fromMap(map);
-        
+
         expect(progress.lastUpdated, now.toUtc());
       });
 
@@ -182,23 +174,21 @@ void main() {
             'nanoseconds': (now.microsecondsSinceEpoch % 1000000) * 1000,
           },
         };
-        
+
         final progress = EmbeddingProgress.fromMap(map);
-        
+
         expect(progress.lastUpdated, isNotNull);
-        expect(progress.lastUpdated!.millisecondsSinceEpoch, 
-               closeTo(now.millisecondsSinceEpoch, 1000));
+        expect(
+          progress.lastUpdated!.millisecondsSinceEpoch,
+          closeTo(now.millisecondsSinceEpoch, 1000),
+        );
       });
 
       test('should calculate pending when not provided', () {
-        final map = {
-          'total': 100,
-          'completed': 30,
-          'failed': 10,
-        };
-        
+        final map = {'total': 100, 'completed': 30, 'failed': 10};
+
         final progress = EmbeddingProgress.fromMap(map);
-        
+
         expect(progress.pending, 60);
       });
 
@@ -208,9 +198,9 @@ void main() {
           'completed': 80,
           'failed': 30, // This would make pending negative
         };
-        
+
         final progress = EmbeddingProgress.fromMap(map);
-        
+
         expect(progress.pending, 0);
       });
     });
@@ -229,14 +219,14 @@ void main() {
           failed: 5,
           pending: 45,
         );
-        
+
         expect(progress1, progress2);
       });
 
       test('should not be equal when fields differ', () {
         const progress1 = EmbeddingProgress(total: 100, completed: 50);
         const progress2 = EmbeddingProgress(total: 100, completed: 60);
-        
+
         expect(progress1, isNot(progress2));
       });
     });

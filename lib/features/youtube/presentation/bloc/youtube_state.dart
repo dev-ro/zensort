@@ -63,18 +63,18 @@ class YoutubeLoaded extends YoutubeState {
   });
 
   factory YoutubeLoaded.initial() => YoutubeLoaded(
-        shelves: const [],
-        allVideos: const [],
-        unlikedVideos: const [],
-        searchQuery: '',
-        hasMore: false,
-        loadingMore: false,
-        expandedShelfKey: null,
-        isFullyLoaded: false,
-        activeShelfKey: null,
-        activeShelfBusy: false,
-        embeddingProgressStream: const Stream.empty(),
-      );
+    shelves: const [],
+    allVideos: const [],
+    unlikedVideos: const [],
+    searchQuery: '',
+    hasMore: false,
+    loadingMore: false,
+    expandedShelfKey: null,
+    isFullyLoaded: false,
+    activeShelfKey: null,
+    activeShelfBusy: false,
+    embeddingProgressStream: const Stream.empty(),
+  );
 
   // Serialization methods for hydrated_bloc
   factory YoutubeLoaded.fromJson(Map<String, dynamic> json) {
