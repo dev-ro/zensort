@@ -23,9 +23,9 @@ class _EmbeddingStatusSheetState extends State<EmbeddingStatusSheet> {
     return BlocConsumer<YouTubeBloc, YoutubeState>(
       listener: (context, state) {
         if (state is EmbeddingCalculationFailure) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: ${state.error}')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Error: ${state.error}')));
         }
       },
       builder: (context, state) {
@@ -80,7 +80,8 @@ class _EmbeddingStatusSheetState extends State<EmbeddingStatusSheet> {
   }
 
   Widget _buildContent(BuildContext context, YoutubeState state) {
-    if (state is EmbeddingCalculationInProgress || state is! EmbeddingCalculationSuccess) {
+    if (state is EmbeddingCalculationInProgress ||
+        state is! EmbeddingCalculationSuccess) {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(32.0),
@@ -97,7 +98,9 @@ class _EmbeddingStatusSheetState extends State<EmbeddingStatusSheet> {
         LinearProgressIndicator(
           value: progress.percentComplete,
           backgroundColor: Colors.grey[300],
-          valueColor: const AlwaysStoppedAnimation<Color>(ZenSortTheme.primaryColor),
+          valueColor: const AlwaysStoppedAnimation<Color>(
+            ZenSortTheme.primaryColor,
+          ),
         ),
         const SizedBox(height: 16),
         Text(
@@ -110,9 +113,9 @@ class _EmbeddingStatusSheetState extends State<EmbeddingStatusSheet> {
           const SizedBox(height: 16),
           Text(
             'Last updated: ${_formatDateTime(progress.lastUpdated!)}',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Colors.grey[600],
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
           ),
         ],
         if (progress.failed > 0) ...[
@@ -207,7 +210,9 @@ class _EmbeddingStatusSheetState extends State<EmbeddingStatusSheet> {
           ),
           Text(
             label,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: color),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: color),
             textAlign: TextAlign.center,
           ),
         ],

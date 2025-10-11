@@ -9,6 +9,7 @@ import 'package:zensort/features/youtube/domain/entities/liked_video.dart';
 import 'package:zensort/features/youtube/domain/entities/sync_progress.dart';
 import 'package:zensort/features/youtube/domain/repositories/youtube_repository.dart';
 import 'package:zensort/features/youtube/domain/entities/video_shelf.dart';
+import 'package:zensort/features/youtube/domain/entities/embedding_progress.dart';
 
 part 'youtube_event.dart';
 part 'youtube_state.dart';
