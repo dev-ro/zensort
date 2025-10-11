@@ -1200,6 +1200,7 @@ def create_video_embedding(event) -> None:
                 "embedding": embedding_vector,
                 "embedding_status": "complete",
                 "embedding_generated_at": datetime.now(timezone.utc),
+                "embedding_error": firestore.DELETE_FIELD,  # Ensure any previous error is cleared
             }
         )
 
@@ -1564,6 +1565,15 @@ def _generate_embedding(client: OpenAI, text: str) -> list:
         raise ValueError(f"Embedding generation failed: {e}")
 
 
+def _embedding_vector_is_valid(embedding: Any) -> bool:
+    """Checks if the provided embedding is a list with the correct dimensionality."""
+    if not isinstance(embedding, list):
+        return False
+    if len(embedding) != EMBEDDING_DIMENSIONALITY:
+        return False
+    return True
+
+
 def _has_valid_embedding(video_data: dict | None) -> bool:
     """
     Check if a video document has a complete, valid embedding vector.
@@ -1578,36 +1588,40 @@ def _has_valid_embedding(video_data: dict | None) -> bool:
     if not video_data:
         return False
 
-    # If status is not_applicable, it's considered "valid" for skipping purposes
-    if video_data.get("embedding_status") == "not_applicable":
+    # If status is not_applicable or complete, it's considered "valid" for skipping purposes
+    if video_data.get("embedding_status") in ("not_applicable", "complete"):
         return True
 
-    # If status is complete, it's valid
-    if video_data.get("embedding_status") == "complete":
-        return True
-
-    # Check if embedding is None (not processed yet)
-    embedding = video_data.get("embedding")
-    if embedding is None:
-        return False
-
-    # Check if embedding is a valid vector
-    if not isinstance(embedding, list):
-        return False
-
-    if len(embedding) != EMBEDDING_DIMENSIONALITY:
-        return False
-
-    return True
+    return _embedding_vector_is_valid(video_data.get("embedding"))
 
 
 def _update_embedding_status(
     video_id: str, status: str, error: str | None = None
 ) -> None:
-    """Update the embedding status for a video document."""
+    """Update the embedding status for a video document, with verification."""
     try:
         db = _firestore().Client()
         video_ref = db.collection("videos").document(video_id)
+
+        # Fortification: If attempting to mark as failed, first check if a valid embedding already exists.
+        if status == "failed":
+            video_doc = video_ref.get()
+            if video_doc.exists:
+                video_data = video_doc.to_dict()
+                embedding = video_data.get("embedding")
+                # If a valid embedding somehow exists, correct the status to 'complete' and ignore the fail.
+                if _embedding_vector_is_valid(embedding):
+                    logger.warning(
+                        f"Correcting status for video {video_id}. It was marked as failed but has a valid embedding."
+                    )
+                    video_ref.update(
+                        {
+                            "embedding_status": "complete",
+                            "embedding_error": firestore.DELETE_FIELD,
+                            "embedding_updated_at": datetime.now(timezone.utc),
+                        }
+                    )
+                    return  # Stop further processing
 
         update_data = {
             "embedding_status": status,
@@ -1616,6 +1630,9 @@ def _update_embedding_status(
 
         if error:
             update_data["embedding_error"] = error
+        else:
+            # If status is not failed (e.g., pending, processing, complete), clear any previous error.
+            update_data["embedding_error"] = firestore.DELETE_FIELD
 
         video_ref.update(update_data)
 
