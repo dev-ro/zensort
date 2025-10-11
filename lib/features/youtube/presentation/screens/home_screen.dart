@@ -180,6 +180,9 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Text('Welcome! Please sync your liked videos.'),
       );
     }
+    if (state is YoutubeSyncSuccess) {
+      return const Center(child: GradientLoader());
+    }
     if (state is YoutubeSyncProgress) {
       return Column(
         children: [
