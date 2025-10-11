@@ -929,6 +929,7 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
                 )
                 # Prepare minimal relation payload (link-only)
                 relation_data = {
+                    "videoId": video_id,
                     "likedAt": video_item["likedAt"],
                     "syncedAt": sync_timestamp,
                 }
@@ -1221,9 +1222,12 @@ def _update_progress_for_all_users(video_id: str, status: str):
     db = _firestore().Client()
     users_ref = db.collection("users")
 
-    # Find all users who have liked this video by querying the likedVideos subcollection
+    # Find all users who have liked this video by querying the likedVideos subcollection.
+    # NOTE: This query requires a composite index on the 'likedVideos' collection group.
+    # Firestore will provide a link to create it in the error logs if it's missing.
+    # The index should be on the 'videoId' field (ascending).
     user_query = db.collection_group("likedVideos").where(
-        filter=FieldFilter("__name__", "==", f"users/{{userId}}/likedVideos/{video_id}")
+        filter=FieldFilter("videoId", "==", video_id)
     )
     liked_user_docs = user_query.stream()
 

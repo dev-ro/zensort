@@ -52,10 +52,10 @@ class EmbeddingProgress extends Equatable {
       if (raw is Timestamp) {
         parsed = raw.toDate();
       } else if (raw is DateTime) {
-        parsed = raw;
+        parsed = raw.toUtc();
       } else if (raw is String) {
         try {
-          parsed = DateTime.parse(raw);
+          parsed = DateTime.parse(raw).toUtc();
         } catch (_) {
           // Ignore parse errors
         }

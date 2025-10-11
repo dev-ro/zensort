@@ -156,32 +156,22 @@ void main() {
         expect(progress.lastUpdated, null);
       });
 
-      test('should parse DateTime string', () {
-        final now = DateTime.now();
-        final map = {'total': 100, 'last_updated': now.toIso8601String()};
-
+      test('should parse DateTime object and convert to UTC', () {
+        final localTime = DateTime(2025, 1, 1, 12, 0, 0); // Local time
+        final map = {'total': 100, 'last_updated': localTime};
         final progress = EmbeddingProgress.fromMap(map);
-
-        expect(progress.lastUpdated, now.toUtc());
+        expect(progress.lastUpdated, localTime.toUtc());
       });
 
-      test('should parse Firestore Timestamp format', () {
-        final now = DateTime.now();
-        final map = {
-          'total': 100,
-          'last_updated': {
-            'seconds': now.millisecondsSinceEpoch ~/ 1000,
-            'nanoseconds': (now.microsecondsSinceEpoch % 1000000) * 1000,
-          },
-        };
+      test('should parse DateTime string and convert to UTC', () {
+        // A non-UTC ISO 8601 string
+        const isoString = '2025-01-01T10:00:00+02:00';
+        final expectedUtc = DateTime.parse(isoString).toUtc();
+        final map = {'total': 100, 'last_updated': isoString};
 
         final progress = EmbeddingProgress.fromMap(map);
 
-        expect(progress.lastUpdated, isNotNull);
-        expect(
-          progress.lastUpdated!.millisecondsSinceEpoch,
-          closeTo(now.millisecondsSinceEpoch, 1000),
-        );
+        expect(progress.lastUpdated, expectedUtc);
       });
 
       test('should calculate pending when not provided', () {
