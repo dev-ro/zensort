@@ -25,7 +25,6 @@ class EmbeddingProgress extends Equatable {
     final ratio = completed / total;
     if (ratio < 0) return 0.0;
     if (ratio > 1) return 1.0;
-    // Round to 1 decimal place (tenth)
     return (ratio * 1000).round() / 1000;
   }
 
