@@ -23,12 +23,7 @@ class _EmbeddingStatusSheetState extends State<EmbeddingStatusSheet> {
 
   Future<void> _initializeProgressStream() async {
     try {
-      // Update the last checked timestamp when modal opens
-      await context
-          .read<YoutubeRepository>()
-          .updateEmbeddingProgressLastChecked();
-
-      // Only start the stream after timestamp update completes
+      // Start the stream first to read the previous timestamp
       if (mounted) {
         setState(() {
           _progressStream = context
@@ -36,6 +31,11 @@ class _EmbeddingStatusSheetState extends State<EmbeddingStatusSheet> {
               .watchEmbeddingProgress();
         });
       }
+
+      // Update the timestamp for the next time after stream is started
+      await context
+          .read<YoutubeRepository>()
+          .updateEmbeddingProgressLastChecked();
     } catch (e) {
       // If timestamp update fails, still initialize the stream to avoid perpetual loading
       if (mounted) {
