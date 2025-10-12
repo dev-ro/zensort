@@ -67,6 +67,16 @@ service cloud.firestore {
         && (request.resource.data == null || validateSyncJobData(request.resource.data));
     }
 
+    // User's embedding progress cache subcollection
+    match /users/{userId}/embeddingProgressCache/{docId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      
+      // Allow writes for embedding progress timestamp tracking
+      allow write: if request.auth != null 
+        && request.auth.uid == userId
+        && (request.resource.data == null || validateEmbeddingProgressCacheData(request.resource.data));
+    }
+
     // Topics collection and reverse references
     match /topics/{topicSlug} {
       // Allow authenticated users to read topics index
@@ -204,5 +214,16 @@ function validateUserUpdate(data) {
   let allowedFields = data.keys().hasOnly(['uid', 'email', 'displayName', 'photoURL', 'lastLogin']);
   
   return validOptionalFields && allowedFields;
+}
+
+function validateEmbeddingProgressCacheData(data) {
+  // Validate embedding progress cache structure
+  let hasRequiredFields = data.keys().hasAll(['lastCheckedAt']);
+  let validTimestamp = data.lastCheckedAt is timestamp;
+  
+  // Only allow expected fields
+  let allowedFields = data.keys().hasOnly(['lastCheckedAt']);
+  
+  return hasRequiredFields && validTimestamp && allowedFields;
 }
 
