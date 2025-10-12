@@ -1823,12 +1823,20 @@ def get_embedding_progress(req: https_fn.CallableRequest) -> dict:
             f"Progress for user {user_id}: Total={total}, Completed={completed_count}, Failed={failed_count}, Pending={pending_count}"
         )
 
+        # Get the last checked timestamp from cache
+        cache_doc = db.collection("users").document(user_id).collection("embeddingProgressCache").document("metadata").get()
+        last_checked = None
+        if cache_doc.exists:
+            data = cache_doc.to_dict()
+            if data and "lastCheckedAt" in data:
+                last_checked = data["lastCheckedAt"]
+
         return {
             "total": total,
             "completed": completed_count,
             "pending": pending_count if pending_count >= 0 else 0,
             "failed": failed_count,
-            "last_updated": datetime.now(timezone.utc).isoformat(),
+            "last_updated": last_checked.isoformat() if last_checked else datetime.now(timezone.utc).isoformat(),
         }
 
     except Exception as e:
