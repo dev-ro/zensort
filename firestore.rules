@@ -221,9 +221,10 @@ function validateEmbeddingProgressCacheData(data) {
   let hasRequiredFields = data.keys().hasAll(['lastCheckedAt']);
   let validTimestamp = data.lastCheckedAt is timestamp;
   
-  // Only allow expected fields
-  let allowedFields = data.keys().hasOnly(['lastCheckedAt']);
+  // Allow lastCheckedAt and any other fields (for merge operations)
+  // This allows Firestore merge operations to work properly
+  let validFields = data.lastCheckedAt is timestamp;
   
-  return hasRequiredFields && validTimestamp && allowedFields;
+  return hasRequiredFields && validTimestamp && validFields;
 }
 
