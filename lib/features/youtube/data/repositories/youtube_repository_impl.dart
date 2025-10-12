@@ -475,7 +475,7 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
         .collection('embeddingProgressCache')
         .doc('metadata')
         .set({
-      'lastCheckedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+          'lastCheckedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
   }
 }
