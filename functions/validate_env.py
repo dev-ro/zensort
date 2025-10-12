@@ -4,9 +4,8 @@ Cloud Functions Environment Validation Script
 This script validates that the Python 3.12 environment is correctly set up for Firebase Cloud Functions.
 """
 
-import sys
-import platform
 import subprocess
+import sys
 from pathlib import Path
 
 

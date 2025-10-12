@@ -69,7 +69,31 @@ git pull origin main
 
 git checkout -b \<branch-name\>
 
-### Step 2: Commit Your Work
+### Step 2: Pre-Commit Quality Checks
+
+Before every commit, you **must** run the following quality checks:
+
+#### Dart/Flutter Code
+```bash
+# Format all Dart files
+dart format lib/
+
+# Run Flutter analyzer
+flutter analyze
+```
+
+#### Python Code
+```bash
+# Format Python files
+black functions/ --line-length 88
+
+# Run pylint (should achieve rating > 9.0/10)
+pylint functions/main.py functions/validate_env.py
+```
+
+**Failure to pass these checks will result in rejected commits.**
+
+### Step 3: Commit Your Work
 
 As you work, make small, logical commits using the standards defined above.
 
@@ -85,7 +109,24 @@ After committing git commit -m "fix(sync): Correct field mapping" -m "The 'last\
 
 gh issue create --title "fix(sync): Correct field mapping" --body "The 'last\_updated' field was missing."
 
-### Step 4: Create a Pull Request
+### Step 4: Pre-Pull Request Quality Checks
+
+Before creating a pull request, you **must** run comprehensive quality checks:
+
+#### Full Code Quality Validation
+```bash
+# Dart/Flutter - Must pass with 0 issues
+dart format lib/
+flutter analyze
+
+# Python - Must achieve rating > 9.0/10
+black functions/ --line-length 88
+pylint functions/main.py functions/validate_env.py --score=y
+```
+
+**All checks must pass before creating a PR. PRs with failing quality checks will be automatically rejected.**
+
+### Step 5: Create a Pull Request
 
 Once your work is ready for review, push your branch and open a PR.
 

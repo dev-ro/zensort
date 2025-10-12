@@ -478,11 +478,11 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
     await _firestore.runTransaction((transaction) async {
       final doc = await transaction.get(docRef);
       final now = FieldValue.serverTimestamp();
-      
+
       if (doc.exists && doc.data() != null) {
         final data = doc.data()!;
         final currentLastChecked = data['lastCheckedAt'];
-        
+
         // Only move to previousCheckedAt if currentLastChecked is not null
         if (currentLastChecked != null) {
           transaction.update(docRef, {
@@ -491,9 +491,7 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
           });
         } else {
           // If no valid lastCheckedAt, just update lastCheckedAt
-          transaction.update(docRef, {
-            'lastCheckedAt': now,
-          });
+          transaction.update(docRef, {'lastCheckedAt': now});
         }
       } else {
         // First time: set both to the same timestamp

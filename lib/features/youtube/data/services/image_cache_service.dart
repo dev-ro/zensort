@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
 /// Centralized image cache configuration for YouTube video thumbnails.
@@ -71,7 +72,7 @@ class ImageCacheService {
       await Future.wait(futures);
     } catch (e) {
       // Silent failure for preloading - don't disrupt user experience
-      print('Thumbnail preload failed: $e');
+      debugPrint('Thumbnail preload failed: $e');
     }
   }
 

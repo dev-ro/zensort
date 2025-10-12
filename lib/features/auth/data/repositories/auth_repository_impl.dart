@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:zensort/features/auth/domain/repositories/auth_repository.dart';
@@ -73,7 +73,7 @@ class AuthRepositoryImpl implements AuthRepository {
           return SignInResult(user: user, accessToken: accessToken);
         } catch (e) {
           // Handle errors
-          print('Error during Google sign-in: $e');
+          debugPrint('Error during Google sign-in: $e');
           return null;
         }
       } else {
@@ -143,7 +143,7 @@ class AuthRepositoryImpl implements AuthRepository {
       return null;
     } catch (e) {
       // Silent sign-in failed, return null to indicate no token available
-      print('Silent sign-in failed: $e');
+      debugPrint('Silent sign-in failed: $e');
       return null;
     }
   }
