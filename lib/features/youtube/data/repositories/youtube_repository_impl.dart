@@ -469,7 +469,7 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
     final user = _auth.currentUser;
     if (user == null) return;
 
-    // Read current lastCheckedAt to move it to previousCheckedAt
+    // Read current document to check if this is the first time
     final currentDoc = await _firestore
         .collection('users')
         .doc(user.uid)
@@ -477,16 +477,20 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
         .doc('metadata')
         .get();
 
-    Map<String, dynamic> updateData = {
-      'lastCheckedAt': FieldValue.serverTimestamp(),
-    };
+    Map<String, dynamic> updateData = {};
 
-    // If there's a current lastCheckedAt, move it to previousCheckedAt
     if (currentDoc.exists && currentDoc.data() != null) {
       final currentData = currentDoc.data()!;
+      // If there's a current lastCheckedAt, move it to previousCheckedAt
       if (currentData['lastCheckedAt'] != null) {
         updateData['previousCheckedAt'] = currentData['lastCheckedAt'];
       }
+      // Always write new lastCheckedAt
+      updateData['lastCheckedAt'] = FieldValue.serverTimestamp();
+    } else {
+      // First time: write as previousCheckedAt (for display) and lastCheckedAt (for next time)
+      updateData['previousCheckedAt'] = FieldValue.serverTimestamp();
+      updateData['lastCheckedAt'] = FieldValue.serverTimestamp();
     }
 
     await _firestore

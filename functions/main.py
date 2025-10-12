@@ -1837,9 +1837,6 @@ def get_embedding_progress(req: https_fn.CallableRequest) -> dict:
             # Use previousCheckedAt for display (shows when counts were last fetched)
             if data and "previousCheckedAt" in data:
                 last_updated = data["previousCheckedAt"]
-            # Fallback to lastCheckedAt for first-time users
-            elif data and "lastCheckedAt" in data:
-                last_updated = data["lastCheckedAt"]
 
         return {
             "total": total,
