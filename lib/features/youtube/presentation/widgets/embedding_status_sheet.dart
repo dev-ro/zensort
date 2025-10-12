@@ -18,9 +18,34 @@ class _EmbeddingStatusSheetState extends State<EmbeddingStatusSheet> {
   @override
   void initState() {
     super.initState();
-    _progressStream = context
-        .read<YoutubeRepository>()
-        .watchEmbeddingProgress();
+    _initializeProgressStream();
+  }
+
+  Future<void> _initializeProgressStream() async {
+    try {
+      // Update the last checked timestamp when modal opens
+      await context
+          .read<YoutubeRepository>()
+          .updateEmbeddingProgressLastChecked();
+
+      // Only start the stream after timestamp update completes
+      if (mounted) {
+        setState(() {
+          _progressStream = context
+              .read<YoutubeRepository>()
+              .watchEmbeddingProgress();
+        });
+      }
+    } catch (e) {
+      // If timestamp update fails, still initialize the stream to avoid perpetual loading
+      if (mounted) {
+        setState(() {
+          _progressStream = context
+              .read<YoutubeRepository>()
+              .watchEmbeddingProgress();
+        });
+      }
+    }
   }
 
   @override
