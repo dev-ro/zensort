@@ -27,4 +27,7 @@ abstract class YoutubeRepository {
 
   // On-demand embedding calculation
   Future<void> retryFailedEmbeddings();
+
+  // Update the last checked timestamp for embedding progress
+  Future<void> updateEmbeddingProgressLastChecked();
 }

@@ -463,4 +463,19 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
     );
     await callable.call({'user_id': user.uid});
   }
+
+  @override
+  Future<void> updateEmbeddingProgressLastChecked() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    await _firestore
+        .collection('users')
+        .doc(user.uid)
+        .collection('embeddingProgressCache')
+        .doc('metadata')
+        .set({
+      'lastCheckedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
 }

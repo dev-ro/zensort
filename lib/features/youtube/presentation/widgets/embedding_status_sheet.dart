@@ -18,6 +18,8 @@ class _EmbeddingStatusSheetState extends State<EmbeddingStatusSheet> {
   @override
   void initState() {
     super.initState();
+    // Update the last checked timestamp when modal opens
+    context.read<YoutubeRepository>().updateEmbeddingProgressLastChecked();
     _progressStream = context
         .read<YoutubeRepository>()
         .watchEmbeddingProgress();
