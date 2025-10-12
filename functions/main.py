@@ -1869,16 +1869,21 @@ def backfill_embedding_data(req: Any) -> Any:
             batch = db.batch()
             video_ids = [doc.id for doc in liked_videos]
 
-            # Fetch all video documents in one go
-            video_docs_query = db.collection("videos").where(
-                FieldPath.document_id(), "in", video_ids
-            )
-            video_docs = video_docs_query.stream()
+            # Fetch all video documents in chunks of 30 (Firestore IN limit)
             video_status_map = {}
-            for doc in video_docs:
-                data = doc.to_dict()
-                if data:
-                    video_status_map[doc.id] = data.get("embedding_status", "pending")
+            chunk_size = 30
+            for i in range(0, len(video_ids), chunk_size):
+                chunk_ids = video_ids[i : i + chunk_size]
+                video_docs_query = db.collection("videos").where(
+                    FieldPath.document_id(), "in", chunk_ids
+                )
+                video_docs = video_docs_query.stream()
+                for doc in video_docs:
+                    data = doc.to_dict()
+                    if data:
+                        video_status_map[doc.id] = data.get(
+                            "embedding_status", "pending"
+                        )
 
             for video_id in video_ids:
                 status = video_status_map.get(video_id, "pending")
