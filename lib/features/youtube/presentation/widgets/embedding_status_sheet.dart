@@ -172,7 +172,9 @@ class _EmbeddingStatusSheetState extends State<EmbeddingStatusSheet> {
           const SizedBox(height: 4),
           Text(
             'Updated ${_formatDateTime(progress.lastUpdated!)}',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.white),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
           ),
         ],
         const SizedBox(height: 16),
