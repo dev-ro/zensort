@@ -469,35 +469,31 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
     final user = _auth.currentUser;
     if (user == null) return;
 
-    // Read current document to check if this is the first time
-    final currentDoc = await _firestore
+    final docRef = _firestore
         .collection('users')
         .doc(user.uid)
         .collection('embeddingProgressCache')
-        .doc('metadata')
-        .get();
+        .doc('metadata');
 
-    Map<String, dynamic> updateData = {};
-
-    if (currentDoc.exists && currentDoc.data() != null) {
-      final currentData = currentDoc.data()!;
-      // If there's a current lastCheckedAt, move it to previousCheckedAt
-      if (currentData['lastCheckedAt'] != null) {
-        updateData['previousCheckedAt'] = currentData['lastCheckedAt'];
+    await _firestore.runTransaction((transaction) async {
+      final doc = await transaction.get(docRef);
+      
+      if (doc.exists && doc.data() != null) {
+        final data = doc.data()!;
+        final currentLastChecked = data['lastCheckedAt'];
+        
+        // Move current lastCheckedAt to previousCheckedAt
+        transaction.update(docRef, {
+          'previousCheckedAt': currentLastChecked,
+          'lastCheckedAt': FieldValue.serverTimestamp(),
+        });
+      } else {
+        // First time: set both to current timestamp
+        transaction.set(docRef, {
+          'previousCheckedAt': FieldValue.serverTimestamp(),
+          'lastCheckedAt': FieldValue.serverTimestamp(),
+        });
       }
-      // Always write new lastCheckedAt
-      updateData['lastCheckedAt'] = FieldValue.serverTimestamp();
-    } else {
-      // First time: write as previousCheckedAt (for display) and lastCheckedAt (for next time)
-      updateData['previousCheckedAt'] = FieldValue.serverTimestamp();
-      updateData['lastCheckedAt'] = FieldValue.serverTimestamp();
-    }
-
-    await _firestore
-        .collection('users')
-        .doc(user.uid)
-        .collection('embeddingProgressCache')
-        .doc('metadata')
-        .set(updateData, SetOptions(merge: true));
+    });
   }
 }
