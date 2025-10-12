@@ -82,7 +82,16 @@ def _get_openai_api_key() -> str:
         raise ValueError(f"Failed to retrieve OpenAI API key: {str(e)}")
 
 
-initialize_app()
+# Initialize Firebase Admin SDK only if not already initialized
+try:
+    initialize_app()
+except ValueError as e:
+    if "already exists" in str(e):
+        # App already initialized, this is fine
+        pass
+    else:
+        # Some other error, re-raise it
+        raise
 
 
 def _firestore():
