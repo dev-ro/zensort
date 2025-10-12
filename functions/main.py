@@ -939,6 +939,24 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
             for video in videos_to_store
         }
 
+        # Efficiently fetch embedding_status for all existing videos in one batch
+        existing_video_status_map = {}
+        if existing_video_ids:
+            # Process existing video IDs in chunks of 30 (Firestore IN limit)
+            chunk_size = 30
+            for i in range(0, len(existing_video_ids), chunk_size):
+                chunk_ids = list(existing_video_ids)[i : i + chunk_size]
+                video_docs_query = db.collection("videos").where(
+                    FieldPath.document_id(), "in", chunk_ids
+                )
+                video_docs = video_docs_query.stream()
+                for doc in video_docs:
+                    data = doc.to_dict()
+                    if data:
+                        existing_video_status_map[doc.id] = data.get(
+                            "embedding_status", "pending"
+                        )
+
         # Add currently liked videos (newly liked + still liked) to user's liked videos subcollection
         # Using the correct likedAt timestamps from Step A. Keep link docs minimal.
         for video_item in all_video_items:
@@ -953,24 +971,13 @@ def sync_youtube_liked_videos(req: https_fn.CallableRequest) -> dict:
                     .document(video_id)
                 )
 
-                # Get the video's embedding status
-                # For new videos, use the status from the map. For existing videos, fetch from Firestore.
+                # Get the video's embedding status efficiently from pre-fetched maps
                 embedding_status = new_video_status_map.get(video_id)
                 if embedding_status is None:
-                    try:
-                        video_doc = db.collection("videos").document(video_id).get()
-                        if video_doc.exists:
-                            video_data = video_doc.to_dict()
-                            if video_data:
-                                embedding_status = video_data.get(
-                                    "embedding_status", "pending"
-                                )
-                        else:
-                            embedding_status = (
-                                "pending"  # Should not happen if sync is correct
-                            )
-                    except Exception:
-                        embedding_status = "pending"
+                    # For existing videos, use the pre-fetched status map
+                    embedding_status = existing_video_status_map.get(
+                        video_id, "pending"
+                    )
 
                 # Prepare minimal relation payload (link-only)
                 relation_data = {
