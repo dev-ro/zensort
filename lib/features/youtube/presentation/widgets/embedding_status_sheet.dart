@@ -13,14 +13,48 @@ class EmbeddingStatusSheet extends StatefulWidget {
 }
 
 class _EmbeddingStatusSheetState extends State<EmbeddingStatusSheet> {
+  Stream<EmbeddingProgress>? _progressStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _progressStream = context
+        .read<YoutubeRepository>()
+        .watchEmbeddingProgress();
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Get the repository once
-    final youtubeRepository = context.read<YoutubeRepository>();
-
     return StreamBuilder<EmbeddingProgress>(
-      stream: youtubeRepository.getEmbeddingProgressStream(),
+      stream: _progressStream,
       builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const GradientLoader(),
+                  const SizedBox(height: 24),
+                  Text(
+                    'Calculating Progress...',
+                    style: Theme.of(context).textTheme.titleMedium,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'This may take a moment for large video libraries.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
         final progress = snapshot.data;
         final error = snapshot.error;
 
@@ -105,24 +139,19 @@ class _EmbeddingStatusSheetState extends State<EmbeddingStatusSheet> {
           ),
         ),
         const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Text(
-              _getProgressText(progress),
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            if (progress.lastUpdated != null)
-              Text(
-                'Updated ${_formatDateTime(progress.lastUpdated!)}',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
-              ),
-          ],
+        Text(
+          _getProgressText(progress),
+          style: Theme.of(context).textTheme.titleMedium,
         ),
+        if (progress.lastUpdated != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            'Updated ${_formatDateTime(progress.lastUpdated!)}',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+          ),
+        ],
         const SizedBox(height: 16),
         _buildStatisticsGrid(context, progress),
         if (progress.failed > 0) ...[

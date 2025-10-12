@@ -23,7 +23,7 @@ abstract class YoutubeRepository {
   Future<List<LikedVideo>> fetchUnlikedVideos();
 
   // Watch embedding progress in real-time
-  Stream<EmbeddingProgress> getEmbeddingProgressStream();
+  Stream<EmbeddingProgress> watchEmbeddingProgress();
 
   // On-demand embedding calculation
   Future<void> retryFailedEmbeddings();

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -368,27 +370,87 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
   }
 
   @override
-  Stream<EmbeddingProgress> getEmbeddingProgressStream() {
-    final user = _auth.currentUser;
-    if (user == null) {
-      // Return a stream that emits a default progress when user is not authenticated
-      return Stream.value(const EmbeddingProgress());
+  Stream<EmbeddingProgress> watchEmbeddingProgress() {
+    late StreamController<EmbeddingProgress> controller;
+    Timer? timer;
+    bool isPolling = false;
+
+    void tick(_) async {
+      // Prevent concurrent execution if the previous poll is still running.
+      if (isPolling) return;
+      isPolling = true;
+
+      try {
+        final progress = await _getEmbeddingProgress();
+        if (!controller.isClosed) {
+          controller.add(progress);
+        }
+      } catch (e, s) {
+        if (!controller.isClosed) {
+          controller.addError(e, s);
+        }
+      } finally {
+        isPolling = false;
+      }
     }
 
-    return _firestore
-        .collection('users')
-        .doc(user.uid)
-        .collection('embeddingProgress')
-        .doc('current')
-        .snapshots()
-        .map((snapshot) {
-          if (!snapshot.exists || snapshot.data() == null) {
-            // Return default progress when document doesn't exist
-            return const EmbeddingProgress();
-          }
+    void startTimer() {
+      // Idempotent start to prevent multiple concurrent timers.
+      if (timer != null && timer!.isActive) return;
+      timer = Timer.periodic(const Duration(seconds: 5), tick);
+    }
 
-          return EmbeddingProgress.fromMap(snapshot.data()!);
-        });
+    void stopTimer() {
+      timer?.cancel();
+      timer = null;
+    }
+
+    controller = StreamController<EmbeddingProgress>(
+      onListen: () {
+        // Fire first event immediately, then start the recurring timer.
+        tick(null);
+        startTimer();
+      },
+      onCancel: stopTimer,
+      onResume:
+          startTimer, // Just restart the timer, don't fire an immediate event.
+      onPause: stopTimer,
+    );
+
+    return controller.stream;
+  }
+
+  Future<EmbeddingProgress> _getEmbeddingProgress() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      return EmbeddingProgress();
+    }
+
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable(
+        'get_embedding_progress',
+        options: HttpsCallableOptions(timeout: const Duration(seconds: 65)),
+      );
+      final result = await callable.call({'user_id': user.uid});
+      final data = result.data as Map<String, dynamic>;
+
+      DateTime? lastUpdated;
+      final lastUpdatedString = data['last_updated'];
+      if (lastUpdatedString != null && lastUpdatedString is String) {
+        lastUpdated = DateTime.tryParse(lastUpdatedString)?.toUtc();
+      }
+
+      return EmbeddingProgress(
+        total: (data['total'] as num?)?.toInt() ?? 0,
+        completed: (data['completed'] as num?)?.toInt() ?? 0,
+        pending: (data['pending'] as num?)?.toInt() ?? 0,
+        failed: (data['failed'] as num?)?.toInt() ?? 0,
+        lastUpdated: lastUpdated,
+      );
+    } catch (e) {
+      // The error will be caught by the stream controller and added to the stream.
+      rethrow;
+    }
   }
 
   @override

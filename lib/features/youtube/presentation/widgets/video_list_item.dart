@@ -14,9 +14,7 @@ class VideoListItem extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         onTap: () {
           // TODO: Add navigation to video player or web view
@@ -36,7 +34,9 @@ class VideoListItem extends StatelessWidget {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: video.shouldSkipThumbnailLoad() || video.thumbnailUrl.isEmpty
+                child:
+                    video.shouldSkipThumbnailLoad() ||
+                        video.thumbnailUrl.isEmpty
                     ? const ThumbnailPlaceholder()
                     : CachedNetworkImage(
                         imageUrl: ImageCacheService.buildThumbnailUrl(video.id),
@@ -72,7 +72,9 @@ class VideoListItem extends StatelessWidget {
                               const SizedBox(height: 2),
                               Text(
                                 'Retry',
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10),
+                                style: Theme.of(
+                                  context,
+                                ).textTheme.bodySmall?.copyWith(fontSize: 10),
                               ),
                             ],
                           ),
@@ -87,9 +89,9 @@ class VideoListItem extends StatelessWidget {
                     Text(
                       video.title.isNotEmpty ? video.title : 'Untitled Video',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            height: 1.3,
-                          ),
+                        fontWeight: FontWeight.w600,
+                        height: 1.3,
+                      ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -104,10 +106,11 @@ class VideoListItem extends StatelessWidget {
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
-                            video.channelName.isNotEmpty 
-                                ? video.channelName 
+                            video.channelName.isNotEmpty
+                                ? video.channelName
                                 : 'Unknown Channel',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
                                   color: Colors.grey[600],
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -120,18 +123,12 @@ class VideoListItem extends StatelessWidget {
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        Icon(
-                          Icons.favorite,
-                          size: 16,
-                          color: Colors.red[400],
-                        ),
+                        Icon(Icons.favorite, size: 16, color: Colors.red[400]),
                         const SizedBox(width: 4),
                         Text(
                           'Liked',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Colors.grey[600],
-                                fontSize: 12,
-                              ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: Colors.grey[600], fontSize: 12),
                         ),
                       ],
                     ),

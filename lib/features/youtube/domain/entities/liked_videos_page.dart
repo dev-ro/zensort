@@ -16,5 +16,3 @@ class LikedVideosPage extends Equatable {
   @override
   List<Object?> get props => [videos, nextCursor, hasMore];
 }
-
-
