@@ -219,12 +219,9 @@ function validateUserUpdate(data) {
 function validateEmbeddingProgressCacheData(data) {
   // Validate embedding progress cache structure
   let hasRequiredFields = data.keys().hasAll(['lastCheckedAt']);
-  let validTimestamp = data.lastCheckedAt is timestamp;
+  let validTimestamps = data.lastCheckedAt is timestamp
+    && (!data.keys().hasAny(['previousCheckedAt']) || data.previousCheckedAt is timestamp);
   
-  // Allow lastCheckedAt and any other fields (for merge operations)
-  // This allows Firestore merge operations to work properly
-  let validFields = data.lastCheckedAt is timestamp;
-  
-  return hasRequiredFields && validTimestamp && validFields;
+  return hasRequiredFields && validTimestamps;
 }
 

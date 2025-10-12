@@ -1831,11 +1831,12 @@ def get_embedding_progress(req: https_fn.CallableRequest) -> dict:
             .document("metadata")
             .get()
         )
-        last_checked = None
+        last_updated = None
         if cache_doc.exists:
             data = cache_doc.to_dict()
-            if data and "lastCheckedAt" in data:
-                last_checked = data["lastCheckedAt"]
+            # Use previousCheckedAt for display (shows when counts were last fetched)
+            if data and "previousCheckedAt" in data:
+                last_updated = data["previousCheckedAt"]
 
         return {
             "total": total,
@@ -1843,8 +1844,8 @@ def get_embedding_progress(req: https_fn.CallableRequest) -> dict:
             "pending": pending_count if pending_count >= 0 else 0,
             "failed": failed_count,
             "last_updated": (
-                last_checked.isoformat()
-                if last_checked
+                last_updated.isoformat()
+                if last_updated
                 else datetime.now(timezone.utc).isoformat()
             ),
         }
