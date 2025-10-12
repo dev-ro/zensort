@@ -469,13 +469,31 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
     final user = _auth.currentUser;
     if (user == null) return;
 
+    // Read current lastCheckedAt to move it to previousCheckedAt
+    final currentDoc = await _firestore
+        .collection('users')
+        .doc(user.uid)
+        .collection('embeddingProgressCache')
+        .doc('metadata')
+        .get();
+
+    Map<String, dynamic> updateData = {
+      'lastCheckedAt': FieldValue.serverTimestamp(),
+    };
+
+    // If there's a current lastCheckedAt, move it to previousCheckedAt
+    if (currentDoc.exists && currentDoc.data() != null) {
+      final currentData = currentDoc.data()!;
+      if (currentData['lastCheckedAt'] != null) {
+        updateData['previousCheckedAt'] = currentData['lastCheckedAt'];
+      }
+    }
+
     await _firestore
         .collection('users')
         .doc(user.uid)
         .collection('embeddingProgressCache')
         .doc('metadata')
-        .set({
-          'lastCheckedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+        .set(updateData, SetOptions(merge: true));
   }
 }
