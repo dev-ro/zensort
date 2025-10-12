@@ -37,8 +37,8 @@ class _EmbeddingStatusSheetState extends State<EmbeddingStatusSheet> {
           .read<YoutubeRepository>()
           .updateEmbeddingProgressLastChecked();
     } catch (e) {
-      // If timestamp update fails, still initialize the stream to avoid perpetual loading
-      if (mounted) {
+      // Only initialize stream if it wasn't already initialized
+      if (mounted && _progressStream == null) {
         setState(() {
           _progressStream = context
               .read<YoutubeRepository>()
