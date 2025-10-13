@@ -40,17 +40,19 @@ This document provides a comprehensive guide to ZenSort's Firestore indexing str
 
 ### Collection Group Indexes
 
-#### 5. Liked Videos Ordering Index
+#### 5. Liked Videos Ordering Optimization
 - **Collection Group**: `likedVideos`
 - **Purpose**: Optimizes home screen loading by ordering liked videos across all users
 - **Query Pattern**: `ORDER BY likedAt DESC LIMIT 100`
+- **Index Strategy**: Field override for `likedAt` field with DESCENDING order and COLLECTION_GROUP scope
 - **Performance Impact**: 10-50x faster home screen loading, 20-40% cost reduction
 - **Code Reference**: `lib/features/youtube/data/repositories/youtube_repository_impl.dart:98`
 
-#### 6. Unliked Videos Ordering Index
+#### 6. Unliked Videos Ordering Optimization
 - **Collection Group**: `unlikedVideos`
 - **Purpose**: Optimizes unliked videos history access
 - **Query Pattern**: `ORDER BY unlikedAt DESC`
+- **Index Strategy**: Field override for `unlikedAt` field with DESCENDING order and COLLECTION_GROUP scope
 - **Performance Impact**: 5-20x faster unliked videos loading, 20-30% cost reduction
 - **Code Reference**: `lib/features/youtube/data/repositories/youtube_repository_impl.dart:337`
 
