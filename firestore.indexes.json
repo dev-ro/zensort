@@ -52,6 +52,26 @@
 		},
 		{
 			"collectionGroup": "likedVideos",
+			"fieldPath": "likedAt",
+			"indexes": [
+				{
+					"order": "DESCENDING",
+					"queryScope": "COLLECTION_GROUP"
+				}
+			]
+		},
+		{
+			"collectionGroup": "unlikedVideos",
+			"fieldPath": "unlikedAt",
+			"indexes": [
+				{
+					"order": "DESCENDING",
+					"queryScope": "COLLECTION_GROUP"
+				}
+			]
+		},
+		{
+			"collectionGroup": "likedVideos",
 			"fieldPath": "embedding_status",
 			"indexes": [
 				{
