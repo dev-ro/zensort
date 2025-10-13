@@ -1,4 +1,88 @@
 {
-  "indexes": [],
-  "fieldOverrides": []
+	"indexes": [
+		{
+			"collectionGroup": "videos",
+			"queryScope": "COLLECTION",
+			"fields": [
+				{
+					"fieldPath": "categoryTitleUS",
+					"order": "ASCENDING"
+				},
+				{
+					"fieldPath": "publishedAt",
+					"order": "DESCENDING"
+				}
+			]
+		},
+		{
+			"collectionGroup": "videos",
+			"queryScope": "COLLECTION",
+			"fields": [
+				{
+					"fieldPath": "topicTags",
+					"arrayConfig": "CONTAINS"
+				},
+				{
+					"fieldPath": "publishedAt",
+					"order": "DESCENDING"
+				}
+			]
+		}
+	],
+	"fieldOverrides": [
+		{
+			"collectionGroup": "videos",
+			"fieldPath": "embedding",
+			"indexes": [
+				{
+					"order": "ASCENDING",
+					"queryScope": "COLLECTION"
+				}
+			]
+		},
+		{
+			"collectionGroup": "videos",
+			"fieldPath": "embedding_status",
+			"indexes": [
+				{
+					"order": "ASCENDING",
+					"queryScope": "COLLECTION"
+				}
+			]
+		},
+		{
+			"collectionGroup": "likedVideos",
+			"fieldPath": "likedAt",
+			"indexes": [
+				{
+					"order": "DESCENDING",
+					"queryScope": "COLLECTION_GROUP"
+				}
+			]
+		},
+		{
+			"collectionGroup": "unlikedVideos",
+			"fieldPath": "unlikedAt",
+			"indexes": [
+				{
+					"order": "DESCENDING",
+					"queryScope": "COLLECTION_GROUP"
+				}
+			]
+		},
+		{
+			"collectionGroup": "likedVideos",
+			"fieldPath": "embedding_status",
+			"indexes": [
+				{
+					"order": "ASCENDING",
+					"queryScope": "COLLECTION_GROUP"
+				},
+				{
+					"order": "DESCENDING",
+					"queryScope": "COLLECTION_GROUP"
+				}
+			]
+		}
+	]
 }
